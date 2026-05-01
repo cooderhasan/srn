@@ -169,6 +169,140 @@ async function main() {
   }
 
   console.log(`✅ ${brandCount} adet marka başarıyla eklendi!`);
+
+  // 8. Marka Model Kategorileri (Markaya Göre > Marka > Model)
+  console.log("🏍️ Marka model kategorileri ekleniyor...");
+
+  const brandModels: { brand: string; models: string[] }[] = [
+    {
+      brand: "Mondial",
+      models: [
+        "100 KH", "125 KT", "125 MH Drift", "150 KN", "150 Mash",
+        "150 MH Drift", "150 MR Vulture", "50 Revival", "50 Turismo",
+        "50 ZNU", "Drift 125 L", "KD-125 F", "Mash 125 i", "Mct 250",
+        "MG Superboy", "RX3-İ Evo", "Strada 125", "Virago 50",
+        "Vulture 125 i Euro4", "Wing 50", "X-Treme Max 150",
+        "X-Treme Max 200", "X-Treme Maxx 200 i", "ZNU", "Zone"
+      ]
+    },
+    {
+      brand: "Bajaj",
+      models: [
+        "Avenger", "Boxer", "Discover", "Dominar 250", "Dominar 400",
+        "Dominar 400 UG", "N 125", "Pulsar", "Pulsar F 250", "Pulsar N 250",
+        "Pulsar NS 200 UG2", "Pulsar NS 400 Z", "Qute", "RS 200 UG", "V15 Motor"
+      ]
+    },
+    {
+      brand: "Cf Moto",
+      models: [
+        "250 CL-X", "250 SR", "450 NK Yedek Parça", "450 SR",
+        "NK 150", "NK 250", "NK 250 E5", "NK 400"
+      ]
+    },
+    {
+      brand: "Kanuni",
+      models: [
+        "Kanuni Atv", "Mati 125", "Seha 125", "Seha 150",
+        "Seyhan 125 T", "Seyhan 150 C", "Tiger 250", "Trodon 50"
+      ]
+    },
+    {
+      brand: "RKS",
+      models: [
+        "RKS Blackwolf 250", "RKS Blazer XR", "RKS Newlight 125",
+        "RKS Pollo 50", "RKS R250", "RKS Sniper 50 X",
+        "RKS Spontini 110", "RKS XVR 250"
+      ]
+    },
+    {
+      brand: "TVS",
+      models: ["Raider", "RTR 200 4V FI", "TVS Jupiter 125 Yedek Parça"]
+    },
+    {
+      brand: "Honda",
+      models: [
+        "Titan", "ACE 125", "Activa 125 2023", "Activa S", "ADV 350",
+        "CB 125 E", "CB 125 F", "CB 125 F 2023", "CB 250 R", "CBF 150",
+        "CBR 125", "CBR 250 R", "CL 250", "CRF 250 L", "CRF 250 Rally",
+        "Dio 110", "Forza 250", "GL 1800 Gold Wing", "NC 750", "NX 500",
+        "PCX 125", "PCX 125 2018-2020", "PCX 125 2021", "PCX 125 DX",
+        "PCX 150", "SH 125 i", "Spacy 110", "Today 50"
+      ]
+    },
+    {
+      brand: "Arora",
+      models: ["Cappucino"]
+    },
+    {
+      brand: "Chopper",
+      models: ["250 Mct", "250 Regal", "250 Rmz", "250 Seyhan"]
+    },
+    {
+      brand: "KTM",
+      models: [
+        "KTM 250 ADV", "KTM 390 ADV", "KTM Duke 250",
+        "KTM Duke 390", "KTM RC 390"
+      ]
+    },
+    {
+      brand: "Suzuki",
+      models: ["Suzuki Adress 110", "Suzuki İnazuma"]
+    },
+    {
+      brand: "Yamaha",
+      models: [
+        "Crypton", "Delight", "MT 25", "N Max", "X-MAX 250",
+        "YBR 125", "YS 125", "YZF R25", "YZF R25 2019"
+      ]
+    },
+    {
+      brand: "Hero",
+      models: ["XPulse"]
+    },
+    {
+      brand: "Kuba",
+      models: [
+        "Kuba CR1", "Kuba TK 03", "Kuba Trendy 50",
+        "Kuba VN 50", "RKS NR 200", "Rocca 100", "Space 50"
+      ]
+    }
+  ];
+
+  let modelCount = 0;
+  for (const { brand, models } of brandModels) {
+    // Marka kategorisini bul (zaten var)
+    const brandSlug = brand.toLowerCase()
+      .replace(/ /g, "-")
+      .replace(/[ığüşöç]/g, (m) => ({ 'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c' }[m] || m));
+
+    const brandCat = await prisma.category.findUnique({ where: { slug: brandSlug } });
+    if (!brandCat) {
+      console.warn(`⚠️ Marka kategorisi bulunamadı: ${brand} (slug: ${brandSlug})`);
+      continue;
+    }
+
+    for (const model of models) {
+      const modelSlug = `${brandSlug}-${model.toLowerCase()
+        .replace(/ /g, "-")
+        .replace(/[ığüşöçİ]/g, (m) => ({ 'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c', 'İ': 'i' }[m] || m))
+        .replace(/[^a-z0-9-]/g, "")}`;
+
+      await prisma.category.upsert({
+        where: { slug: modelSlug },
+        update: { parentId: brandCat.id },
+        create: {
+          name: model,
+          slug: modelSlug,
+          parentId: brandCat.id,
+        },
+      });
+      modelCount++;
+    }
+    console.log(`  ✅ ${brand}: ${models.length} model eklendi`);
+  }
+
+  console.log(`🎉 Toplam ${modelCount} adet model kategorisi başarıyla eklendi!`);
 }
 
 main()
