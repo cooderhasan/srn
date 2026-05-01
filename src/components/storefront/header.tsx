@@ -381,7 +381,11 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
                                                     {/* Mega Menu Promo Image Area */}
                                                     <div className="w-[320px] shrink-0 border-l pl-8 hidden lg:flex flex-col">
-                                                        <div className="bg-white rounded-xl p-4 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:bg-blue-50 transition-colors border border-gray-100">
+                                                        <Link 
+                                                            href={`/category/${category.slug}`}
+                                                            onClick={() => setHoveredCategory(null)}
+                                                            className="bg-white rounded-xl p-4 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:bg-blue-50 transition-colors border border-gray-100"
+                                                        >
                                                             <div className="w-full h-48 relative mb-4">
                                                                 <Image 
                                                                     src={category.imageUrl || "/placeholder.svg"} 
@@ -396,7 +400,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                                             <span className="text-xs text-gray-500 mt-1">
                                                                 Tüm ürünleri keşfet
                                                             </span>
-                                                        </div>
+                                                        </Link>
                                                     </div>
                                                 </div>
                                             )}
