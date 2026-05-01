@@ -139,6 +139,29 @@ async function main() {
   const count5 = await addSubs(brandSubCategories, brandCategory.id);
 
   console.log(`🎉 Toplam ${count1 + count2 + count3 + count4 + count5} alt kategori başarıyla eklendi!`);
+
+  // 7. Markalar (Brand Tablosuna Ekleme)
+  console.log("🏷️ Markalar ekleniyor...");
+  const brands = [
+    "Monero", "Gms", "Ncr", "Tvr", "Srn", "Gogo", 
+    "Givis", "Bajaj", "Jet Motor", "Tvs", "Mondial", "Kuba"
+  ];
+
+  let brandCount = 0;
+  for (const bName of brands) {
+    const bSlug = bName.toLowerCase().replace(/ /g, "-");
+    await prisma.brand.upsert({
+      where: { name: bName },
+      update: {},
+      create: {
+        name: bName,
+        slug: bSlug,
+      },
+    });
+    brandCount++;
+  }
+
+  console.log(`✅ ${brandCount} adet marka başarıyla eklendi!`);
 }
 
 main()
