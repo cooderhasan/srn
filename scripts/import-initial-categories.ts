@@ -18,7 +18,7 @@ async function main() {
 
   // 1. Ana kategoriyi oluştur veya bul
   const mainCategory = await prisma.category.upsert({
-    where: { name: mainCategoryName },
+    where: { slug: "motosiklet-yedek-parca" },
     update: {},
     create: {
       name: mainCategoryName,
@@ -26,6 +26,8 @@ async function main() {
       description: "Motosiklet yedek parça ve aksesuarları",
     },
   });
+
+  console.log(`✅ Ana kategori hazır: ${mainCategory.name}`);
 
   // 2. İkinci Ana Kategori: Motosiklet Koruma Ekipmanları
   const protectionCategoryName = "Motosiklet Koruma Ekipmanları";
@@ -36,7 +38,7 @@ async function main() {
   ];
 
   const protectionCategory = await prisma.category.upsert({
-    where: { name: protectionCategoryName },
+    where: { slug: "motosiklet-koruma-ekipmanlari" },
     update: {},
     create: {
       name: protectionCategoryName,
@@ -57,7 +59,7 @@ async function main() {
   ];
 
   const maintenanceCategory = await prisma.category.upsert({
-    where: { name: maintenanceCategoryName },
+    where: { slug: "bakim-ve-tamir-urunleri" },
     update: {},
     create: {
       name: maintenanceCategoryName,
@@ -79,7 +81,7 @@ async function main() {
   ];
 
   const accessoryCategory = await prisma.category.upsert({
-    where: { name: accessoryCategoryName },
+    where: { slug: "motosiklet-aksesuar" },
     update: {},
     create: {
       name: accessoryCategoryName,
@@ -99,7 +101,7 @@ async function main() {
   ];
 
   const brandCategory = await prisma.category.upsert({
-    where: { name: brandCategoryName },
+    where: { slug: "markaya-gore" },
     update: {},
     create: {
       name: brandCategoryName,
@@ -119,7 +121,7 @@ async function main() {
         .replace(/[ığüşöç&]/g, (m) => ({ 'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c', '&': 've' }[m] || m));
 
       await prisma.category.upsert({
-        where: { name: subName },
+        where: { slug: slug },
         update: { parentId: parentId },
         create: {
           name: subName,
