@@ -379,27 +379,32 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                                         ))}
                                                     </div>
 
-                                                    {/* Mega Menu Promo Image Area */}
-                                                    <div className="w-[320px] shrink-0 border-l pl-8 hidden lg:flex flex-col">
+                                                    {/* Mega Menu Promo Image Area - Large Floating Style */}
+                                                    <div className="w-[450px] xl:w-[600px] shrink-0 hidden lg:flex items-center justify-end relative pl-8">
                                                         <Link 
                                                             href={`/category/${category.slug}`}
                                                             onClick={() => setHoveredCategory(null)}
-                                                            className="bg-white rounded-xl p-4 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:bg-blue-50 transition-colors border border-gray-100"
+                                                            className="w-full h-full flex items-center justify-end group/promo"
                                                         >
-                                                            <div className="w-full h-48 relative mb-4">
-                                                                <Image 
-                                                                    src={category.imageUrl || "/placeholder.svg"} 
-                                                                    alt={category.name}
-                                                                    fill
-                                                                    className="object-contain group-hover/promo:scale-110 transition-transform duration-500 drop-shadow-md" 
-                                                                />
-                                                            </div>
-                                                            <span className="font-bold text-gray-800 group-hover/promo:text-[#009AD0] text-sm">
-                                                                {category.name}
-                                                            </span>
-                                                            <span className="text-xs text-gray-500 mt-1">
-                                                                Tüm ürünleri keşfet
-                                                            </span>
+                                                            {category.imageUrl ? (
+                                                                <div className="w-full h-[300px] relative">
+                                                                    <Image 
+                                                                        src={category.imageUrl} 
+                                                                        alt={category.name}
+                                                                        fill
+                                                                        className="object-contain object-right group-hover/promo:scale-105 transition-transform duration-500 drop-shadow-xl" 
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="w-full h-[200px] relative opacity-50">
+                                                                    <Image 
+                                                                        src="/placeholder.svg" 
+                                                                        alt={category.name}
+                                                                        fill
+                                                                        className="object-contain object-right group-hover/promo:scale-105 transition-transform duration-500" 
+                                                                    />
+                                                                </div>
+                                                            )}
                                                         </Link>
                                                     </div>
                                                 </div>
