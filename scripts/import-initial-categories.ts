@@ -23,7 +23,6 @@ async function main() {
     create: {
       name: mainCategoryName,
       slug: "motosiklet-yedek-parca",
-      description: "Motosiklet yedek parça ve aksesuarları",
     },
   });
 
@@ -43,7 +42,6 @@ async function main() {
     create: {
       name: protectionCategoryName,
       slug: "motosiklet-koruma-ekipmanlari",
-      description: "Motosiklet koruma ekipmanları ve giyim",
     },
   });
 
@@ -64,7 +62,6 @@ async function main() {
     create: {
       name: maintenanceCategoryName,
       slug: "bakim-ve-tamir-urunleri",
-      description: "Motosiklet bakım ve tamir malzemeleri",
     },
   });
 
@@ -86,7 +83,6 @@ async function main() {
     create: {
       name: accessoryCategoryName,
       slug: "motosiklet-aksesuar",
-      description: "Motosiklet aksesuarları ve yardımcı ekipmanlar",
     },
   });
 
@@ -106,7 +102,6 @@ async function main() {
     create: {
       name: brandCategoryName,
       slug: "markaya-gore",
-      description: "Markalara göre kategorize edilmiş ürünler",
     },
   });
 
