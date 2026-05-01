@@ -90,7 +90,27 @@ async function main() {
 
   console.log(`✅ Dördüncü ana kategori hazır: ${accessoryCategory.name}`);
 
-  // 5. Alt kategorileri ekle (Tüm gruplar için)
+  // 5. Beşinci Ana Kategori: Markaya Göre
+  const brandCategoryName = "Markaya Göre";
+  const brandSubCategories = [
+    "Mondial", "Bajaj", "Cf Moto", "Kanuni", "RKS", "TVS", 
+    "Honda", "Arora", "Chopper", "KTM", "Suzuki", "Yamaha", 
+    "Atv", "Hero", "Kuba", "SYM Motor"
+  ];
+
+  const brandCategory = await prisma.category.upsert({
+    where: { name: brandCategoryName },
+    update: {},
+    create: {
+      name: brandCategoryName,
+      slug: "markaya-gore",
+      description: "Markalara göre kategorize edilmiş ürünler",
+    },
+  });
+
+  console.log(`✅ Beşinci ana kategori hazır: ${brandCategory.name}`);
+
+  // 6. Alt kategorileri ekle (Tüm gruplar için)
   async function addSubs(subs: string[], parentId: string) {
     let subCount = 0;
     for (const subName of subs) {
@@ -116,8 +136,9 @@ async function main() {
   const count2 = await addSubs(protectionSubCategories, protectionCategory.id);
   const count3 = await addSubs(maintenanceSubCategories, maintenanceCategory.id);
   const count4 = await addSubs(accessorySubCategories, accessoryCategory.id);
+  const count5 = await addSubs(brandSubCategories, brandCategory.id);
 
-  console.log(`🎉 Toplam ${count1 + count2 + count3 + count4} alt kategori başarıyla eklendi!`);
+  console.log(`🎉 Toplam ${count1 + count2 + count3 + count4 + count5} alt kategori başarıyla eklendi!`);
 }
 
 main()
