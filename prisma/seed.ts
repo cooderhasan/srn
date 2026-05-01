@@ -48,18 +48,19 @@ async function main() {
 
     // Create admin user
     // Create admin user
+    const adminEmail = process.env.ADMIN_EMAIL || "ahmetufekci91@gmail.com";
     const adminPassword = await bcrypt.hash("Ahmet.91!Tufekci_2025*Guvenli", 12);
     const admin = await prisma.user.upsert({
-        where: { email: "ahmetufekci91@gmail.com" },
+        where: { email: adminEmail },
         update: {
             passwordHash: adminPassword,
             role: "ADMIN",
             status: "APPROVED",
         },
         create: {
-            email: "ahmetufekci91@gmail.com",
+            email: adminEmail,
             passwordHash: adminPassword,
-            companyName: "B2B Admin",
+            companyName: "Serin Motor Admin",
             role: "ADMIN",
             status: "APPROVED",
         },
