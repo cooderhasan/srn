@@ -57,6 +57,16 @@ interface Product {
         id: string;
         name: string;
         slug: string;
+        parent?: {
+            id: string;
+            name: string;
+            slug: string;
+            parent?: {
+                id: string;
+                name: string;
+                slug: string;
+            } | null;
+        } | null;
     } | null;
     brand?: {
         name: string;
@@ -229,6 +239,19 @@ export function ProductDetail({
         toast.success("Ürün sepete eklendi!");
     };
 
+    // Helper to build category breadcrumbs
+    const getCategoryPath = (cat: any) => {
+        const path = [];
+        let current = cat;
+        while (current) {
+            path.unshift(current);
+            current = current.parent;
+        }
+        return path;
+    };
+
+    const categoryPath = product.category ? getCategoryPath(product.category) : [];
+
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
             <div className="container mx-auto px-4 py-6 animate-in fade-in duration-500">
@@ -237,21 +260,28 @@ export function ProductDetail({
                     <Link href="/" className="hover:text-[#009AD0] transition-colors">
                         Ana Sayfa
                     </Link>
-                    <ChevronRightIcon className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                    <Link href="/products" className="hover:text-[#009AD0] transition-colors">
-                        Ürünler
-                    </Link>
-                    {product.category && (
+                    
+                    {categoryPath.length > 0 ? (
+                        categoryPath.map((cat, index) => (
+                            <div key={cat.id} className="flex items-center gap-1.5">
+                                <ChevronRightIcon className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                                <Link
+                                    href={`/category/${cat.slug}`}
+                                    className="hover:text-[#009AD0] transition-colors"
+                                >
+                                    {cat.name}
+                                </Link>
+                            </div>
+                        ))
+                    ) : (
                         <>
                             <ChevronRightIcon className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                            <Link
-                                href={`/products?category=${product.category.slug}`}
-                                className="hover:text-[#009AD0] transition-colors"
-                            >
-                                {product.category.name}
+                            <Link href="/products" className="hover:text-[#009AD0] transition-colors">
+                                Ürünler
                             </Link>
                         </>
                     )}
+                    
                     <ChevronRightIcon className="w-3.5 h-3.5 text-gray-300 shrink-0" />
                     <span className="text-gray-800 dark:text-gray-200 font-medium truncate max-w-[200px]">{product.name}</span>
                 </nav>
