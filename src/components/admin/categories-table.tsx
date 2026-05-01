@@ -362,8 +362,9 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
             }
             setIsOpen(false);
             resetForm();
-        } catch {
-            toast.error("Bir hata oluştu.");
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error?.message || "Bir hata oluştu.");
         } finally {
             setLoading(false);
         }
