@@ -349,7 +349,8 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                         >
                                             <Link
                                                 href={`/category/${category.slug}`}
-                                                className={`flex flex-col items-center justify-center px-4 py-4 md:px-6 md:py-5 transition-all duration-300 ${
+                                                onClick={() => setHoveredCategory(null)}
+                                                className={`flex flex-col items-center justify-center px-4 py-4 md:px-6 md:py-5 transition-colors duration-150 ${
                                                     isHovered ? "bg-white" : "hover:bg-white/10"
                                                 }`}
                                             >
@@ -362,13 +363,14 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
                                             {/* Mega Menu Dropdown */}
                                             {isHovered && hasChildren && (
-                                                <div className="absolute left-0 top-full w-full bg-white shadow-2xl border-t-2 border-[#009AD0] z-50 p-8 rounded-b-xl flex gap-8 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                <div className="absolute left-0 top-full w-full bg-white shadow-2xl border-t-2 border-[#009AD0] z-50 p-8 rounded-b-xl flex gap-8 animate-in fade-in duration-150">
                                                     {/* Subcategories Grid */}
                                                     <div className="flex-1 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-3 content-start">
                                                         {category.children!.map(sub => (
                                                             <Link 
                                                                 key={sub.id} 
                                                                 href={`/category/${sub.slug}`} 
+                                                                onClick={() => setHoveredCategory(null)}
                                                                 className="text-sm text-gray-700 hover:text-[#009AD0] hover:font-medium hover:translate-x-1 transition-all flex items-center gap-2"
                                                             >
                                                                 <span className="w-1 h-1 rounded-full bg-gray-300 group-hover:bg-[#009AD0]"></span>
@@ -379,7 +381,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
                                                     {/* Mega Menu Promo Image Area */}
                                                     <div className="w-[280px] shrink-0 border-l pl-8 hidden md:flex flex-col">
-                                                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:from-blue-50 hover:to-white transition-all border border-gray-100">
+                                                        <div className="bg-white rounded-xl p-6 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:bg-blue-50 transition-colors border border-gray-100">
                                                             <div className="w-full h-32 relative mb-4">
                                                                 <Image 
                                                                     src={category.imageUrl || "/placeholder.svg"} 
