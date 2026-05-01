@@ -380,9 +380,9 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                                     </div>
 
                                                     {/* Mega Menu Promo Image Area */}
-                                                    <div className="w-[280px] shrink-0 border-l pl-8 hidden md:flex flex-col">
-                                                        <div className="bg-white rounded-xl p-6 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:bg-blue-50 transition-colors border border-gray-100">
-                                                            <div className="w-full h-32 relative mb-4">
+                                                    <div className="w-[320px] shrink-0 border-l pl-8 hidden lg:flex flex-col">
+                                                        <div className="bg-white rounded-xl p-4 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:bg-blue-50 transition-colors border border-gray-100">
+                                                            <div className="w-full h-48 relative mb-4">
                                                                 <Image 
                                                                     src={category.imageUrl || "/placeholder.svg"} 
                                                                     alt={category.name}
