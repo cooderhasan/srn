@@ -323,7 +323,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
             {/* Bottom Row: Category Navigation (Desktop) - STRIKING DESIGN */}
             <div
-                className="hidden md:block relative overflow-hidden bg-[#009AD0] bg-gradient-to-r from-[#0081AF]/95 via-[#009AD0]/95 to-[#0081AF]/95 backdrop-blur-md shadow-lg"
+                className="hidden md:block relative overflow-visible bg-[#009AD0] bg-gradient-to-r from-[#0081AF]/95 via-[#009AD0]/95 to-[#0081AF]/95 backdrop-blur-md shadow-lg"
             >
                 {/* Glowing Line Effect */}
                 <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#4FC3F7] to-transparent opacity-50" />
