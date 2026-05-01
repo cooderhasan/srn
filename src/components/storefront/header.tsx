@@ -63,6 +63,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
     const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
 
     // Auto-close mobile menu on navigation
     useEffect(() => {
@@ -332,50 +333,74 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                     <div className="flex items-center">
 
 
-                        <nav className="flex items-center justify-center w-full py-3 gap-2 lg:gap-8">
-                            <Link
-                                href="/"
-                                className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
-                            >
-                                <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
-                                    <Home className="h-5 w-5 text-white group-hover:scale-110 transition-all" />
-                                </div>
-                                <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center whitespace-nowrap">Ana Sayfa</span>
-                            </Link>
+                        <nav className="flex items-center justify-center w-full relative">
                             {categories
                                 .filter(c => c.name !== "Home" && c.name !== "Root")
-                                .map((category) => (
-                                    <Link
-                                        key={category.id}
-                                        href={`/category/${category.slug}`}
-                                        className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
-                                    >
-                                        <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
-                                            <Cog className="h-5 w-5 text-white group-hover:scale-110 group-hover:rotate-45 transition-all" />
+                                .map((category) => {
+                                    const hasChildren = category.children && category.children.length > 0;
+                                    const isHovered = hoveredCategory === category.id;
+                                    
+                                    return (
+                                        <div
+                                            key={category.id}
+                                            className="group"
+                                            onMouseEnter={() => setHoveredCategory(category.id)}
+                                            onMouseLeave={() => setHoveredCategory(null)}
+                                        >
+                                            <Link
+                                                href={`/category/${category.slug}`}
+                                                className={`flex flex-col items-center justify-center px-4 py-4 md:px-6 md:py-5 transition-all duration-300 ${
+                                                    isHovered ? "bg-white" : "hover:bg-white/10"
+                                                }`}
+                                            >
+                                                <span className={`text-sm font-bold transition-colors text-center whitespace-nowrap ${
+                                                    isHovered ? "text-[#009AD0]" : "text-white"
+                                                }`}>
+                                                    {category.name}
+                                                </span>
+                                            </Link>
+
+                                            {/* Mega Menu Dropdown */}
+                                            {isHovered && hasChildren && (
+                                                <div className="absolute left-0 top-full w-full bg-white shadow-2xl border-t-2 border-[#009AD0] z-50 p-8 rounded-b-xl flex gap-8 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                    {/* Subcategories Grid */}
+                                                    <div className="flex-1 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-3 content-start">
+                                                        {category.children!.map(sub => (
+                                                            <Link 
+                                                                key={sub.id} 
+                                                                href={`/category/${sub.slug}`} 
+                                                                className="text-sm text-gray-700 hover:text-[#009AD0] hover:font-medium hover:translate-x-1 transition-all flex items-center gap-2"
+                                                            >
+                                                                <span className="w-1 h-1 rounded-full bg-gray-300 group-hover:bg-[#009AD0]"></span>
+                                                                {sub.name}
+                                                            </Link>
+                                                        ))}
+                                                    </div>
+
+                                                    {/* Mega Menu Promo Image Area */}
+                                                    <div className="w-[280px] shrink-0 border-l pl-8 hidden md:flex flex-col">
+                                                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 flex flex-col items-center justify-center text-center h-full group/promo cursor-pointer hover:shadow-md hover:from-blue-50 hover:to-white transition-all border border-gray-100">
+                                                            <div className="w-32 h-32 relative mb-4">
+                                                                <Image 
+                                                                    src={category.imageUrl || "/placeholder.svg"} 
+                                                                    alt={category.name}
+                                                                    fill
+                                                                    className="object-contain group-hover/promo:scale-110 transition-transform duration-500" 
+                                                                />
+                                                            </div>
+                                                            <span className="font-bold text-gray-800 group-hover/promo:text-[#009AD0] text-sm">
+                                                                {category.name}
+                                                            </span>
+                                                            <span className="text-xs text-gray-500 mt-1">
+                                                                Tüm ürünleri keşfet
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center">
-                                            {category.name}
-                                        </span>
-                                    </Link>
-                                ))}
-                            <Link
-                                href="/about"
-                                className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
-                            >
-                                <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
-                                    <Building2 className="h-5 w-5 text-white group-hover:scale-110 transition-all" />
-                                </div>
-                                <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center whitespace-nowrap">Hakkımızda</span>
-                            </Link>
-                            <Link
-                                href="/contact"
-                                className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
-                            >
-                                <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
-                                    <Phone className="h-5 w-5 text-white group-hover:scale-110 transition-all" />
-                                </div>
-                                <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center whitespace-nowrap">İletişim</span>
-                            </Link>
+                                    );
+                                })}
                         </nav>
                     </div>
                 </div>
