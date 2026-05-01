@@ -19,10 +19,12 @@ async function main() {
   // 1. Ana kategoriyi oluştur veya bul
   const mainCategory = await prisma.category.upsert({
     where: { slug: "motosiklet-yedek-parca" },
-    update: {},
+    update: { isInHeader: true, isFeatured: true },
     create: {
       name: mainCategoryName,
       slug: "motosiklet-yedek-parca",
+      isInHeader: true,
+      isFeatured: true,
     },
   });
 
@@ -38,10 +40,12 @@ async function main() {
 
   const protectionCategory = await prisma.category.upsert({
     where: { slug: "motosiklet-koruma-ekipmanlari" },
-    update: {},
+    update: { isInHeader: true, isFeatured: true },
     create: {
       name: protectionCategoryName,
       slug: "motosiklet-koruma-ekipmanlari",
+      isInHeader: true,
+      isFeatured: true,
     },
   });
 
@@ -58,10 +62,12 @@ async function main() {
 
   const maintenanceCategory = await prisma.category.upsert({
     where: { slug: "bakim-ve-tamir-urunleri" },
-    update: {},
+    update: { isInHeader: true, isFeatured: true },
     create: {
       name: maintenanceCategoryName,
       slug: "bakim-ve-tamir-urunleri",
+      isInHeader: true,
+      isFeatured: true,
     },
   });
 
@@ -79,10 +85,12 @@ async function main() {
 
   const accessoryCategory = await prisma.category.upsert({
     where: { slug: "motosiklet-aksesuar" },
-    update: {},
+    update: { isInHeader: true, isFeatured: true },
     create: {
       name: accessoryCategoryName,
       slug: "motosiklet-aksesuar",
+      isInHeader: true,
+      isFeatured: true,
     },
   });
 
@@ -98,10 +106,12 @@ async function main() {
 
   const brandCategory = await prisma.category.upsert({
     where: { slug: "markaya-gore" },
-    update: {},
+    update: { isInHeader: true, isFeatured: true },
     create: {
       name: brandCategoryName,
       slug: "markaya-gore",
+      isInHeader: true,
+      isFeatured: true,
     },
   });
 
