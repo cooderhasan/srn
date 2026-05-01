@@ -1,0 +1,530 @@
+"use client";
+
+import { useState, useRef, useEffect, useMemo } from "react";
+
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ShoppingCart, User, Menu, LogOut, Package, Settings, LayoutDashboard, X, Phone, Zap, ChevronDown, Home, Car, Truck, Building2, Mail, Info, Cog, Plus, Minus, ChevronRight } from "lucide-react";
+
+
+
+import { signOut } from "next-auth/react";
+import { useCartStore } from "@/stores/cart-store";
+import type { UserRole, UserStatus } from "@prisma/client";
+import { SearchInput } from "./search-input";
+import { CategoryMenu } from "./category-menu";
+
+interface Category {
+    id: string;
+    name: string;
+    slug: string;
+    parentId?: string | null;
+    isInHeader?: boolean;
+    headerOrder?: number;
+    children?: Category[];
+}
+
+interface StorefrontHeaderProps {
+    user?: {
+        id: string;
+        email: string;
+        role: UserRole;
+        status: UserStatus;
+        companyName?: string | null;
+        discountRate?: number;
+    } | null;
+    logoUrl?: string;
+    siteName?: string;
+    categories?: Category[];
+    phone?: string;
+    facebookUrl?: string;
+    instagramUrl?: string;
+    twitterUrl?: string;
+    linkedinUrl?: string;
+    sidebarCategories?: Category[];
+}
+
+export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sidebarCategories = [], phone, facebookUrl, instagramUrl, twitterUrl, linkedinUrl }: StorefrontHeaderProps) {
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const items = useCartStore((state) => state.items);
+    const clearCart = useCartStore((state) => state.clearCart);
+    const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    // Auto-close mobile menu on navigation
+    useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [pathname, searchParams]);
+    const [mounted, setMounted] = useState(false);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const handleMouseEnter = () => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+        setIsDropdownOpen(true);
+    };
+
+    const handleMouseLeave = () => {
+        timeoutRef.current = setTimeout(() => {
+            setIsDropdownOpen(false);
+        }, 300);
+    };
+
+    const isAdmin = user?.role === "ADMIN" || user?.role === "OPERATOR";
+    const isDealer = user?.role === "DEALER" && user?.status === "APPROVED";
+
+    const categoryTree = useMemo(() => {
+        return categories
+            .filter(c => c.name !== "Root" && c.name !== "Home")
+            .map(c => ({
+                ...c,
+                children: (c.children || []) as Category[]
+            }));
+    }, [categories]);
+
+    // Use sidebar categories for mobile menu (all 11 categories with subcategories)
+    const mobileCategoryTree = useMemo(() => {
+        const source = sidebarCategories.length > 0 ? sidebarCategories : categories;
+        return source
+            .filter(c => c.name !== "Root" && c.name !== "Home")
+            .map(c => ({
+                ...c,
+                children: (c.children || []) as Category[]
+            }));
+    }, [sidebarCategories, categories]);
+
+    return (
+        <header className="sticky top-0 z-50 w-full bg-white/95 supports-[backdrop-filter]:bg-white/80 dark:bg-gray-900/95 supports-[backdrop-filter]:dark:bg-gray-900/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 dark:border-gray-800/50 transition-all duration-300">
+
+            {/* Top Row: Logo, Search, User Actions */}
+            <div className="border-b dark:border-gray-800/50">
+                <div className="container mx-auto px-4">
+                    <div className="flex h-16 items-center justify-between gap-4">
+                        {/* Left: Logo + Phone */}
+                        <div className="flex items-center gap-4 shrink-0">
+                            {/* Logo */}
+                            <Link href="/" className="flex items-center gap-2 group">
+                                {logoUrl ? (
+                                    <div className="relative h-10 md:h-14 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
+                                        <Image
+                                            src={logoUrl}
+                                            alt={siteName || "Logo"}
+                                            fill
+                                            className="object-contain"
+                                            sizes="(max-width: 768px) 120px, 160px"
+                                            priority
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 transition-transform duration-300 group-hover:scale-105">
+                                        <div className="w-10 h-10 md:w-14 md:h-14 bg-[#009AD0] rounded-xl flex items-center justify-center transform -rotate-3 shadow-lg group-hover:rotate-0 transition-transform">
+                                            <span className="text-white font-extrabold text-xl md:text-3xl">L</span>
+                                        </div>
+                                        <div className="flex flex-col leading-none">
+                                            <span className="font-black text-xl md:text-3xl text-gray-900 dark:text-white tracking-tight uppercase">
+                                                SERİN
+                                            </span>
+                                            <span className="font-bold text-[10px] md:text-base text-[#009AD0] tracking-widest uppercase">
+                                                MOTOR
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </Link>
+
+                            {/* Call Center (Desktop) - Next to Logo */}
+                            {phone && (
+                                <a
+                                    href={`tel:${phone.replace(/\s/g, '')}`}
+                                    className="hidden lg:flex items-center gap-2 text-gray-600 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 border-l border-gray-200 ml-2 pl-4"
+                                >
+                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                        <Phone className="h-4 w-4 text-green-600" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-500 font-medium">Çağrı Merkezi</span>
+                                        <span className="text-sm font-bold text-gray-900">{phone}</span>
+                                    </div>
+                                </a>
+                            )}
+                        </div>
+
+                        {/* Center: Search Bar */}
+                        <div className="flex-1 max-w-xl mx-auto hidden md:block">
+                            <SearchInput />
+                        </div>
+
+                        {/* Right Actions */}
+                        <div className="flex items-center gap-2 md:gap-4">
+
+                            {/* User Panel */}
+                            <div
+                                onMouseEnter={handleMouseEnter}
+                                onMouseLeave={handleMouseLeave}
+                                className="relative"
+                            >
+                                {!mounted ? (
+                                    <button className="flex items-center gap-3 text-gray-700 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100">
+                                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                                            <User className="h-5 w-5" />
+                                        </div>
+                                        <div className="hidden sm:flex flex-col items-start">
+                                            <span className="text-[10px] text-gray-500">Kullanıcı</span>
+                                            <span className="text-sm font-semibold">Giriş Yap</span>
+                                        </div>
+                                    </button>
+                                ) : (
+                                    <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen} modal={false}>
+                                        <DropdownMenuTrigger asChild>
+                                            <button className="flex items-center gap-3 text-gray-700 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 outline-none">
+                                                <div className={`w-10 h-10 ${user ? 'bg-[#009AD0]/10' : 'bg-gray-100'} rounded-full flex items-center justify-center`}>
+                                                    <User className={`h-5 w-5 ${user ? 'text-[#009AD0]' : ''}`} />
+                                                </div>
+                                                <div className="hidden sm:flex flex-col items-start">
+                                                    <span className="text-[10px] text-gray-500">Kullanıcı</span>
+                                                    <span className="text-sm font-semibold">
+                                                        {user ? "Hesabım" : "Giriş Yap"}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        </DropdownMenuTrigger>
+
+                                        {!user ? (
+                                            <DropdownMenuContent align="end" className="w-[280px] p-4">
+                                                <div className="flex flex-col gap-3">
+                                                    <Link href="/login" className="w-full">
+                                                        <Button variant="default" className="w-full">
+                                                            Giriş Yap
+                                                        </Button>
+                                                    </Link>
+                                                    <Link href="/register" className="w-full">
+                                                        <Button variant="outline" className="w-full">
+                                                            Üye Ol
+                                                        </Button>
+                                                    </Link>
+                                                </div>
+                                            </DropdownMenuContent>
+                                        ) : (
+                                            <DropdownMenuContent align="end" className="w-56">
+                                                <DropdownMenuLabel>
+                                                    <div className="flex flex-col space-y-1">
+                                                        <p className="text-sm font-medium">
+                                                            {user.companyName || "Hoşgeldiniz"}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">{user.email}</p>
+                                                    </div>
+                                                </DropdownMenuLabel>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem asChild>
+                                                    <Link href="/account">
+                                                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                                                        Hesabım
+                                                    </Link>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                {isDealer && (
+                                                    <>
+                                                        <DropdownMenuItem asChild>
+                                                            <Link href="/account/orders">
+                                                                <Package className="mr-2 h-4 w-4" />
+                                                                Siparişlerim
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                    </>
+                                                )}
+                                                {isAdmin && (
+                                                    <>
+                                                        <DropdownMenuItem asChild>
+                                                            <Link href="/admin">
+                                                                <Settings className="mr-2 h-4 w-4" />
+                                                                Admin Panel
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                    </>
+                                                )}
+                                                <DropdownMenuItem
+                                                    className="text-red-600"
+                                                    onClick={() => {
+                                                        const { logout } = useCartStore.getState();
+                                                        logout();
+                                                        signOut({ callbackUrl: "/" });
+                                                    }}
+                                                >
+                                                    <LogOut className="mr-2 h-4 w-4" />
+                                                    Çıkış Yap
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        )}
+                                    </DropdownMenu>
+                                )}
+                            </div>
+
+                            {/* Cart - Visible for everyone */}
+                            <Link href="/cart" className={cn(
+                                "flex items-center gap-3 text-gray-700 hover:text-blue-600 transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 pl-4",
+                                user && "border-l"
+                            )}>
+                                <div className="relative">
+                                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                                        <ShoppingCart className="h-5 w-5 text-orange-600" />
+                                    </div>
+                                    <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white border-2 border-white">
+                                        {mounted ? itemCount : 0}
+                                    </span>
+                                </div>
+                                <div className="hidden sm:flex flex-col items-start">
+                                    <span className="text-[10px] text-gray-500">Sepetim</span>
+                                    <span className="text-sm font-bold text-orange-600">
+                                        <CartTotalDisplay />
+                                    </span>
+                                </div>
+                            </Link>
+
+                            {/* Mobile Menu Toggle */}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="md:hidden"
+                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            >
+                                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Mobile Search Row - ALWAYS VISIBLE */}
+                <div className="md:hidden border-t dark:border-gray-800/50 bg-white/50 dark:bg-gray-900/50 py-3 px-4 animate-in slide-in-from-top-1 duration-300">
+                    <SearchInput />
+                </div>
+            </div>
+
+            {/* Bottom Row: Category Navigation (Desktop) - STRIKING DESIGN */}
+            <div
+                className="hidden md:block relative overflow-hidden bg-[#009AD0] bg-gradient-to-r from-[#0081AF]/95 via-[#009AD0]/95 to-[#0081AF]/95 backdrop-blur-md shadow-lg"
+            >
+                {/* Glowing Line Effect */}
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#4FC3F7] to-transparent opacity-50" />
+                <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#4FC3F7] to-transparent opacity-50" />
+
+                <div className="container mx-auto px-4 relative z-10">
+                    <div className="flex items-center">
+
+
+                        <nav className="flex items-center justify-center w-full py-3 gap-2 lg:gap-8">
+                            <Link
+                                href="/"
+                                className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
+                            >
+                                <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
+                                    <Home className="h-5 w-5 text-white group-hover:scale-110 transition-all" />
+                                </div>
+                                <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center whitespace-nowrap">Ana Sayfa</span>
+                            </Link>
+                            {categories
+                                .filter(c => c.name !== "Home" && c.name !== "Root")
+                                .map((category) => (
+                                    <Link
+                                        key={category.id}
+                                        href={`/category/${category.slug}`}
+                                        className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
+                                    >
+                                        <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
+                                            <Cog className="h-5 w-5 text-white group-hover:scale-110 group-hover:rotate-45 transition-all" />
+                                        </div>
+                                        <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center">
+                                            {category.name}
+                                        </span>
+                                    </Link>
+                                ))}
+                            <Link
+                                href="/about"
+                                className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
+                            >
+                                <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
+                                    <Building2 className="h-5 w-5 text-white group-hover:scale-110 transition-all" />
+                                </div>
+                                <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center whitespace-nowrap">Hakkımızda</span>
+                            </Link>
+                            <Link
+                                href="/contact"
+                                className="group flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:-translate-y-0.5"
+                            >
+                                <div className="p-2 rounded-lg bg-white/10 group-hover:bg-white/20 transition-all">
+                                    <Phone className="h-5 w-5 text-white group-hover:scale-110 transition-all" />
+                                </div>
+                                <span className="text-xs font-bold text-white group-hover:text-white transition-colors text-center whitespace-nowrap">İletişim</span>
+                            </Link>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+
+            {/* Mobile Menu */}
+            {isMobileMenuOpen && (
+                <div className="md:hidden border-b dark:border-gray-800/50 bg-white dark:bg-gray-900 supports-[backdrop-filter]:bg-white/95 supports-[backdrop-filter]:dark:bg-gray-900/95 backdrop-blur-xl animate-in slide-in-from-top-2 duration-200 max-h-[80vh] overflow-y-auto">
+                    <div className="container mx-auto px-4 py-4 space-y-4">
+                        {/* Mobile Quick Actions */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <Link
+                                href="/cart"
+                                className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-orange-50 text-orange-700 font-bold text-sm"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <ShoppingCart className="h-4 w-4" />
+                                Sepetim ({mounted ? itemCount : 0})
+                            </Link>
+                            <Link
+                                href={user ? "/account" : "/login"}
+                                className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-blue-50 text-blue-700 font-bold text-sm"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <User className="h-4 w-4" />
+                                {user ? "Hesabım" : "Giriş Yap"}
+                            </Link>
+                        </div>
+
+                        {/* Mobile Categories - Expandable Sidebar Style */}
+                        <div className="space-y-1.5">
+                            <p className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2">Kategoriler</p>
+                            <Link
+                                href="/products"
+                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-[#009AD0] hover:bg-blue-50 rounded-lg"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#009AD0]" />
+                                Tüm Ürünler
+                            </Link>
+                            {mobileCategoryTree.map((category) => {
+                                const hasChildren = category.children && category.children.length > 0;
+                                return (
+                                    <MobileCategoryItem
+                                        key={category.id}
+                                        category={category}
+                                        hasChildren={hasChildren}
+                                        onClose={() => setIsMobileMenuOpen(false)}
+                                    />
+                                );
+                            })}
+                        </div>
+
+                        {/* Mobile Quick Links */}
+                        <div className="border-t pt-4 space-y-1">
+                            <Link
+                                href="/about"
+                                className="block px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                Hakkımızda
+                            </Link>
+                            <Link
+                                href="/contact"
+                                className="block px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                İletişim
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </header>
+    );
+}
+
+function MobileCategoryItem({ category, hasChildren, onClose }: { category: Category; hasChildren: boolean; onClose: () => void }) {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <div className={cn(
+            "rounded-lg border border-gray-100 dark:border-gray-800 transition-all duration-200",
+            isOpen && "shadow-sm ring-1 ring-blue-500/20"
+        )}>
+            <div className="flex items-center">
+                <Link
+                    href={`/category/${category.slug}`}
+                    className="flex-1 flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-[#009AD0] transition-colors"
+                    onClick={onClose}
+                >
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                    {category.name}
+                </Link>
+                {hasChildren && (
+                    <button
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="p-2.5 mr-1 rounded-lg text-gray-400 hover:text-[#009AD0] hover:bg-blue-50 transition-all"
+                    >
+                        {isOpen ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    </button>
+                )}
+            </div>
+            {isOpen && hasChildren && (
+                <div className="px-4 pb-2 space-y-0.5 border-t border-gray-50 dark:border-gray-800/50">
+                    {category.children!.map((child) => (
+                        <Link
+                            key={child.id}
+                            href={`/category/${child.slug}`}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-500 hover:text-[#009AD0] hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            onClick={onClose}
+                        >
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
+                            {child.name}
+                        </Link>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CartTotalDisplay() {
+    const total = useCartStore((state) => state.getSummary().total);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const formattedTotal = new Intl.NumberFormat("tr-TR", {
+        style: "currency",
+        currency: "TRY",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(total);
+
+    if (!mounted) {
+        return (
+            <>
+                {new Intl.NumberFormat("tr-TR", {
+                    style: "currency",
+                    currency: "TRY",
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                }).format(0)}
+            </>
+        );
+    }
+
+    return <>{formattedTotal}</>;
+}

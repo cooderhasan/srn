@@ -1,0 +1,18 @@
+
+--- Matches for Samara ---
+Lada Samara Sport-Tek Kapı : lada-samara-sport-tek-kapi-34
+Samara 1500i : samara-1500i-12
+Lada Samara Kaporta Aksamı : lada-samara-kaporta-aksam-15
+Lada SamaraYedek parçaları : lada-samarayedek-paralar-23
+
+--- Matches for Vega ---
+Lada Vega 500-8V : lada-vega-500-8v-36
+Lada Vega 16v Yedek Parçaları : lada-vega-16v-yedek-paralar-37
+
+--- Matches for Kalina ---
+Lada Kalina Yedek Parçaları : lada-kalina-yedek-paralar-38
+
+--- Matches for Niva ---
+Lada Niva-1600 Yedek Parçaları : lada-niva-1600-yedek-paralar-39
+Lada Niva-100  Karb. Yedek Parçaları : lada-niva-100-karb-yedek-paralar-40
+Lada Niva-1700-İ Yedek Parçaları : lada-niva-1700-i-yedek-paralar-41

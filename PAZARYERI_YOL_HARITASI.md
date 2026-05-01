@@ -1,0 +1,47 @@
+# E-Ticaret Pazaryeri Entegrasyon ve Ölçeklendirme Yol Haritası
+
+Bu doküman, mevcut B2B/B2C Next.js e-ticaret altyapınızın yüksek performanslı, tıkanmayan ve profesyonel (Enterprise) bir pazar yeri senkronizasyon yeteneğine kavuşması için atılması gereken adımları teknik bir sıra halinde içermektedir.
+
+---
+
+## 🏗️ Faz 1: Altyapı Hazırlığı ve Arka Plan Kuyruk (Queue) Sistemi
+Mevcut durumda tüm API işlemlerinin senkron (anlık donmalara yol açarak) ilerlediğini tespit ettik. 7000+ ürünün anında işlenmesi için asenkron (kuyruklu) bir yapı şarttır.
+
+- [ ] **Redis Altyapısının Kurulması:** Sunucu (Coolify / Docker) üzerine bir Redis container başlatılacak (Maliyet ve RAM kullanımı son derece düşüktür).
+- [ ] **BullMQ Kütüphanesinin Projeye Eklenmesi:** Next.js içerisinde `package.json`'a iş parçacıklarını yönetecek kuyruk altyapısı kurulacak.
+- [ ] **Kuyruk Süreçlerinin (Worker) Yazılması:** Örneğin `updateMarketplacePriceQueue` adında bir worker yazılarak, arka planda ürünleri 100'erli batch'ler halinde Pazar yerlerine (Trendyol, N11) gönderebilmesi sağlanacak.
+- [ ] **Admin Paneline "Görevler" (Tasks) Arayüzü Eklenmesi:** Admin "Tümüne Zam Yap" dediğinde işlemin gidişini UI'da %20, %40... gibi progress bar (ilerleme) halinde görebilecek.
+
+---
+
+## 🔄 Faz 2: Kategori, Marka Eşleştirmesi (Mapping) ve Ürün Gönderimi
+Şu anda API entegrasyonlarında kategori ID'leri statik (mock/sahte) atanıyor. Ürünlerin başarıyla sergilenmesi için gerçek eşleştirme modülü gereklidir.
+
+- [ ] **Kategori Eşleştirme UI/UX:** Admin panelindeki mevcut kategorilerin sağında "Trendyol Kategori Bul", "N11 Kategori Bul" şeklinde seçici arayüzler eklenecek.
+- [ ] **Marka Eşleştirme (Brand Mapping):** Sistemdeki markalar, her pazar yeri için otomatik sorgulanıp veritabanına (`brand` tablosuna `trendyolBrandId` vs.) kaydedilecek.
+- [ ] **Product Variant Barcode Düzeltmeleri:** Pazar yerleri kesinlikle barcodsuz varyant kabul etmez. Veritabanındaki ürünlerde eksik barkodların uyarılarak tamamlatılması sağlanacak.
+- [ ] **Gerçek Veri Gönderim Testi:** Trendyol Test ortamına eşleştirilmesi yapılmış gerçek 10 adet ürün yollanıp hatalar (API response'ları) incelenecek.
+
+---
+
+## ⚡ Faz 3: Sipariş & Gerçek Zamanlı Stok Senkronizasyonu
+Stoklar arasında "Yok Satma" (Overselling) problemini önleyecek akıllı mimarinin kurulması.
+
+- [ ] **Order Created (Sipariş Oluştu) Event'i Yazılması:** Web sitenizden veya N11/Trendyol'dan sipariş geldiği saniye bir *Event* tetiklenecek.
+- [ ] **Veritabanı Stok Düşme İşleminin Eklenmesi:** Mevcut kodlardaki eksik giderilecek, satılan ürünün `Product` ve `ProductVariant` tablolarındaki stoğu güvenli bir db Transaction'u ile `-1` eksiltilecek.
+- [ ] **Webhooks Dinleyicisi (Listener) Tanımlanması:** Pazar yeri sipariş iptalleri (iptal olduysa stoku otomatik geri ekleme) işlemleri dinlenecek.
+- [ ] **Kritik Stok Fren Sistemi:** Kodlanan mevcut schema'daki `criticalStock` alanına ulaşıldığında ürünü pazar yerlerinde "Tükendi" göstermesi sağlanacak. (Yalnızca kendi kârlı ve asistan sitenizde kalacak).
+
+---
+
+## 🌍 Faz 4: Yeni Pazaryerlerinin (EpttAVM, Pazarama, İdefix) Eklenmesi
+Sistem artık sağlam, kuyruklu ve tamamen modüler çalışıyor; Yeni pazaryerleri rahatça entegre edilebilir.
+
+- [ ] **EpttAVM:** Swagger/Soap dokümanlarına göre `EpttavmConfig` Prisma şemasına eklenecek ve `api.ts` yazılacak.
+- [ ] **Pazarama:** Pazarama API dokümantasyonu incelenip `PazaramaConfig` ve `sync` fonksiyonları eklenecek.
+- [ ] **Kuyruğa Dahil Etme:** E-ticaret sitenizde stok 1 azaldığında, Background Worker *aynı saniye içinde* "Sırayla N11, Trendyol, Pazarama ve Epttavm'nin apilerine git ve stoğu 10'dan 9'a düşür" işlemini yapacak.
+
+---
+
+> **Not:** 
+> Yukarıdaki fazlar e-ticaret sitenizi basit bir monolitik uygulamadan, profesyonel (enterprise-grade) dev bir yapıya çıkartacaktır. Projelendirmeye/Geliştirmeye başlanacağı zaman öncelikle **Faz 1 (Kuyruk / Queue)** adımından başlanması tavsiye edilir. Çünkü sağlam bir iş kuyruğu olmadan yapılacak her toplu güncelleme mevcut sistemi kilitleyecektir.

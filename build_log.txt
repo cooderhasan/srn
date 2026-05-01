@@ -1,0 +1,105 @@
+
+> b2b@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+
+✔ Generated Prisma Client (v7.2.0) to .\node_modules\@prisma\client in 64ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\MOTOVITRIN1\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\MOTOVITRIN1\Desktop\Yetki Belgeleri\b2b\package-lock.json
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 5.4s
+  Running TypeScript ...
+  Collecting page data using 23 workers ...
+  Generating static pages using 23 workers (0/54) ...
+  Generating static pages using 23 workers (13/54) 
+  Generating static pages using 23 workers (26/54) 
+  Generating static pages using 23 workers (40/54) 
+✓ Generating static pages using 23 workers (54/54) in 368.7ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /about
+├ ƒ /account
+├ ƒ /account/addresses
+├ ƒ /account/finance
+├ ƒ /account/orders
+├ ƒ /account/profile
+├ ƒ /account/quotes
+├ ƒ /account/quotes/[id]
+├ ƒ /admin
+├ ƒ /admin/brands
+├ ƒ /admin/categories
+├ ƒ /admin/customers
+├ ƒ /admin/discount-groups
+├ ○ /admin/login
+├ ƒ /admin/orders
+├ ƒ /admin/orders/[id]/pdf
+├ ƒ /admin/orders/[id]/print
+├ ƒ /admin/products
+├ ƒ /admin/products/[id]/edit
+├ ƒ /admin/products/import
+├ ƒ /admin/products/new
+├ ƒ /admin/quotes
+├ ƒ /admin/quotes/[id]
+├ ƒ /admin/reports
+├ ƒ /admin/reports/categories
+├ ƒ /admin/reports/dealers
+├ ƒ /admin/reports/products
+├ ƒ /admin/reports/sales
+├ ƒ /admin/reports/stock
+├ ƒ /admin/settings
+├ ƒ /admin/sliders
+├ ƒ /admin/stock-alerts
+├ ƒ /api/admin/notifications
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/products/export
+├ ƒ /api/products/low-stock
+├ ƒ /api/products/template
+├ ƒ /api/quotes
+├ ƒ /api/quotes/[id]/accept
+├ ƒ /api/upload
+├ ƒ /cart
+├ ƒ /checkout
+├ ƒ /contact
+├ ○ /login
+├ ƒ /orders
+├ ƒ /orders/[id]
+├ ƒ /policies/cancellation
+├ ƒ /policies/commercial-communication
+├ ƒ /policies/cookies
+├ ƒ /policies/distance-sales
+├ ƒ /policies/kvkk
+├ ƒ /policies/membership
+├ ƒ /policies/payment-methods
+├ ƒ /policies/privacy
+├ ƒ /products
+├ ƒ /products/[slug]
+├ ƒ /quick-order
+├ ○ /register
+└ ƒ /request-quote
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

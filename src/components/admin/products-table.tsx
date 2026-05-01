@@ -1,0 +1,449 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Edit, MoreHorizontal, Trash, Star, Sparkles, TrendingUp, Search, Upload, Download, ExternalLink, Package } from "lucide-react";
+import { formatPrice } from "@/lib/helpers";
+import { deleteProduct, toggleProductStatus } from "@/app/admin/(protected)/products/actions";
+import { toast } from "sonner";
+
+interface Product {
+    id: string;
+    name: string;
+    slug: string;
+    sku: string | null;
+    barcode: string | null;
+    listPrice: number;
+    vatRate: number;
+    minQuantity: number;
+    stock: number;
+    isFeatured: boolean;
+    isNew: boolean;
+    isBestSeller: boolean;
+    isActive: boolean;
+    isBundle?: boolean;
+    category: {
+        id: string;
+        name: string;
+    } | null;
+    brand: {
+        id: string;
+        name: string;
+    } | null;
+}
+
+interface Brand {
+    id: string;
+    name: string;
+}
+
+interface ProductsTableProps {
+    products: Product[];
+    brands: Brand[];
+    pagination?: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+    };
+}
+
+const stockStatusOptions = [
+    { value: "ALL", label: "Tümü" },
+    { value: "IN_STOCK", label: "Stokta Var" },
+    { value: "OUT_OF_STOCK", label: "Tükendi" },
+];
+
+const priceStatusOptions = [
+    { value: "ALL", label: "Tümü" },
+    { value: "NO_PRICE", label: "Fiyatsız" },
+    { value: "HAS_PRICE", label: "Fiyatlı" },
+];
+
+export function ProductsTable({ products: initialProducts, brands, pagination }: ProductsTableProps) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Filter States
+    const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+    const [brandFilter, setBrandFilter] = useState(searchParams.get("brand") || "ALL");
+    const [stockStatus, setStockStatus] = useState(searchParams.get("stockStatus") || "ALL");
+    const [priceStatus, setPriceStatus] = useState(searchParams.get("priceStatus") || "ALL");
+
+    const [products, setProducts] = useState(initialProducts);
+    const [loading, setLoading] = useState<string | null>(null);
+
+    // Sync local product state when props change
+    useEffect(() => {
+        setProducts(initialProducts);
+    }, [initialProducts]);
+
+    // Apply Filters
+    const applyFilters = () => {
+        const params = new URLSearchParams(searchParams.toString());
+
+        if (searchTerm) params.set("search", searchTerm);
+        else params.delete("search");
+
+        if (brandFilter && brandFilter !== "ALL") params.set("brand", brandFilter);
+        else params.delete("brand");
+
+        if (stockStatus && stockStatus !== "ALL") params.set("stockStatus", stockStatus);
+        else params.delete("stockStatus");
+
+        if (priceStatus && priceStatus !== "ALL") params.set("priceStatus", priceStatus);
+        else params.delete("priceStatus");
+
+        params.set("page", "1");
+        router.push(`?${params.toString()}`);
+    };
+
+    // Reset Filters
+    const resetFilters = () => {
+        setSearchTerm("");
+        setBrandFilter("ALL");
+        setStockStatus("ALL");
+        setPriceStatus("ALL");
+        router.push("/admin/products");
+    };
+
+    // Handle Pagination
+    const handlePageChange = (newPage: number) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("page", newPage.toString());
+        router.push(`?${params.toString()}`);
+    };
+
+    const handleDelete = async (productId: string) => {
+        if (!confirm("Bu ürünü silmek istediğinize emin misiniz?")) return;
+
+        setLoading(productId);
+        try {
+            await deleteProduct(productId);
+            toast.success("Ürün silindi.");
+            setProducts(prev => prev.filter(p => p.id !== productId));
+        } catch {
+            toast.error("Bir hata oluştu.");
+        } finally {
+            setLoading(null);
+        }
+    };
+
+    const handleToggleStatus = async (productId: string, isActive: boolean) => {
+        try {
+            await toggleProductStatus(productId, !isActive);
+            toast.success(isActive ? "Ürün pasif yapıldı." : "Ürün aktif yapıldı.");
+            setProducts(prev => prev.map(p =>
+                p.id === productId ? { ...p, isActive: !isActive } : p
+            ));
+        } catch {
+            toast.error("Bir hata oluştu.");
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                    {pagination && `${pagination.totalCount} ürün`}
+                </div>
+                <div className="flex gap-2">
+                    <Link href="/api/products/export">
+                        <Button variant="outline" size="sm">
+                            <Download className="h-4 w-4 mr-2" />
+                            Excel'e Aktar
+                        </Button>
+                    </Link>
+                    <Link href="/admin/products/import">
+                        <Button variant="outline" size="sm">
+                            <Upload className="h-4 w-4 mr-2" />
+                            Toplu Yükle
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="bg-white dark:bg-gray-900 p-4 rounded-lg shadow border border-gray-100 dark:border-gray-800">
+                <div className="flex flex-col md:flex-row md:items-end gap-4">
+                    {/* Search */}
+                    <div className="flex-1 min-w-[200px] space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Arama</label>
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="Ürün Adı, SKU, Barkod..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+                                className="pl-9"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Brand */}
+                    <div className="w-full md:w-[180px] space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Marka</label>
+                        <Select value={brandFilter} onValueChange={setBrandFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tümü" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">Tümü</SelectItem>
+                                {brands.map((brand) => (
+                                    <SelectItem key={brand.id} value={brand.id}>
+                                        {brand.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Stock Status */}
+                    <div className="w-full md:w-[180px] space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Stok Durumu</label>
+                        <Select value={stockStatus} onValueChange={setStockStatus}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tümü" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {stockStatusOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Price Status */}
+                    <div className="w-full md:w-[180px] space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Fiyat Durumu</label>
+                        <Select value={priceStatus} onValueChange={setPriceStatus}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tümü" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {priceStatusOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-end gap-2 md:ml-auto w-full md:w-auto pt-2 md:pt-0">
+                        <Button onClick={resetFilters} variant="ghost" className="text-gray-500 hover:text-gray-700">
+                            Temizle
+                        </Button>
+                        <Button onClick={applyFilters} className="min-w-[100px]">
+                            Filtrele
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Table */}
+            <div className="rounded-lg border bg-white dark:bg-gray-800 shadow">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Ürün</TableHead>
+                                <TableHead>Kategori</TableHead>
+                                <TableHead>Marka</TableHead>
+                                <TableHead>SKU/Barkod</TableHead>
+                                <TableHead>Liste Fiyatı</TableHead>
+                                <TableHead>Stok</TableHead>
+                                <TableHead>Durum</TableHead>
+                                <TableHead className="text-right">İşlemler</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {products.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                                        Ürün bulunamadı.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                products.map((product) => (
+                                    <TableRow key={product.id}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Link 
+                                                            href={`/products/${product.slug}`} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="font-medium hover:text-blue-600 transition-colors"
+                                                        >
+                                                            {product.name}
+                                                        </Link>
+                                                        {(product as any).isBundle && (
+                                                            <span className="inline-flex items-center gap-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                                                <Package className="h-3 w-3" />
+                                                                Paket
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-1 mt-1">
+                                                        {product.isFeatured && (
+                                                            <Star className="h-3 w-3 text-yellow-500" />
+                                                        )}
+                                                        {product.isNew && (
+                                                            <Sparkles className="h-3 w-3 text-blue-500" />
+                                                        )}
+                                                        {product.isBestSeller && (
+                                                            <TrendingUp className="h-3 w-3 text-green-500" />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {product.category?.name || (
+                                                <span className="text-gray-400">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {product.brand?.name || (
+                                                <span className="text-gray-400">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="text-sm">
+                                                <div>{product.sku || "-"}</div>
+                                                <div className="text-gray-500 text-xs">{product.barcode || "-"}</div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{formatPrice(Number(product.listPrice))}</TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={product.stock > 10 ? "default" : "destructive"}
+                                            >
+                                                {product.stock}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={product.isActive ? "default" : "secondary"}
+                                                className={
+                                                    product.isActive
+                                                        ? "bg-green-100 text-green-800"
+                                                        : "bg-gray-100 text-gray-800"
+                                                }
+                                            >
+                                                {product.isActive ? "Aktif" : "Pasif"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        disabled={loading === product.id}
+                                                    >
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem asChild>
+                                                        <Link href={`/admin/products/${product.id}/edit`}>
+                                                            <Edit className="h-4 w-4 mr-2" />
+                                                            Düzenle
+                                                        </Link>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem asChild>
+                                                        <Link 
+                                                            href={`/products/${product.slug}`} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                        >
+                                                            <ExternalLink className="h-4 w-4 mr-2" />
+                                                            Görüntüle
+                                                        </Link>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() =>
+                                                            handleToggleStatus(product.id, product.isActive)
+                                                        }
+                                                    >
+                                                        {product.isActive ? "Pasif Yap" : "Aktif Yap"}
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        className="text-red-600"
+                                                        onClick={() => handleDelete(product.id)}
+                                                    >
+                                                        <Trash className="h-4 w-4 mr-2" />
+                                                        Sil
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+
+                {/* Pagination Controls */}
+                {pagination && pagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between p-4 border-t">
+                        <div className="text-sm text-gray-500">
+                            Toplam {pagination.totalCount} ürün, Sayfa {pagination.currentPage} / {pagination.totalPages}
+                        </div>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                                disabled={pagination.currentPage <= 1}
+                            >
+                                Önceki
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                                disabled={pagination.currentPage >= pagination.totalPages}
+                            >
+                                Sonraki
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

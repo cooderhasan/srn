@@ -1,0 +1,740 @@
+// Prisma schema for B2B E-Commerce Platform
+// PostgreSQL database with dealer-based discount system
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum UserRole {
+  GUEST
+  CUSTOMER
+  DEALER
+  OPERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum OrderStatus {
+  PENDING
+  WAITING_FOR_PAYMENT // Ödeme Bekleniyor (PayTR vb. için geçici statü)
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CREDIT_CARD
+  CURRENT_ACCOUNT // Cari Hesap / Açık Hesap
+  CASH_ON_DELIVERY // Kapıda Ödeme
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum QuoteStatus {
+  PENDING     // Müşteri talep etti
+  REVIEWING   // Admin inceliyor
+  QUOTED      // Teklif verildi
+  ACCEPTED    // Müşteri kabul etti
+  REJECTED    // Reddedildi
+  EXPIRED     // Süresi doldu
+  CONVERTED   // Siparişe dönüştürüldü
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  name            String?        // Ad Soyad
+  companyName     String?
+  taxNumber       String?
+  phone           String?
+  address         String?
+  city            String?
+  district        String?
+  postalCode      String?
+  role            UserRole       @default(CUSTOMER)
+  status          UserStatus     @default(PENDING)
+  discountGroupId String?
+  discountGroup   DiscountGroup? @relation(fields: [discountGroupId], references: [id])
+  orders          Order[]
+  quotes          Quote[]
+  adminLogs       AdminLog[]     @relation("AdminActions")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt  
+  cart            Cart?
+  reviews         Review[]
+  wishlist        Wishlist[]
+  returnRequests  ReturnRequest[]
+
+  // Current Account / Bakiye Sistemi
+  creditLimit      Decimal        @default(0)   // Tanımlı Kredi Limiti
+  riskLimit        Decimal        @default(0)   // Risk Limiti (Opsiyonel)
+  transactions     CurrentAccountTransaction[]  // Hesap Hareketleri
+
+  @@map("users")
+}
+
+// ==================== CURRENT ACCOUNT TYPES ====================
+
+enum TransactionType {
+  DEBIT    // BORÇ (Sipariş vb. - Müşterinin borçlanması)
+  CREDIT   // ALACAK (Ödeme vb. - Müşterinin ödeme yapması)
+}
+
+enum ProcessType {
+  ORDER         // Sipariş kaynaklı
+  PAYMENT       // Ödeme / Tahsilat
+  REFUND        // İade
+  ADJUSTMENT    // Manuel Düzeltme / Virman
+  OPENING_BALANCE // Açılış Bakiyesi
+}
+
+// Cari Hesap Hareketleri
+model CurrentAccountTransaction {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+  
+  type            TransactionType
+  processType     ProcessType
+  amount          Decimal         @default(0)
+  description     String?         // İşlem açıklaması
+  documentNo      String?         // Fatura No / Dekont No
+  
+  orderId         String?         // Varsa ilişkili sipariş
+  order           Order?          @relation(fields: [orderId], references: [id])
+  
+  createdBy       String?         // İşlemi yapan admin (email/id)
+  createdAt       DateTime        @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model DiscountGroup {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  discountRate Decimal  @db.Decimal(5, 2)
+  isActive     Boolean  @default(true)
+  users        User[]
+  createdAt    DateTime @default(now())
+
+  @@map("discount_groups")
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  order     Int       @default(0)
+  isActive  Boolean   @default(true)
+  imageUrl  String?
+  trendyolCategoryId Int? // Trendyol Kategori ID
+  n11CategoryId      Int? // N11 Kategori ID
+  hbCategoryId       String? // Hepsiburada Kategori ID (HB uses strings often like "telefon")
+  googleProductCategory String? // Google Product Taxonomy (örn. "Ev ve Bahçe > Mobilya > Sandalyeler")
+  isFeatured Boolean  @default(false)
+  isInHeader Boolean  @default(false)
+  headerOrder Int     @default(0)
+  legacyProducts  Product[] @relation("LegacyCategory")
+  products  Product[]
+
+  createdAt DateTime  @default(now())
+  
+  // Hierarchical Categories
+  parentId  String?
+  parent    Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryHierarchy")
+
+  @@map("categories")
+}
+
+model Brand {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  logoUrl   String?
+  isActive  Boolean   @default(true)
+  trendyolBrandId Int?
+  n11BrandId      Int?
+  hbBrandId       String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+
+  @@map("brands")
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  sku         String?     @unique // Stok Kodu
+  barcode     String?     // Barkod
+  brandId     String?     // Marka ID
+  brand       Brand?      @relation(fields: [brandId], references: [id])
+  origin      String?     // Menşei
+  description String?     @db.Text // HTML içerik için Text tipi
+  listPrice   Decimal     @db.Decimal(12, 2)
+  salePrice   Decimal?    @db.Decimal(12, 2) // İndirimli fiyat (opsiyonel)
+  trendyolPrice Decimal?  @db.Decimal(12, 2) // Trendyol'a gönderilecek özel fiyat
+  n11Price    Decimal?    @db.Decimal(12, 2) // N11'e gönderilecek özel fiyat
+  hepsiburadaPrice Decimal? @db.Decimal(12, 2) // Hepsiburada'ya gönderilecek özel fiyat
+  vatRate     Int         @default(20)
+  minQuantity Int         @default(1)
+  stock       Int         @default(0)
+  criticalStock Int       @default(10) // Kritik stok seviyesi
+  images      String[]
+  weight      Decimal?    @db.Decimal(8, 2)  // Ağırlık (kg)
+  width       Decimal?    @db.Decimal(8, 2)  // Genişlik (cm)
+  height      Decimal?    @db.Decimal(8, 2)  // Yükseklik (cm)
+  length      Decimal?    @db.Decimal(8, 2)  // Uzunluk (cm)
+  desi        Decimal?    @db.Decimal(8, 2)  // Hesaplanmış veya manuel desi
+
+  // Bundle (Paket Ürün)
+  isBundle    Boolean     @default(false)  // Paket ürün mü?
+
+  isFeatured  Boolean     @default(false)
+  isNew       Boolean     @default(false)
+  isBestSeller Boolean    @default(false)
+  isActive    Boolean     @default(true)
+  
+  // Marketplace Visibility
+  isTrendyolActive    Boolean @default(false)
+  isN11Active         Boolean @default(false)
+  isHepsiburadaActive Boolean @default(false)
+  isGoogleActive      Boolean @default(false) // Google Shopping Feed'e dahil edilsin mi?
+
+  // Google Merchant Center
+  googlePrice  Decimal?  @db.Decimal(12, 2) // Google'a özel fiyat (boşsa listPrice kullanılır)
+  gtin         String?   // GTIN / EAN (Global Trade Item Number)
+  mpn          String?   // Manufacturer Part Number
+  referenceUrl String?   // AI için referans alınan kaynak URL
+
+  categoryId  String? // Deprecated: Use categories relation instead
+  category    Category?   @relation("LegacyCategory", fields: [categoryId], references: [id])
+  categories  Category[]
+  orderItems  OrderItem[]
+  quoteItems  QuoteItem[]
+  variants    ProductVariant[]
+  cartItems   CartItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  trendyolProduct TrendyolProduct?
+  n11Product      N11Product?
+  hepsiburadaProduct HepsiburadaProduct?
+  reviews         Review[]
+  wishlistItems   Wishlist[]
+  bundleItems     BundleItem[] @relation("BundleParent")  // Bu paketin içindeki ürünler
+  bundleOf        BundleItem[] @relation("BundleChild")   // Bu ürünün dahil olduğu paketler
+
+  @@map("products")
+}
+
+// ==================== BUNDLE (PAKET ÜRÜN) ====================
+
+model BundleItem {
+  id              String   @id @default(cuid())
+  bundleProductId String   // Paket ürünün ID'si
+  bundleProduct   Product  @relation("BundleParent", fields: [bundleProductId], references: [id], onDelete: Cascade)
+  childProductId  String   // Pakete dahil edilen ürünün ID'si
+  childProduct    Product  @relation("BundleChild", fields: [childProductId], references: [id], onDelete: Cascade)
+  quantity        Int      @default(1) // Bu üründen pakette kaç adet var
+
+  @@unique([bundleProductId, childProductId])
+  @@index([bundleProductId])
+  @@index([childProductId])
+  @@map("bundle_items")
+}
+
+model ProductVariant {
+  id              String      @id @default(cuid())
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  color           String?     // Renk
+  size            String?     // Beden
+  sku             String?     // Varyant özel SKU
+  barcode         String?     // Varyant özel Barkod
+  stock           Int         @default(0)
+  priceAdjustment Decimal     @default(0) @db.Decimal(12, 2) // Fiyat farkı (+/-)
+  isActive        Boolean     @default(true)
+  orderItems      OrderItem[]
+  cartItems       CartItem[]
+  createdAt       DateTime    @default(now())
+
+  @@unique([productId, color, size])
+  @@map("product_variants")
+}
+
+model Order {
+  id                   String        @id @default(cuid())
+  orderNumber          String        @unique
+  userId               String?       // Optional for guest orders
+  user                 User?         @relation(fields: [userId], references: [id])
+  guestEmail           String?       // Email for guest orders
+  subtotal             Decimal       @db.Decimal(12, 2)
+  discountAmount       Decimal       @db.Decimal(12, 2)
+  appliedDiscountRate  Decimal       @db.Decimal(5, 2)
+  vatAmount            Decimal       @db.Decimal(12, 2)
+  total                Decimal       @db.Decimal(12, 2)
+  status               OrderStatus   @default(PENDING)
+  shippingAddress      Json?
+  shippingCost         Decimal       @default(0) @db.Decimal(12, 2) // Kargo ücreti
+  shippingDesi         Decimal?      @db.Decimal(8, 2)  // Toplam sipariş desisi
+  cargoCompany         String?       // Kargo Firması
+  trackingUrl          String?       // Kargo Takip Linki
+  // Yurtiçi Kargo Entegrasyonu
+  ykCargoKey          String?       // YK'ya gönderilen tekil kargo anahtarı
+  ykJobId             Int?          // YK Talep Numarası (createShipment'tan döner)
+  ykDocId             String?       // YK Gönderi Numarası (queryShipment'tan gelir)
+  ykStatus            String?       // NOP | IND | ISR | CNL | ISC | DLV | BI
+  ykStatusMessage     String?       // YK durum açıklaması
+  ykSyncedAt          DateTime?     // Son YK senkronizasyon zamanı
+  ykError             String?       // Son YK hata mesajı
+  notes                String?
+  items                OrderItem[]
+  payment              Payment?
+  transactions         CurrentAccountTransaction[] // Cari hareket bağlantısı
+  returnRequests       ReturnRequest[]
+  bankTransferNotifications BankTransferNotification[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String          @id @default(cuid())
+  orderId      String
+  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id])
+  variantId    String?
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
+  productName  String
+  variantInfo  String?         // Sipariş anında varyant bilgisi (Renk: X, Beden: Y)
+  quantity     Int
+  unitPrice    Decimal         @db.Decimal(12, 2)
+  discountRate Decimal         @db.Decimal(5, 2)
+  vatRate      Int
+  lineTotal    Decimal         @db.Decimal(12, 2)
+  returnRequest ReturnRequest[]
+
+  @@map("order_items")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String        @unique
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method      PaymentMethod @default(BANK_TRANSFER)
+  status      PaymentStatus @default(PENDING)
+  amount      Decimal       @db.Decimal(12, 2)
+  providerRef String?
+  providerData Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+model SiteSettings {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+model AdminLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      User     @relation("AdminActions", fields: [adminId], references: [id])
+  action     String
+  details    String?  @db.Text
+  entityType String
+  entityId   String?
+  oldData    Json?
+  newData    Json?
+  createdAt  DateTime @default(now())
+
+  @@map("admin_logs")
+}
+
+model Slider {
+  id        String   @id @default(cuid())
+  title     String?
+  subtitle  String?
+  imageUrl  String
+  linkUrl   String?
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("sliders")
+}
+
+model Banner {
+  id        String   @id @default(cuid())
+  title     String?
+  imageUrl  String
+  linkUrl   String?
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("banners")
+}
+
+model CargoCompany {
+  id           String           @id @default(cuid())
+  name         String           @unique
+  isActive     Boolean          @default(true)
+  isDesiActive Boolean          @default(false)
+  desiPrices   DesiPriceRange[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@map("cargo_companies")
+}
+
+model DesiPriceRange {
+  id              String       @id @default(cuid())
+  cargoCompanyId  String
+  cargoCompany    CargoCompany @relation(fields: [cargoCompanyId], references: [id], onDelete: Cascade)
+  minDesi         Decimal      @db.Decimal(8, 2)  // Başlangıç Desi
+  maxDesi         Decimal      @db.Decimal(8, 2)  // Bitiş Desi
+  price           Decimal      @db.Decimal(12, 2) // Kargo Ücreti (TL)
+  multiplierType  String       @default("FIXED")  // "FIXED" = Sabit Değer, "MULTIPLY" = Katsayı ile Çarp
+  createdAt       DateTime     @default(now())
+
+  @@index([cargoCompanyId])
+  @@map("desi_price_ranges")
+}
+
+// ==================== QUOTE SYSTEM ====================
+
+model Quote {
+  id          String      @id @default(cuid())
+  quoteNumber String      @unique
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  status      QuoteStatus @default(PENDING)
+  items       QuoteItem[]
+  notes       String?     @db.Text  // Müşteri notu
+  adminNotes  String?     @db.Text  // Admin notu
+  subtotal    Decimal?    @db.Decimal(12, 2)
+  discount    Decimal?    @db.Decimal(12, 2)
+  total       Decimal?    @db.Decimal(12, 2)
+  validUntil  DateTime?   // Teklif geçerlilik süresi
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  productName String
+  quantity    Int
+  listPrice   Decimal  @db.Decimal(12, 2)  // Liste fiyatı
+  quotedPrice Decimal? @db.Decimal(12, 2)  // Teklif fiyatı
+  lineTotal   Decimal? @db.Decimal(12, 2)
+
+  @@map("quote_items")
+}
+
+// ==================== NEW FEATURES ====================
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("contact_messages")
+}
+
+model Policy {
+  slug      String   @id
+  title     String
+  content   String   @db.Text // HTML content
+  updatedAt DateTime @updatedAt
+
+  @@map("policies")
+}
+
+// ==================== TRENDYOL INTEGRATION ====================
+
+model TrendyolConfig {
+  id             String   @id @default(cuid())
+  supplierId     String
+  apiKey         String
+  apiSecret      String
+  isActive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@map("trendyol_configs")
+}
+
+model TrendyolProduct {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  barcode        String   // Barker
+  trendyolId     String?  // Trendyol's internal ID if returned
+  
+  isSynced       Boolean  @default(false)
+  lastSyncError  String? 
+  lastSyncedAt   DateTime?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@unique([productId])
+  @@index([barcode])
+  @@map("trendyol_products")
+}
+
+model N11Config {
+  id             String   @id @default(cuid())
+  apiKey         String
+  apiSecret      String
+  isActive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("n11_configs")
+}
+
+model N11Product {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  n11Id          String?  // N11 Product ID
+  sellerCode     String?  // Our SKU/Barcode used in N11
+
+  isSynced       Boolean  @default(false)
+  lastSyncError  String?
+  lastSyncedAt   DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([productId])
+  @@map("n11_products")
+}
+
+model HepsiburadaConfig {
+  id             String   @id @default(cuid())
+  username       String   // Merchant ID usually
+  password       String
+  merchantId     String?  // Sometimes separate
+  isActive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("hepsiburada_configs")
+}
+
+model HepsiburadaProduct {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  hbSku          String?  // Hepsiburada SKU
+  merchantSku    String?  // Our SKU
+
+  isSynced       Boolean  @default(false)
+  lastSyncError  String?
+  lastSyncedAt   DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([productId])
+  @@map("hepsiburada_products")
+}
+
+model Cart {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           CartItem[]
+  updatedAt       DateTime   @updatedAt
+  reminderSentAt  DateTime?  // Son hatırlatma e-postası gönderim zamanı
+  reminderCount   Int        @default(0) // Toplam gönderilen hatırlatma sayısı
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String          @id @default(cuid())
+  cartId    String
+  cart      Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity  Int             @default(1)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@map("cart_items")
+}
+
+// ==================== B2C FEATURES ====================
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id])
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  rating    Int          // 1-5 stars
+  comment   String?      @db.Text
+  status    ReviewStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+  @@map("reviews")
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("wishlists")
+}
+
+enum ReturnStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model ReturnRequest {
+  id          String       @id @default(cuid())
+  orderId     String
+  order       Order        @relation(fields: [orderId], references: [id])
+  orderItemId String
+  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  reason      String
+  details     String?      @db.Text
+  images      String[]
+  status      ReturnStatus @default(PENDING)
+  adminNote   String?      @db.Text
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([orderId])
+  @@index([userId])
+  @@map("return_requests")
+}
+
+// ==================== BANK TRANSFER NOTIFICATION ====================
+
+model BankTransferNotification {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId        String?
+  senderName    String          // Gönderici adı
+  bankName      String          // Banka adı
+  amount        Decimal  @db.Decimal(12, 2)
+  transferDate  DateTime        // Havale tarihi
+  receiptUrl    String?         // Dekont görseli (opsiyonel)
+  notes         String?  @db.Text
+  status        String   @default("PENDING") // PENDING, CONFIRMED, REJECTED
+  adminNote     String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@map("bank_transfer_notifications")
+}
+
+// ==================== YURTİÇİ KARGO ENTEGRASYONu ====================
+
+model YurticiKargoConfig {
+  id               String   @id @default(cuid())
+  username         String   // YK Web Servis Kullanıcı Adı (Alıcı Ödemeli)
+  password         String   // YK Web Servis Şifresi
+  customerCode     String?  // Müşteri Kodu (Opsiyonel Bilgi)
+  unitCode         String?  // Birim Kodu (Opsiyonel Bilgi)
+  demandNo         String?  // Talep No (Opsiyonel Bilgi)
+  isTestMode       Boolean  @default(true)  // true = test, false = canlı
+  isActive         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("yurtici_kargo_configs")
+}
+
+// ==================== GEMINI AI INTEGRATION ====================
+
+model GeminiConfig {
+  id              String   @id @default(cuid())
+  provider        String   @default("GEMINI") // "GEMINI" veya "OPENROUTER"
+  apiKey          String?
+  openRouterApiKey String?
+  openRouterModel  String   @default("qwen/qwen3.6-plus:free") // Varsayılan model (ücretsiz)
+  isActive        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("gemini_configs")
+}

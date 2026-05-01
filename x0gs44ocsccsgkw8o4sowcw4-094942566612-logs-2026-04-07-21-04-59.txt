@@ -1,0 +1,100 @@
+MW_DEBUG: Path: /admin/orders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/brands Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/categories Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports Token: true Role: ADMIN
+MW_DEBUG: Path: /admin Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/import Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/new Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/integrations/gemini Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/orders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports/abandoned-carts Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/banners Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/sliders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/categories Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/brands Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports Token: true Role: ADMIN
+MW_DEBUG: Path: /admin Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+LAYOUT_DEBUG: Session User: info@ladamarketi.com Role: ADMIN
+MW_DEBUG: Path: /admin/products/new Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/integrations/gemini Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/import Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports/abandoned-carts Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/orders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/banners Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/sliders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/brands Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/categories Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports Token: true Role: ADMIN
+MW_DEBUG: Path: /admin Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/new Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/integrations/gemini Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/import Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports/abandoned-carts Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/orders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/sliders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/categories Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/brands Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/banners Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+MW_DEBUG: Path: /admin Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/cmnp3mnlk00a2p80kfbex0s2e/edit Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/cmnp3mnlk00a2p80kfbex0s2e/edit Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+LAYOUT_DEBUG: Session User: info@ladamarketi.com Role: ADMIN
+MW_DEBUG: Path: /admin/products/import Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports/abandoned-carts Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/banners Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/sliders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/brands Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/categories Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/orders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports Token: true Role: ADMIN
+MW_DEBUG: Path: /admin Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products/import Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports/abandoned-carts Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/orders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/banners Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/sliders Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/products Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/categories Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/brands Token: true Role: ADMIN
+MW_DEBUG: Path: /admin/reports Token: true Role: ADMIN
+MW_DEBUG: Path: /admin Token: true Role: ADMIN
+Product slug: lada-vega-kalorifer-isi-klapesi-kmp-767
+Product origin from DB: null
+Product variants count: 0
+Product slug: samara-sanziman-mahruti-mili
+Product origin from DB: null
+Product variants count: 0
+Product slug: lada-vega-sw-2111-bagaj-kapagi-mentesesi-sag
+Product origin from DB: null
+Product variants count: 0
+Product slug: samara-vega-benzin-deposu-186
+Product origin from DB: null
+Product variants count: 0
+Product slug: lada-samara-vega-8v-kapak-conta-200-678
+Product origin from DB: null
+Product variants count: 0
+SYNC_CART: Received request, item count: 1
+SYNC_CART: No active session, skipping sync.
+Product slug: lada-samara-paspas-havuzlu-272
+Product origin from DB: null
+Product variants count: 0
+Product slug: samara-vega-fan-musuru
+Product origin from DB: null
+Product variants count: 0
+Product slug: skoda-favorit-felicia-forman-amortisor-arka-komple
+Product origin from DB: null
+Product variants count: 0
+Product slug: lada-samara-vega-niva-1700-fren-ana-merkezi-ve-hidrolik-deposu-komple-orijinal-576
+Product origin from DB: null
+Product variants count: 0
+Product slug: lada-vega-kalorifer-isi-ayar-motoru-em-625
+Product origin from DB: null
+Product variants count: 0
