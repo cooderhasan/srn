@@ -2,12 +2,10 @@
 
 import * as React from "react";
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Check, X, Search } from "lucide-react";
+import { Check, X, Search, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface CategoryOption {
     id: string;
@@ -30,50 +28,46 @@ export function CategoryTreeSelect({
 }: CategoryTreeSelectProps) {
     const [open, setOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [activeMainCategory, setActiveMainCategory] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState("main");
+    const [activeLevel1, setActiveLevel1] = useState<string | null>(null);
+    const [activeLevel2, setActiveLevel2] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setOpen(false);
             }
         };
-
-        if (open) {
-            document.addEventListener("mousedown", handleClickOutside);
-        }
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
+        if (open) document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [open]);
 
-    // Get main categories (those whose parent is not in the list - i.e., top-level after filtering Root/Home)
-    const mainCategories = useMemo(() => {
+    // Level 1: En üst kategoriler (parentId yok veya parent options içinde değil)
+    const level1Categories = useMemo(() => {
         const ids = new Set(options.map((o) => o.id));
         return options.filter((o) => !o.parentId || !ids.has(o.parentId));
     }, [options]);
 
-    // Get subcategories for the active main category
-    const subcategories = useMemo(() => {
-        if (!activeMainCategory) return [];
-        return options.filter((o) => o.parentId === activeMainCategory);
-    }, [options, activeMainCategory]);
+    // Level 2: Seçili ana kategorinin çocukları
+    const level2Categories = useMemo(() => {
+        if (!activeLevel1) return [];
+        return options.filter((o) => o.parentId === activeLevel1);
+    }, [options, activeLevel1]);
 
-    // Filter by search
-    const filteredMainCategories = useMemo(() => {
-        if (!searchQuery) return mainCategories;
-        const lq = searchQuery.toLowerCase();
-        return mainCategories.filter((c) => c.name.toLowerCase().includes(lq));
-    }, [mainCategories, searchQuery]);
+    // Level 3: Seçili 2. seviye kategorinin çocukları
+    const level3Categories = useMemo(() => {
+        if (!activeLevel2) return [];
+        return options.filter((o) => o.parentId === activeLevel2);
+    }, [options, activeLevel2]);
 
-    const filteredSubcategories = useMemo(() => {
-        if (!searchQuery) return subcategories;
+    const hasChildren = (id: string) => options.some((o) => o.parentId === id);
+
+    // Arama sonuçları - tüm seviyelerde ara
+    const searchResults = useMemo(() => {
+        if (!searchQuery) return [];
         const lq = searchQuery.toLowerCase();
-        return subcategories.filter((c) => c.name.toLowerCase().includes(lq));
-    }, [subcategories, searchQuery]);
+        return options.filter((c) => c.name.toLowerCase().includes(lq));
+    }, [options, searchQuery]);
 
     const selectedNames = useMemo(() => {
         return selected.map((id) => options.find((o) => o.id === id)?.name || id);
@@ -91,28 +85,59 @@ export function CategoryTreeSelect({
         onChange(selected.filter((s) => s !== id));
     };
 
-    const renderCategoryItem = (cat: CategoryOption) => {
+    const renderItem = (cat: CategoryOption, level: number = 0) => {
         const isSelected = selected.includes(cat.id);
+        const hasSubs = hasChildren(cat.id);
         return (
             <div
                 key={cat.id}
-                className="flex items-center gap-2 py-2 px-3 hover:bg-accent rounded-sm cursor-pointer"
-                onClick={() => toggleSelect(cat.id)}
+                className={`flex items-center gap-2 py-2 px-3 hover:bg-accent rounded-sm cursor-pointer transition-colors ${
+                    (level === 0 && activeLevel1 === cat.id) || (level === 1 && activeLevel2 === cat.id)
+                        ? "bg-accent"
+                        : ""
+                }`}
+                onClick={() => {
+                    toggleSelect(cat.id);
+                    if (level === 0) {
+                        setActiveLevel1(cat.id);
+                        setActiveLevel2(null);
+                    } else if (level === 1) {
+                        setActiveLevel2(cat.id);
+                    }
+                }}
             >
                 <div
-                    className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-primary border-primary" : "border-input"
-                        }`}
+                    className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? "bg-primary border-primary" : "border-input"
+                    }`}
                 >
                     {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
                 </div>
-                <span className="text-sm">{cat.name}</span>
+                <span className="text-sm flex-1">{cat.name}</span>
+                {hasSubs && (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                )}
             </div>
         );
     };
 
+    // Breadcrumb: hangi seviyedeyiz
+    const activePath = useMemo(() => {
+        const parts = [];
+        if (activeLevel1) {
+            const l1 = options.find((o) => o.id === activeLevel1);
+            if (l1) parts.push(l1.name);
+        }
+        if (activeLevel2) {
+            const l2 = options.find((o) => o.id === activeLevel2);
+            if (l2) parts.push(l2.name);
+        }
+        return parts;
+    }, [activeLevel1, activeLevel2, options]);
+
     return (
         <div className="relative" ref={containerRef}>
-            {/* Selected badges & toggle button */}
+            {/* Seçili badges */}
             <div
                 className="min-h-10 border border-input rounded-md p-2 flex flex-wrap gap-1 cursor-pointer"
                 onClick={() => setOpen(!open)}
@@ -155,11 +180,12 @@ export function CategoryTreeSelect({
             {/* Dropdown */}
             {open && (
                 <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-lg">
+                    {/* Arama */}
                     <div className="p-2 border-b">
                         <div className="relative">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Ara..."
+                                placeholder="Kategori ara..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-8"
@@ -168,79 +194,109 @@ export function CategoryTreeSelect({
                         </div>
                     </div>
 
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                        <TabsList className="w-full grid grid-cols-2">
-                            <TabsTrigger value="main">Ana Kategoriler</TabsTrigger>
-                            <TabsTrigger value="sub" disabled={!activeMainCategory}>
-                                Alt Kategoriler
-                            </TabsTrigger>
-                        </TabsList>
+                    {/* Breadcrumb navigasyon */}
+                    {activePath.length > 0 && !searchQuery && (
+                        <div className="px-3 py-1.5 text-xs text-muted-foreground border-b flex items-center gap-1 flex-wrap">
+                            <button
+                                className="hover:text-foreground transition-colors"
+                                onClick={() => { setActiveLevel1(null); setActiveLevel2(null); }}
+                            >
+                                Tümü
+                            </button>
+                            {activePath.map((part, i) => (
+                                <React.Fragment key={i}>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <button
+                                        className="hover:text-foreground transition-colors font-medium"
+                                        onClick={() => {
+                                            if (i === 1) setActiveLevel2(null);
+                                        }}
+                                    >
+                                        {part}
+                                    </button>
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    )}
 
-                        <TabsContent value="main" className="m-0">
-                            <ScrollArea className="h-64">
-                                <div className="p-1">
-                                    {filteredMainCategories.length === 0 ? (
-                                        <div className="text-sm text-muted-foreground p-2">
-                                            Sonuç bulunamadı
-                                        </div>
-                                    ) : (
-                                        filteredMainCategories.map((cat) => (
+                    {/* İçerik */}
+                    <ScrollArea className="h-72">
+                        <div className="p-1">
+                            {searchQuery ? (
+                                // Arama sonuçları
+                                searchResults.length === 0 ? (
+                                    <div className="text-sm text-muted-foreground p-2">Sonuç bulunamadı</div>
+                                ) : (
+                                    searchResults.map((cat) => (
+                                        <div
+                                            key={cat.id}
+                                            className="flex items-center gap-2 py-2 px-3 hover:bg-accent rounded-sm cursor-pointer"
+                                            onClick={() => toggleSelect(cat.id)}
+                                        >
                                             <div
-                                                key={cat.id}
-                                                className={`flex items-center gap-2 py-2 px-3 hover:bg-accent rounded-sm cursor-pointer ${activeMainCategory === cat.id ? "bg-accent" : ""
-                                                    }`}
-                                                onClick={() => {
-                                                    toggleSelect(cat.id);
-                                                    setActiveMainCategory(cat.id);
-                                                    // Auto-switch to subcategories tab if this category has children
-                                                    if (options.some((o) => o.parentId === cat.id)) {
-                                                        setActiveTab("sub");
-                                                        setSearchQuery(""); // Clear search when switching to subcategories
-                                                    }
-                                                }}
+                                                className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
+                                                    selected.includes(cat.id) ? "bg-primary border-primary" : "border-input"
+                                                }`}
                                             >
-                                                <div
-                                                    className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${selected.includes(cat.id)
-                                                        ? "bg-primary border-primary"
-                                                        : "border-input"
-                                                        }`}
-                                                >
-                                                    {selected.includes(cat.id) && (
-                                                        <Check className="h-3 w-3 text-primary-foreground" />
-                                                    )}
-                                                </div>
-                                                <span className="text-sm flex-1">{cat.name}</span>
-                                                {options.some((o) => o.parentId === cat.id) && (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Alt kategoriler →
-                                                    </span>
-                                                )}
+                                                {selected.includes(cat.id) && <Check className="h-3 w-3 text-primary-foreground" />}
                                             </div>
-                                        ))
-                                    )}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-
-                        <TabsContent value="sub" className="m-0">
-                            <ScrollArea className="h-64">
-                                <div className="p-1">
-                                    {activeMainCategory && (
-                                        <div className="px-3 py-1 text-xs text-muted-foreground border-b mb-1">
-                                            {options.find((o) => o.id === activeMainCategory)?.name} alt kategorileri
+                                            <span className="text-sm">{cat.name}</span>
                                         </div>
-                                    )}
-                                    {filteredSubcategories.length === 0 ? (
-                                        <div className="text-sm text-muted-foreground p-2">
-                                            Alt kategori bulunamadı
+                                    ))
+                                )
+                            ) : activeLevel2 ? (
+                                // 3. seviye: model kategorileri
+                                <>
+                                    <div className="px-3 py-1 text-xs font-semibold text-muted-foreground mb-1">
+                                        {options.find(o => o.id === activeLevel2)?.name} → Model Kategorileri
+                                    </div>
+                                    {level3Categories.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground p-2 text-center">
+                                            Bu kategorinin alt kategorisi yok
                                         </div>
                                     ) : (
-                                        filteredSubcategories.map((cat) => renderCategoryItem(cat))
+                                        level3Categories.map((cat) => renderItem(cat, 2))
                                     )}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-                    </Tabs>
+                                </>
+                            ) : activeLevel1 ? (
+                                // 2. seviye: marka/alt kategoriler
+                                <>
+                                    <div className="px-3 py-1 text-xs font-semibold text-muted-foreground mb-1">
+                                        {options.find(o => o.id === activeLevel1)?.name} → Alt Kategoriler
+                                    </div>
+                                    {level2Categories.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground p-2 text-center">
+                                            Bu kategorinin alt kategorisi yok
+                                        </div>
+                                    ) : (
+                                        level2Categories.map((cat) => renderItem(cat, 1))
+                                    )}
+                                </>
+                            ) : (
+                                // 1. seviye: ana kategoriler
+                                <>
+                                    <div className="px-3 py-1 text-xs font-semibold text-muted-foreground mb-1">
+                                        Ana Kategoriler
+                                    </div>
+                                    {level1Categories.map((cat) => renderItem(cat, 0))}
+                                </>
+                            )}
+                        </div>
+                    </ScrollArea>
+
+                    {/* Alt bilgi */}
+                    <div className="px-3 py-2 border-t text-xs text-muted-foreground flex justify-between">
+                        <span>{selected.length} kategori seçildi</span>
+                        {selected.length > 0 && (
+                            <button
+                                type="button"
+                                className="text-destructive hover:underline"
+                                onClick={() => onChange([])}
+                            >
+                                Tümünü temizle
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
