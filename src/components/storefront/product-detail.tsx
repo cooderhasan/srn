@@ -53,7 +53,7 @@ interface Product {
     height?: number | null;
     length?: number | null;
     desi?: number | null;
-    category: {
+    categories: {
         id: string;
         name: string;
         slug: string;
@@ -67,6 +67,11 @@ interface Product {
                 slug: string;
             } | null;
         } | null;
+    }[];
+    category?: {
+        id: string;
+        name: string;
+        slug: string;
     } | null;
     brand?: {
         name: string;
@@ -250,7 +255,11 @@ export function ProductDetail({
         return path;
     };
 
-    const categoryPath = product.category ? getCategoryPath(product.category) : [];
+    // Birden fazla kategori olabilir, önce alt kategoriyi (parent'ı olanı) tercih et
+    const primaryCategory = (product.categories || []).find((c: any) => c.parent) 
+        || (product.categories || [])[0] 
+        || null;
+    const categoryPath = primaryCategory ? getCategoryPath(primaryCategory) : [];
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">

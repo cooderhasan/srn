@@ -50,7 +50,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     const product = await prisma.product.findUnique({
         where: { slug, isActive: true },
         include: {
-            category: {
+            categories: {
                 include: {
                     parent: {
                         include: {
