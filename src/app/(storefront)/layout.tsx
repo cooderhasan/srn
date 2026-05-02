@@ -39,6 +39,7 @@ export default async function StorefrontLayout({
                 slug: true,
                 parentId: true,
                 imageUrl: true,
+                menuImageUrl: true,
                 isInHeader: true,
                 children: {
                     where: { isActive: true },
@@ -68,6 +69,7 @@ export default async function StorefrontLayout({
                     slug: true,
                     parentId: true,
                     imageUrl: true,
+                    menuImageUrl: true,
                     isInHeader: true,
                     children: {
                         where: { isActive: true },
@@ -97,6 +99,7 @@ export default async function StorefrontLayout({
                         slug: true,
                         parentId: true,
                         imageUrl: true,
+                        menuImageUrl: true,
                         isInHeader: true,
                         children: {
                             where: { isActive: true },
