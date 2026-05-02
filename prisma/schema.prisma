@@ -153,6 +153,7 @@ model Category {
   order     Int       @default(0)
   isActive  Boolean   @default(true)
   imageUrl  String?
+  menuImageUrl String?
   trendyolCategoryId Int? // Trendyol Kategori ID
   n11CategoryId      Int? // N11 Kategori ID
   hbCategoryId       String? // Hepsiburada Kategori ID (HB uses strings often like "telefon")

@@ -14,7 +14,7 @@ export async function getCategories() {
     });
 }
 
-export async function createCategory(data: { name: string; slug: string; order?: number; parentId?: string | null; imageUrl?: string; isFeatured?: boolean; isInHeader?: boolean; headerOrder?: number; trendyolCategoryId?: number | null; n11CategoryId?: number | null; hbCategoryId?: string | null; googleProductCategory?: string | null }) {
+export async function createCategory(data: { name: string; slug: string; order?: number; parentId?: string | null; imageUrl?: string; menuImageUrl?: string; isFeatured?: boolean; isInHeader?: boolean; headerOrder?: number; trendyolCategoryId?: number | null; n11CategoryId?: number | null; hbCategoryId?: string | null; googleProductCategory?: string | null }) {
     await prisma.category.create({
         data: {
             name: data.name,
@@ -22,6 +22,7 @@ export async function createCategory(data: { name: string; slug: string; order?:
             order: data.order ?? 0,
             parentId: data.parentId || null,
             imageUrl: data.imageUrl,
+            menuImageUrl: data.menuImageUrl,
             isFeatured: data.isFeatured ?? false,
             isInHeader: data.isInHeader ?? false,
             headerOrder: data.headerOrder ?? 0,
@@ -35,7 +36,7 @@ export async function createCategory(data: { name: string; slug: string; order?:
     revalidatePath("/");
 }
 
-export async function updateCategory(id: string, data: { name?: string; slug?: string; order?: number; isActive?: boolean; parentId?: string | null; imageUrl?: string; isFeatured?: boolean; isInHeader?: boolean; headerOrder?: number; trendyolCategoryId?: number | null; n11CategoryId?: number | null; hbCategoryId?: string | null; googleProductCategory?: string | null }) {
+export async function updateCategory(id: string, data: { name?: string; slug?: string; order?: number; isActive?: boolean; parentId?: string | null; imageUrl?: string; menuImageUrl?: string; isFeatured?: boolean; isInHeader?: boolean; headerOrder?: number; trendyolCategoryId?: number | null; n11CategoryId?: number | null; hbCategoryId?: string | null; googleProductCategory?: string | null }) {
     console.log("updateCategory called with:", { id, data });
     try {
         const result = await prisma.category.update({

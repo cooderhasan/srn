@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { HeroSlider } from "@/components/storefront/hero-slider";
 import { FeaturedProducts } from "@/components/storefront/featured-products";
 import { CategorySectionModern } from "@/components/storefront/category-section-modern";
-import { CategorySidebarModern } from "@/components/storefront/category-sidebar-modern";
 import Link from "next/link";
 import Image from "next/image";
 import { Truck, Shield, HeadphonesIcon } from "lucide-react";
@@ -114,15 +113,10 @@ export default async function HomePage() {
         session?.user?.role === "DEALER" && session?.user?.status === "APPROVED";
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                {/* Left Sidebar - Desktop Only */}
-                <aside className="hidden lg:block lg:col-span-1 h-fit sticky top-24 z-30">
-                    <CategorySidebarModern categories={data.sidebarCategories} />
-                </aside>
-
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+            <div className="space-y-12">
                 {/* Main Content */}
-                <div className="lg:col-span-3 space-y-12">
+                <div className="space-y-12">
                     {/* Hero Slider */}
                     <div className="rounded-xl overflow-hidden shadow-sm">
                         <HeroSlider sliders={data.sliders} />

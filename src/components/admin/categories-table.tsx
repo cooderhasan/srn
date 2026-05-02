@@ -61,6 +61,7 @@ interface Category {
     createdAt: Date;
     parentId?: string | null;
     imageUrl?: string | null;
+    menuImageUrl?: string | null;
     isInHeader: boolean;
     headerOrder: number;
     isFeatured: boolean;
@@ -197,6 +198,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
     const [headerOrder, setHeaderOrder] = useState(0);
     const [parentId, setParentId] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState("");
+    const [menuImageUrl, setMenuImageUrl] = useState("");
     const [isFeatured, setIsFeatured] = useState(false);
     const [trendyolCategoryId, setTrendyolCategoryId] = useState<number | undefined>(undefined);
     const [n11CategoryId, setN11CategoryId] = useState<number | undefined>(undefined);
@@ -322,6 +324,32 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
         }
     };
 
+    const handleMenuImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+
+        setUploading(true);
+        const file = e.target.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!res.ok) throw new Error("Upload failed");
+
+            const data = await res.json();
+            setMenuImageUrl(data.url);
+            toast.success("Mega menü görseli yüklendi");
+        } catch {
+            toast.error("Resim yüklenirken hata oluştu");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -334,6 +362,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                     order,
                     parentId: parentId || null,
                     imageUrl,
+                    menuImageUrl,
                     isFeatured,
                     isInHeader,
                     headerOrder,
@@ -350,6 +379,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                     order,
                     parentId: parentId || null,
                     imageUrl,
+                    menuImageUrl,
                     isFeatured,
                     isInHeader,
                     headerOrder,
@@ -399,6 +429,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
         setHeaderOrder(0);
         setParentId(null);
         setImageUrl("");
+        setMenuImageUrl("");
         setIsFeatured(false);
         setTrendyolCategoryId(undefined);
         setN11CategoryId(undefined);
@@ -416,6 +447,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
         setHeaderOrder(category.headerOrder);
         setParentId(category.parentId || null);
         setImageUrl(category.imageUrl || "");
+        setMenuImageUrl(category.menuImageUrl || "");
         setIsFeatured(category.isFeatured);
         setTrendyolCategoryId(category.trendyolCategoryId ?? undefined);
         setN11CategoryId(category.n11CategoryId ?? undefined);
@@ -603,6 +635,29 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                                             type="file"
                                             accept="image/*"
                                             onChange={handleImageUpload}
+                                            disabled={uploading}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Mega Menü Görseli</Label>
+                                    <div className="flex items-center gap-4">
+                                        {menuImageUrl && (
+                                            <div className="relative w-16 h-16 border rounded-md overflow-hidden">
+                                                <img src={menuImageUrl} alt="Mega Menü" className="object-cover w-full h-full" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMenuImageUrl("")}
+                                                    className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        <Input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleMenuImageUpload}
                                             disabled={uploading}
                                         />
                                     </div>

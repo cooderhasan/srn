@@ -32,6 +32,8 @@ interface Category {
     parentId?: string | null;
     isInHeader?: boolean;
     headerOrder?: number;
+    menuImageUrl?: string | null;
+    imageUrl?: string | null;
     children?: Category[];
 }
 
@@ -117,9 +119,9 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
         <header className="sticky top-0 z-50 w-full bg-white/95 supports-[backdrop-filter]:bg-white/80 dark:bg-gray-900/95 supports-[backdrop-filter]:dark:bg-gray-900/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 dark:border-gray-800/50 transition-all duration-300">
 
             {/* Top Row: Logo, Search, User Actions */}
-            <div className="border-b dark:border-gray-800/50">
-                <div className="container mx-auto px-4">
-                    <div className="flex h-16 items-center justify-between gap-4">
+            <div className="border-b dark:border-gray-800/50 py-2">
+                <div className="container mx-auto px-4 max-w-7xl">
+                    <div className="flex h-20 items-center justify-between gap-6">
                         {/* Left: Logo + Phone */}
                         <div className="flex items-center gap-4 shrink-0">
                             {/* Logo */}
@@ -170,12 +172,12 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                         </div>
 
                         {/* Center: Search Bar */}
-                        <div className="flex-1 max-w-xl mx-auto hidden md:block">
+                        <div className="flex-1 max-w-2xl mx-auto hidden md:block px-8">
                             <SearchInput />
                         </div>
 
                         {/* Right Actions */}
-                        <div className="flex items-center gap-2 md:gap-4">
+                        <div className="flex items-center gap-4 md:gap-6 shrink-0">
 
                             {/* User Panel */}
                             <div
@@ -386,10 +388,10 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                                             onClick={() => setHoveredCategory(null)}
                                                             className="w-full h-full flex items-center justify-end group/promo"
                                                         >
-                                                            {category.imageUrl ? (
+                                                            {(category.menuImageUrl || category.imageUrl) ? (
                                                                 <div className="w-full h-[300px] relative">
                                                                     <Image 
-                                                                        src={category.imageUrl} 
+                                                                        src={category.menuImageUrl || category.imageUrl || ""} 
                                                                         alt={category.name}
                                                                         fill
                                                                         className="object-contain object-right group-hover/promo:scale-105 transition-transform duration-500 drop-shadow-xl" 
