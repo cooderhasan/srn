@@ -517,6 +517,18 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         if (!brandId) return { success: false, message: "Ürünün markası Trendyol ile eşleşmemiş." };
 
         // 2. Trendyol Formatına Dönüştürme
+        const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.serinmotor.com";
+        
+        // Görselleri tam URL'ye çevir (Trendyol sadece https:// kabul eder)
+        const imageUrls = product.images
+            .map((url: string) => {
+                if (url.startsWith("http")) return url; // Zaten tam URL
+                return `${siteUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+            })
+            .filter((url: string) => url.startsWith("https://"));
+        
+        if (imageUrls.length === 0) return { success: false, message: "Geçerli görsel bulunamadı. Ürüne https:// ile erişilebilen en az 1 görsel ekleyin." };
+
         const items: any[] = [];
         const baseItem = {
             title: product.name,
@@ -526,7 +538,7 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             description: product.description || product.name,
             currencyType: "TRY",
             vatRate: product.vatRate,
-            images: product.images.map((url: string) => ({ url })),
+            images: imageUrls.map((url: string) => ({ url })),
             attributes: attributeMappings // Kullanıcıdan gelen eşleşmeler
         };
 
