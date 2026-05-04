@@ -9,7 +9,7 @@ interface TrendyolCreds {
 }
 
 export class TrendyolClient {
-    private baseUrl = "https://apigw.trendyol.com/sapigw";
+    private gatewayUrl = "https://apigw.trendyol.com";
     private creds: TrendyolCreds | null = null;
 
     constructor(creds?: TrendyolCreds) {
@@ -24,8 +24,6 @@ export class TrendyolClient {
     async init() {
         if (this.creds) return;
 
-        // We use 'any' cast here because Prisma Client might not be fully regenerated yet in dev environment
-        // due to file locking issues. In production/fresh build, this will work natively.
         const config = await (prisma as any).trendyolConfig.findFirst({
             where: { isActive: true }
         });
@@ -53,13 +51,14 @@ export class TrendyolClient {
 
     /**
      * Test connection with detailed error reporting
+     * Uses the new endpoint: GET /integration/product/sellers/{sellerId}/products
      */
     async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
             if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
-            const response = await fetch(`${this.baseUrl}/suppliers/${this.creds.supplierId}/products?size=1`, {
+            const response = await fetch(`${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products?size=1`, {
                 headers: this.getHeaders()
             });
             
@@ -96,7 +95,7 @@ export class TrendyolClient {
      */
     async getBrands(page = 0, size = 100) {
         await this.init();
-        const response = await fetch(`${this.baseUrl}/brands?page=${page}&size=${size}`, {
+        const response = await fetch(`${this.gatewayUrl}/integration/product/brands?page=${page}&size=${size}`, {
             headers: this.getHeaders()
         });
 
@@ -109,7 +108,7 @@ export class TrendyolClient {
      */
     async getCategories() {
         await this.init();
-        const response = await fetch(`${this.baseUrl}/product-categories`, {
+        const response = await fetch(`${this.gatewayUrl}/integration/product/product-categories`, {
             headers: this.getHeaders()
         });
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
@@ -118,13 +117,13 @@ export class TrendyolClient {
 
     /**
      * Create Products (Bulk)
-     * https://developers.trendyol.com/en/product-integration/v2/create-products
+     * POST /integration/product/sellers/{sellerId}/products
      */
     async createProducts(items: any[]) {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
-        const url = `${this.baseUrl}/suppliers/${this.creds.supplierId}/v2/products`;
+        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products`;
 
         const response = await fetch(url, {
             method: "POST",
@@ -138,13 +137,13 @@ export class TrendyolClient {
 
     /**
      * Update Price and Inventory
-     * https://developers.trendyol.com/en/product-integration/update-price-and-inventory
+     * POST /integration/inventory/sellers/{sellerId}/products/price-and-inventory
      */
     async updatePriceAndInventory(items: { barcode: string, quantity?: number, salePrice?: number, listPrice?: number }[]) {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
-        const url = `${this.baseUrl}/suppliers/${this.creds.supplierId}/products/price-and-inventory`;
+        const url = `${this.gatewayUrl}/integration/inventory/sellers/${this.creds.supplierId}/products/price-and-inventory`;
 
         const response = await fetch(url, {
             method: "POST",
@@ -155,13 +154,14 @@ export class TrendyolClient {
         const data = await response.json();
         return { ok: response.ok, ...data };
     }
+
     /**
      * Get Attributes for a Category
-     * https://developers.trendyol.com/en/product-integration/get-category-attributes
+     * GET /integration/product/product-categories/{categoryId}/attributes
      */
     async getCategoryAttributes(categoryId: number) {
         await this.init();
-        const response = await fetch(`${this.baseUrl}/product-categories/${categoryId}/attributes`, {
+        const response = await fetch(`${this.gatewayUrl}/integration/product/product-categories/${categoryId}/attributes`, {
             headers: this.getHeaders()
         });
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
