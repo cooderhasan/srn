@@ -75,6 +75,11 @@ export function SliderForm({ initialData, onSuccess }: SliderFormProps) {
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
                 <Label>Görsel (Zorunlu)</Label>
+                <div className="text-xs text-muted-foreground mb-2">
+                    Önerilen boyut: <span className="font-bold">1920x600px</span>. Format: <span className="font-bold">JPG</span> veya <span className="font-bold">WebP</span>.
+                    <br />
+                    <span className="text-[10px] text-orange-600 font-medium italic">* Metinler sol tarafta olduğu için ana görsel objesinin sağ tarafta olması önerilir.</span>
+                </div>
                 <ImageUpload
                     value={images}
                     onChange={(urls) => setImages(urls)}

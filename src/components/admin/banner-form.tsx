@@ -105,7 +105,7 @@ export function BannerForm({ initialData, onSuccess }: BannerFormProps) {
                                 />
                             </FormControl>
                             <FormDescription>
-                                Önerilen boyut: 800x600px.
+                                Önerilen boyut: <span className="font-bold">800x500px</span>. Format: <span className="font-bold">JPG</span> veya <span className="font-bold">WebP</span>.
                             </FormDescription>
                             <FormMessage />
                         </FormItem>

@@ -208,9 +208,8 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                 <CardDescription>Site logosu ve tarayıcı ikonu</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-8">
-                                <div className="space-y-2">
                                     <Label>Site Logosu (Header)</Label>
-                                    <div className="text-xs text-gray-500 mb-2">Önerilen boyut: 200x60px, PNG formatında şeffaf arka plan.</div>
+                                    <div className="text-xs text-gray-500 mb-2">Önerilen boyut: <span className="font-bold">200x60px</span>. Format: <span className="font-bold">PNG</span> (Şeffaf arka plan önerilir).</div>
                                     <ImageUpload
                                         value={settings.logoUrl ? [settings.logoUrl] : []}
                                         onChange={(urls) => updateField("logoUrl", urls[0] || "")}
@@ -219,9 +218,8 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                     />
                                 </div>
 
-                                <div className="space-y-2 pt-4 border-t">
                                     <Label>Favicon (Tarayıcı İkonu)</Label>
-                                    <div className="text-xs text-gray-500 mb-2">Önerilen boyut: 32x32px veya 64x64px, PNG veya ICO formatı.</div>
+                                    <div className="text-xs text-gray-500 mb-2">Önerilen boyut: <span className="font-bold">32x32px</span> veya <span className="font-bold">64x64px</span>. Format: <span className="font-bold">PNG</span> veya <span className="font-bold">ICO</span>.</div>
                                     <ImageUpload
                                         value={settings.faviconUrl ? [settings.faviconUrl] : []}
                                         onChange={(urls) => updateField("faviconUrl", urls[0] || "")}
