@@ -212,7 +212,7 @@ export default async function HomePage() {
                                 key={banner.id}
                                 href={banner.linkUrl || "#"}
                                 className={cn(
-                                    "relative h-48 md:h-64 rounded-2xl overflow-hidden group block",
+                                    "relative h-48 md:h-64 bg-white rounded-2xl overflow-hidden group block",
                                     !banner.linkUrl && "cursor-default"
                                 )}
                             >
@@ -222,10 +222,9 @@ export default async function HomePage() {
                                     fill
                                     className="object-cover transition-transform duration-500 group-hover:scale-110"
                                 />
-                                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
                                 {banner.title && (
                                     <div className="absolute bottom-4 left-4 right-4 z-10">
-                                        <h3 className="text-white font-bold text-lg drop-shadow-md">{banner.title}</h3>
+                                        <h3 className="text-gray-900 font-bold text-lg">{banner.title}</h3>
                                     </div>
                                 )}
                             </Link>
