@@ -127,7 +127,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                             {/* Logo */}
                             <Link href="/" className="flex items-center gap-2 group">
                                 {logoUrl ? (
-                                    <div className="relative h-10 md:h-14 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
+                                    <div className="relative h-12 md:h-16 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
                                         <Image
                                             src={logoUrl}
                                             alt={siteName || "Logo"}
