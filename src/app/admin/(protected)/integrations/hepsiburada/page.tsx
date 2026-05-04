@@ -2,6 +2,8 @@
 import { getHepsiburadaConfig } from "./actions";
 import { HepsiburadaSettingsForm } from "./hepsiburada-settings-form";
 import { HepsiburadaSyncButton } from "./hepsiburada-sync-button";
+import { Box } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default async function HepsiburadaIntegrationPage() {
     const { data: config } = await getHepsiburadaConfig();
@@ -23,10 +25,17 @@ export default async function HepsiburadaIntegrationPage() {
                         <p className="text-sm text-muted-foreground mb-4">
                             Hepsiburada Merchant Portal üzerinden API bilgilerinizi alabilirsiniz.
                         </p>
-                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
-                            <li>Ürün Listeleme</li>
-                            <li>Fiyat ve Stok Güncelleme</li>
+                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2 mb-6">
+                            <li>Katalog Eşleştirme (Otomatik)</li>
+                            <li>Stok ve Fiyat Eşitleme (Anlık)</li>
                         </ul>
+
+                        <a href="/admin/integrations/hepsiburada/products">
+                            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-lg shadow-blue-500/20">
+                                <Box className="w-4 h-4" />
+                                HB Ürünlerini Yönet
+                            </Button>
+                        </a>
                     </div>
 
                     <HepsiburadaSyncButton />

@@ -448,3 +448,123 @@ export async function syncOrdersFromTrendyol() {
         return { success: false, message: "Sipariş Hatası: " + error.message };
     }
 }
+export async function getTrendyolCategoryAttributes(categoryId: number) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const data = await client.getCategoryAttributes(categoryId);
+        return { success: true, data: data.categoryAttributes };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function sendProductToTrendyol(productId: string, attributeMappings: any[]) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const product = await prisma.product.findUnique({
+            where: { id: productId },
+            include: {
+                brand: true,
+                categories: true,
+                variants: true
+            }
+        });
+
+        if (!product) return { success: false, message: "Ürün bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        // 1. Kategori ve Marka ID kontrolü
+        const mappedCategory = (product as any).categories.find((c: any) => c.trendyolCategoryId !== null);
+        if (!mappedCategory) return { success: false, message: "Ürünün kategorisi Trendyol ile eşleşmemiş." };
+
+        const brandId = (product as any).brand?.trendyolBrandId;
+        if (!brandId) return { success: false, message: "Ürünün markası Trendyol ile eşleşmemiş." };
+
+        // 2. Trendyol Formatına Dönüştürme
+        const items: any[] = [];
+        const baseItem = {
+            title: product.name,
+            productMainId: product.sku || product.id,
+            brandId: Number(brandId),
+            categoryId: Number(mappedCategory.trendyolCategoryId),
+            description: product.description || product.name,
+            currencyType: "TRY",
+            vatRate: product.vatRate,
+            images: product.images.map((url: string) => ({ url })),
+            attributes: attributeMappings // Kullanıcıdan gelen eşleşmeler
+        };
+
+        const baseListPrice = Number(product.listPrice);
+        const baseSalePrice = product.trendyolPrice ? Number(product.trendyolPrice) : Number(product.listPrice);
+
+        if (product.variants && product.variants.length > 0) {
+            for (const v of product.variants) {
+                if (!v.barcode) continue;
+                
+                const variantListPrice = baseListPrice + Number(v.priceAdjustment || 0);
+                const variantSalePrice = baseSalePrice + Number(v.priceAdjustment || 0);
+                const availableStock = Math.max(0, v.stock - (product.criticalStock || 0));
+
+                items.push({
+                    ...baseItem,
+                    barcode: v.barcode,
+                    stockCode: v.sku || v.barcode,
+                    quantity: availableStock,
+                    listPrice: variantListPrice,
+                    salePrice: variantSalePrice,
+                    dimensionalWeight: 1,
+                    // Varyant bazlı özellikleri (Renk/Beden) attributeMappings içine dahil edilmeli
+                });
+            }
+        } else {
+            if (product.barcode) {
+                const availableStock = Math.max(0, product.stock - (product.criticalStock || 0));
+                items.push({
+                    ...baseItem,
+                    barcode: product.barcode,
+                    stockCode: product.sku || product.barcode,
+                    quantity: availableStock,
+                    listPrice: baseListPrice,
+                    salePrice: baseSalePrice,
+                    dimensionalWeight: product.desi ? Number(product.desi) : 1
+                });
+            }
+        }
+
+        if (items.length === 0) return { success: false, message: "Gönderilecek geçerli (Barkodlu) varyant bulunamadı." };
+
+        const result = await client.createProducts(items);
+
+        if (result.ok) {
+            // Başarılıysa veritabanına Trendyol ID'sini veya senkronize edildi bilgisini kaydet
+            await (prisma as any).trendyolProduct.upsert({
+                where: { productId: product.id },
+                update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null },
+                create: { productId: product.id, barcode: product.barcode || items[0].barcode, isSynced: true, lastSyncedAt: new Date() }
+            });
+
+            return { success: true, message: "Ürün başarıyla Trendyol'a gönderildi. Onay süreci başlayacaktır.", batchRequestId: result.batchRequestId };
+        } else {
+            const errorMsg = result.errors?.[0]?.message || "Trendyol hata döndürdü.";
+            return { success: false, message: "Trendyol Hatası: " + errorMsg };
+        }
+
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}

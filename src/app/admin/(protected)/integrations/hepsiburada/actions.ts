@@ -272,3 +272,76 @@ export async function syncOrdersFromHepsiburada() {
         return { success: false, message: "Order Sync Hatası: " + error.message };
     }
 }
+export async function getHepsiburadaCategoryAttributes(categoryId: string) {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password
+        });
+
+        const data = await client.getCategoryAttributes(categoryId);
+        return { success: true, data: data.data || [] }; // HB metadata returns { data: [...] }
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function sendProductToHepsiburada(productId: string, attributes: any[]) {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const product = await prisma.product.findUnique({
+            where: { id: productId },
+            include: {
+                brand: true,
+                categories: true,
+                variants: true
+            }
+        });
+
+        if (!product) return { success: false, message: "Ürün bulunamadı." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password
+        });
+
+        const mappedCat = product.categories.find((c: any) => c.hepsiburadaCategoryId !== null);
+        if (!mappedCat) return { success: false, message: "Ürünün kategorisi Hepsiburada ile eşleşmemiş." };
+
+        // Transformation logic for HB Catalog Upload
+        const payload = [{
+            merchantSku: product.sku || product.barcode || product.id,
+            attributes: {
+                ...attributes.reduce((acc, curr) => ({ ...acc, [curr.name]: curr.value }), {}),
+                "product_name": product.name,
+                "brand": product.brand?.name || "Diğer",
+                "category_id": mappedCat.hepsiburadaCategoryId,
+                "description": product.description || product.name,
+                "image1": product.images[0] || "",
+                "price": product.listPrice,
+                "vat": product.vatRate
+            }
+        }];
+
+        const result = await client.createProduct(payload);
+
+        if (result.success) {
+            await (prisma as any).hepsiburadaProduct.upsert({
+                where: { productId: product.id },
+                update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null },
+                create: { productId: product.id, isSynced: true, lastSyncedAt: new Date() }
+            });
+            return { success: true, message: "Hepsiburada ürün talebi başarıyla oluşturuldu." };
+        } else {
+            return { success: false, message: "HB Hatası: " + (result.message || "Bilinmeyen hata") };
+        }
+
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}

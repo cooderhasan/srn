@@ -4,6 +4,8 @@ import { TrendyolSettingsForm } from "./trendyol-settings-form";
 import { TrendyolSyncButton } from "./trendyol-sync-button";
 import { TrendyolOrderSyncButton } from "./trendyol-order-sync-button";
 import { TrendyolDataHelper } from "./trendyol-data-helper";
+import { Box } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default async function TrendyolIntegrationPage() {
     const { data: config } = await getTrendyolConfig();
@@ -25,11 +27,18 @@ export default async function TrendyolIntegrationPage() {
                         <p className="text-sm text-muted-foreground mb-4">
                             Entegrasyonu kullanabilmek için Trendyol Partner panelinden API bilgilerinizi almanız gerekmektedir.
                         </p>
-                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
+                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2 mb-6">
                             <li>Ürün Aktarımı (Otomatik)</li>
                             <li>Stok ve Fiyat Eşitleme (Otomatik)</li>
                             <li>Sipariş Entegrasyonu (Manuel/Otomatik)</li>
                         </ul>
+
+                        <a href="/admin/integrations/trendyol/products">
+                            <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-500/20">
+                                <Box className="w-4 h-4" />
+                                Trendyol Ürünlerini Yönet
+                            </Button>
+                        </a>
                     </div>
 
                     <TrendyolSyncButton />

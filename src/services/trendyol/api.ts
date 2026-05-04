@@ -134,19 +134,14 @@ export class TrendyolClient {
         return { ok: response.ok, ...data };
     }
     /**
-     * Get Orders
-     * https://developers.trendyol.com/en/order-integration/get-shipment-packages
+     * Get Attributes for a Category
+     * https://developers.trendyol.com/en/product-integration/get-category-attributes
      */
-    async getOrders(status = "Created", size = 50) {
+    async getCategoryAttributes(categoryId: number) {
         await this.init();
-        if (!this.creds) throw new Error("No creds");
-
-        const url = `${this.baseUrl}/suppliers/${this.creds.supplierId}/orders?status=${status}&size=${size}`;
-
-        const response = await fetch(url, {
+        const response = await fetch(`${this.baseUrl}/product-categories/${categoryId}/attributes`, {
             headers: { "Authorization": this.getAuthHeader() }
         });
-
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
         return await response.json();
     }

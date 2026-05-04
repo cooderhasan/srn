@@ -113,5 +113,34 @@ export class HepsiburadaClient {
         }
 
         return await response.json();
+    /**
+     * Get Category Attributes (Metadata)
+     */
+    async getCategoryAttributes(categoryId: string) {
+        await this.init();
+        // HB uses metadata-external API for attributes
+        const url = `https://metadata-external.hepsiburada.com/categories/${categoryId}/attributes`;
+        const response = await fetch(url, {
+            headers: { "Authorization": this.getAuthHeader() }
+        });
+        if (!response.ok) throw new Error("HB Metadata Error");
+        return await response.json();
+    }
+
+    /**
+     * Create Product (Product Upload)
+     */
+    async createProduct(items: any[]) {
+        await this.init();
+        const url = `https://product-uploader-external.hepsiburada.com/products/v2`;
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Authorization": this.getAuthHeader(),
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(items)
+        });
+        return await response.json();
     }
 }

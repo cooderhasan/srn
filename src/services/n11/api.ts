@@ -9,6 +9,7 @@ interface N11Creds {
 export class N11Client {
     private productServiceUrl = "https://api.n11.com/ws/ProductService.wsdl";
     private orderServiceUrl = "https://api.n11.com/ws/OrderService.wsdl";
+    private categoryServiceUrl = "https://api.n11.com/ws/CategoryService.wsdl";
     private creds: N11Creds | null = null;
 
     constructor(creds?: N11Creds) {
@@ -150,5 +151,33 @@ export class N11Client {
         // We will do a basic regex extraction for Order Numbers as a proof of concept
         // Or we could return raw XML for now.
         return { raw: response };
+    // --- Category Service ---
+
+    async getCategoryAttributes(categoryId: number) {
+        const xml = `
+           <sch:GetCategoryAttributesRequest>
+               <auth>
+                   <appKey>${this.creds?.apiKey}</appKey>
+                   <appSecret>${this.creds?.apiSecret}</appSecret>
+               </auth>
+               <categoryId>${categoryId}</categoryId>
+           </sch:GetCategoryAttributesRequest>`;
+
+        const response = await this.callSoap(this.categoryServiceUrl, "GetCategoryAttributes", xml);
+        
+        // Simple XML extraction for attributes (Name and ID)
+        const attributes: any[] = [];
+        const matches = response.matchAll(/<attribute>[\s\S]*?<id>(.*?)<\/id>[\s\S]*?<name>(.*?)<\/name>[\s\S]*?<mandatory>(.*?)<\/mandatory>[\s\S]*?<\/attribute>/g);
+        
+        for (const match of matches) {
+            attributes.push({
+                id: match[1],
+                name: match[2],
+                mandatory: match[3] === "true",
+                // N11 values are separate call usually, but we could simplify or add them here if needed
+            });
+        }
+        
+        return { success: true, attributes };
     }
 }

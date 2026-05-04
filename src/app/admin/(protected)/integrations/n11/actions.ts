@@ -176,3 +176,76 @@ export async function syncOrdersFromN11() {
         return { success: false, message: "Order Sync Hatası: " + error.message };
     }
 }
+export async function getN11CategoryAttributes(categoryId: number) {
+    try {
+        const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new N11Client({
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const data = await client.getCategoryAttributes(categoryId);
+        return { success: true, data: data.attributes };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function sendProductToN11(productId: string, attributes: any[]) {
+    try {
+        const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const product = await prisma.product.findUnique({
+            where: { id: productId },
+            include: {
+                brand: true,
+                categories: true,
+                variants: true
+            }
+        });
+
+        if (!product) return { success: false, message: "Ürün bulunamadı." };
+
+        const client = new N11Client({
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const mappedCat = product.categories.find((c: any) => c.n11CategoryId !== null);
+        if (!mappedCat) return { success: false, message: "Ürünün kategorisi N11 ile eşleşmemiş." };
+
+        // N11 doesn't strictly require brand matching by ID for all categories, 
+        // but it's better to have it. For now we use the brand name.
+
+        const payload = {
+            sellerCode: product.sku || product.id,
+            title: product.name,
+            description: product.description || product.name,
+            categoryId: mappedCat.n11CategoryId,
+            price: Number(product.n11Price || product.listPrice),
+            quantity: product.stock,
+            stockCode: product.barcode || product.sku || product.id,
+            images: product.images,
+            attributes: attributes // Custom attributes mapped from UI
+        };
+
+        const result = await client.saveProduct(payload);
+
+        if (result.success) {
+             await (prisma as any).n11Product.upsert({
+                where: { productId: product.id },
+                update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null },
+                create: { productId: product.id, isSynced: true, lastSyncedAt: new Date() }
+            });
+            return { success: true, message: "Ürün N11'e başarıyla gönderildi." };
+        } else {
+            return { success: false, message: "N11 Hatası: " + result.message };
+        }
+
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}

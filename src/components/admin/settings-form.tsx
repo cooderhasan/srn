@@ -208,6 +208,7 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                 <CardDescription>Site logosu ve tarayıcı ikonu</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-8">
+                                <div className="space-y-2">
                                     <Label>Site Logosu (Header)</Label>
                                     <div className="text-xs text-gray-500 mb-2">Önerilen boyut: <span className="font-bold">200x60px</span>. Format: <span className="font-bold">PNG</span> (Şeffaf arka plan önerilir).</div>
                                     <ImageUpload
@@ -218,6 +219,7 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                     />
                                 </div>
 
+                                <div className="space-y-2">
                                     <Label>Favicon (Tarayıcı İkonu)</Label>
                                     <div className="text-xs text-gray-500 mb-2">Önerilen boyut: <span className="font-bold">32x32px</span> veya <span className="font-bold">64x64px</span>. Format: <span className="font-bold">PNG</span> veya <span className="font-bold">ICO</span>.</div>
                                     <ImageUpload

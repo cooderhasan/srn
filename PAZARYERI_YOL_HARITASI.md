@@ -20,7 +20,7 @@ Mevcut durumda tüm API işlemlerinin senkron (anlık donmalara yol açarak) ile
 - [x] **Kategori Eşleştirme UI/UX:** Admin panelindeki mevcut kategorilerin sağında "Trendyol Kategori Bul", "N11 Kategori Bul" şeklinde seçici arayüzler eklenecek.
 - [x] **Marka Eşleştirme (Brand Mapping):** Sistemdeki markalar, her pazar yeri için otomatik sorgulanıp veritabanına (`brand` tablosuna `trendyolBrandId` vs.) kaydedilecek.
 - [x] **Product Variant Barcode Düzeltmeleri:** Pazar yerleri kesinlikle barcodsuz varyant kabul etmez. Veritabanındaki ürünlerde eksik barkodların uyarılarak tamamlatılması sağlanacak.
-- [x] **Gerçek Veri Gönderim Testi:** Trendyol Test ortamına eşleştirilmesi yapılmış gerçek 10 adet ürün yollanıp hatalar (API response'ları) incelenecek.
+- [x] **Gerçek Veri Gönderim Testi:** Trendyol, N11 ve Hepsiburada için "Ürün Yönetim Paneli" ve "Dinamik Özellik Sihirbazı" (Wizard) tamamlandı. Ürünler sıfırdan pazaryerlerine gönderilebilir durumda.
 
 ---
 
@@ -29,7 +29,7 @@ Stoklar arasında "Yok Satma" (Overselling) problemini önleyecek akıllı mimar
 
 - [x] **Order Created (Sipariş Oluştu) Event'i Yazılması:** Web sitenizden veya N11/Trendyol'dan sipariş geldiği saniye bir *Event* tetiklenecek. (Checkout entegrasyonu tamamlandı).
 - [x] **Veritabanı Stok Düşme İşleminin Eklenmesi:** Mevcut kodlardaki eksik giderilecek, satılan ürünün `Product` ve `ProductVariant` tablolarındaki stoğu güvenli bir db Transaction'u ile `-1` eksiltilecek.
-- [ ] **Webhooks Dinleyicisi (Listener) Tanımlanması:** Pazar yeri sipariş iptalleri (iptal olduysa stoku otomatik geri ekleme) işlemleri dinlenecek. (Pazaryeri Webhook ayarları bekliyor).
+- [/] **Webhooks Dinleyicisi (Listener) Tanımlanması:** Pazar yeri sipariş iptalleri (iptal olduysa stoku otomatik geri ekleme) işlemleri dinlenecek. (Trendyol/N11 Webhook rotaları hazırlanıyor).
 - [x] **Kritik Stok Fren Sistemi:** Kodlanan mevcut schema'daki `criticalStock` alanına ulaşıldığında ürünü pazar yerlerinde "Tükendi" göstermesi sağlanacak. (Yalnızca kendi kârlı ve asistan sitenizde kalacak).
 
 ---

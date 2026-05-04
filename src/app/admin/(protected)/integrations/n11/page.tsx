@@ -2,6 +2,8 @@
 import { getN11Config } from "./actions";
 import { N11SettingsForm } from "./n11-settings-form";
 import { N11SyncButton } from "./n11-sync-button";
+import { Box } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default async function N11IntegrationPage() {
     const { data: config } = await getN11Config();
@@ -23,10 +25,17 @@ export default async function N11IntegrationPage() {
                         <p className="text-sm text-muted-foreground mb-4">
                             N11 API anahtarlarınızı Developer panelinden alabilirsiniz.
                         </p>
-                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
-                            <li>Ürün Aktarımı (Beta)</li>
-                            <li>Stok ve Fiyat Eşitleme (Planlanıyor)</li>
+                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2 mb-6">
+                            <li>Ürün Aktarımı (Otomatik)</li>
+                            <li>Stok ve Fiyat Eşitleme (Otomatik)</li>
                         </ul>
+
+                        <a href="/admin/integrations/n11/products">
+                            <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white gap-2 shadow-lg shadow-purple-500/20">
+                                <Box className="w-4 h-4" />
+                                N11 Ürünlerini Yönet
+                            </Button>
+                        </a>
                     </div>
 
                     <N11SyncButton />
