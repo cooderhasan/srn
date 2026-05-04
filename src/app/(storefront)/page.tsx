@@ -223,8 +223,10 @@ export default async function HomePage() {
                                     className="object-cover transition-transform duration-500 group-hover:scale-110"
                                 />
                                 {banner.title && (
-                                    <div className="absolute bottom-4 left-4 right-4 z-10">
-                                        <h3 className="text-gray-900 font-bold text-lg">{banner.title}</h3>
+                                    <div className="absolute bottom-4 left-4 right-4 z-10 flex">
+                                        <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-sm border border-white/50 transition-transform duration-300 group-hover:-translate-y-1">
+                                            <h3 className="text-gray-900 font-bold text-sm md:text-base">{banner.title}</h3>
+                                        </div>
                                     </div>
                                 )}
                             </Link>
