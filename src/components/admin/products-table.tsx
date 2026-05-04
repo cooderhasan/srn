@@ -46,6 +46,7 @@ interface Product {
     isNew: boolean;
     isBestSeller: boolean;
     isActive: boolean;
+    isTrendyolActive: boolean;
     isBundle?: boolean;
     category: {
         id: string;
@@ -342,7 +343,14 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                                         <TableCell>
                                             <div className="text-sm">
                                                 <div>{product.sku || "-"}</div>
-                                                <div className="text-gray-500 text-xs">{product.barcode || "-"}</div>
+                                                <div className="text-gray-500 text-xs flex items-center gap-2">
+                                                    {product.barcode || "-"}
+                                                    {product.isTrendyolActive && !product.barcode && (
+                                                        <span className="bg-red-100 text-red-600 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold" title="Trendyol için barkod zorunludur!">
+                                                            ⚠️ BARKOD EKSİK
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </TableCell>
                                         <TableCell>{formatPrice(Number(product.listPrice))}</TableCell>
