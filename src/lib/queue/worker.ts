@@ -31,6 +31,13 @@ export function initializeWorker() {
                         throw new Error(result.message);
                     }
                     console.log(`✅ Tamamlandı: N11 Sync - ${result.message}`);
+                } else if (job.data.marketplace === "hepsiburada") {
+                    const { syncProductsToHepsiburada } = await import("@/app/admin/(protected)/integrations/hepsiburada/actions");
+                    const result = await syncProductsToHepsiburada(job.data.productIds);
+                    if (!result.success) {
+                        throw new Error(result.message);
+                    }
+                    console.log(`✅ Tamamlandı: Hepsiburada Sync - ${result.message}`);
                 }
                 
                 await job.updateProgress(100);

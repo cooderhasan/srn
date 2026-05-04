@@ -49,7 +49,18 @@ import { HepsiburadaClient } from "@/services/hepsiburada/api";
 
 // ... (get and save config remain same)
 
-export async function syncProductsToHepsiburada(productId?: string) {
+import { addMarketplaceSyncJob } from "@/lib/queue/producer";
+
+export async function enqueueHepsiburadaSync() {
+    try {
+        await addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "products" });
+        return { success: true, message: "Senkronizasyon işlemi kuyruğa alındı. Arka planda işlenecektir." };
+    } catch (error: any) {
+        return { success: false, message: "Kuyruğa eklenirken hata oluştu: " + error.message };
+    }
+}
+
+export async function syncProductsToHepsiburada(productIds?: string[]) {
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -59,8 +70,8 @@ export async function syncProductsToHepsiburada(productId?: string) {
             isHepsiburadaActive: true
         };
 
-        if (productId) {
-            whereClause.id = productId;
+        if (productIds && productIds.length > 0) {
+            whereClause.id = { in: productIds };
         }
 
         // 1. Fetch products (Include variants)
@@ -78,6 +89,7 @@ export async function syncProductsToHepsiburada(productId?: string) {
 
         for (const p of products) {
             const basePrice = Number((p as any).hepsiburadaPrice) || Number(p.listPrice); // Use HB price if available
+            const criticalStock = p.criticalStock || 10;
 
             // Variants?
             if ((p as any).variants && (p as any).variants.length > 0) {
@@ -85,24 +97,27 @@ export async function syncProductsToHepsiburada(productId?: string) {
                     if (!v.sku && !v.barcode) continue; // Need identifier (MerchantSku)
 
                     const varPrice = basePrice + Number(v.priceAdjustment || 0);
+                    const availableStock = Math.max(0, v.stock - criticalStock);
 
                     hbItems.push({
                         merchantSku: v.sku || v.barcode, // Important: Must match HB Listing SKU
-                        availableStock: v.stock,
+                        availableStock: availableStock,
                         price: varPrice,
                         dispatchTime: 3, // Default dispatch time
-                        cargoCompany1: "Yurtici Kargo", // Placeholder, should be config
+                        cargoCompany1: "DHL eCommerce",
                         maximumPurchasableQuantity: 10
                     });
                 }
             } else {
                 if (p.sku || p.barcode) {
+                    const availableStock = Math.max(0, p.stock - criticalStock);
+                    
                     hbItems.push({
                         merchantSku: p.sku || p.barcode,
-                        availableStock: p.stock,
+                        availableStock: availableStock,
                         price: basePrice,
                         dispatchTime: 3,
-                        cargoCompany1: "Yurtici Kargo",
+                        cargoCompany1: "DHL eCommerce",
                         maximumPurchasableQuantity: 10
                     });
                 }
@@ -118,10 +133,22 @@ export async function syncProductsToHepsiburada(productId?: string) {
             merchantId: config.merchantId || config.username
         });
 
-        // HB API might error if items > 100 or something, but usually supports bulk json list
         try {
-            await client.uploadInventory(hbItems);
-            return { success: true, message: `${hbItems.length} varyant/ürün için stok ve fiyat güncellendi.` };
+            // Chunking logic for Hepsiburada
+            const CHUNK_SIZE = 500;
+            const chunks = [];
+            for (let i = 0; i < hbItems.length; i += CHUNK_SIZE) {
+                chunks.push(hbItems.slice(i, i + CHUNK_SIZE));
+            }
+
+            let successCount = 0;
+            for (const chunk of chunks) {
+                await client.uploadInventory(chunk);
+                successCount += chunk.length;
+                await new Promise(resolve => setTimeout(resolve, 500)); // Sleep between chunks
+            }
+            
+            return { success: true, message: `${successCount} varyant/ürün için stok ve fiyat güncellendi.` };
         } catch (apiError: any) {
             return { success: false, message: "HB API Hatası: " + apiError.message };
         }

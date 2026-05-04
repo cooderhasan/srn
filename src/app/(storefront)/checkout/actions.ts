@@ -328,7 +328,8 @@ export async function createOrder(data: CreateOrderData) {
         if (affectedProductIds.length > 0) {
             Promise.all([
                 addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: affectedProductIds }).catch(console.error),
-                addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: affectedProductIds }).catch(console.error)
+                addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: affectedProductIds }).catch(console.error),
+                addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds: affectedProductIds }).catch(console.error)
             ]).catch(console.error);
         }
 

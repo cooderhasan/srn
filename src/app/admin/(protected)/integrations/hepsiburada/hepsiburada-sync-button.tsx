@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, RefreshCw } from "lucide-react";
-import { syncProductsToHepsiburada } from "./actions";
+import { enqueueHepsiburadaSync } from "./actions";
 
 export function HepsiburadaSyncButton() {
     const [loading, setLoading] = useState(false);
@@ -13,7 +13,7 @@ export function HepsiburadaSyncButton() {
     const handleSync = async () => {
         setLoading(true);
         try {
-            const res = await syncProductsToHepsiburada();
+            const res = await enqueueHepsiburadaSync();
             if (res.success) {
                 toast.success(res.message);
             } else {

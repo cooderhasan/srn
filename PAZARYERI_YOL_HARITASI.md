@@ -7,30 +7,30 @@ Bu doküman, mevcut B2B/B2C Next.js e-ticaret altyapınızın yüksek performans
 ## 🏗️ Faz 1: Altyapı Hazırlığı ve Arka Plan Kuyruk (Queue) Sistemi
 Mevcut durumda tüm API işlemlerinin senkron (anlık donmalara yol açarak) ilerlediğini tespit ettik. 7000+ ürünün anında işlenmesi için asenkron (kuyruklu) bir yapı şarttır.
 
-- [ ] **Redis Altyapısının Kurulması:** Sunucu (Coolify / Docker) üzerine bir Redis container başlatılacak (Maliyet ve RAM kullanımı son derece düşüktür).
-- [ ] **BullMQ Kütüphanesinin Projeye Eklenmesi:** Next.js içerisinde `package.json`'a iş parçacıklarını yönetecek kuyruk altyapısı kurulacak.
-- [ ] **Kuyruk Süreçlerinin (Worker) Yazılması:** Örneğin `updateMarketplacePriceQueue` adında bir worker yazılarak, arka planda ürünleri 100'erli batch'ler halinde Pazar yerlerine (Trendyol, N11) gönderebilmesi sağlanacak.
-- [ ] **Admin Paneline "Görevler" (Tasks) Arayüzü Eklenmesi:** Admin "Tümüne Zam Yap" dediğinde işlemin gidişini UI'da %20, %40... gibi progress bar (ilerleme) halinde görebilecek.
+- [x] **Redis Altyapısının Kurulması:** Sunucu (Coolify / Docker) üzerine bir Redis container başlatılacak (Maliyet ve RAM kullanımı son derece düşüktür).
+- [x] **BullMQ Kütüphanesinin Projeye Eklenmesi:** Next.js içerisinde `package.json`'a iş parçacıklarını yönetecek kuyruk altyapısı kurulacak.
+- [x] **Kuyruk Süreçlerinin (Worker) Yazılması:** Örneğin `updateMarketplacePriceQueue` adında bir worker yazılarak, arka planda ürünleri 100'erli batch'ler halinde Pazar yerlerine (Trendyol, N11) gönderebilmesi sağlanacak.
+- [x] **Admin Paneline "Görevler" (Tasks) Arayüzü Eklenmesi:** (Kuyruk Butonlara entegre edildi, ilerleme loglarda takip ediliyor).
 
 ---
 
 ## 🔄 Faz 2: Kategori, Marka Eşleştirmesi (Mapping) ve Ürün Gönderimi
 Şu anda API entegrasyonlarında kategori ID'leri statik (mock/sahte) atanıyor. Ürünlerin başarıyla sergilenmesi için gerçek eşleştirme modülü gereklidir.
 
-- [ ] **Kategori Eşleştirme UI/UX:** Admin panelindeki mevcut kategorilerin sağında "Trendyol Kategori Bul", "N11 Kategori Bul" şeklinde seçici arayüzler eklenecek.
-- [ ] **Marka Eşleştirme (Brand Mapping):** Sistemdeki markalar, her pazar yeri için otomatik sorgulanıp veritabanına (`brand` tablosuna `trendyolBrandId` vs.) kaydedilecek.
-- [ ] **Product Variant Barcode Düzeltmeleri:** Pazar yerleri kesinlikle barcodsuz varyant kabul etmez. Veritabanındaki ürünlerde eksik barkodların uyarılarak tamamlatılması sağlanacak.
-- [ ] **Gerçek Veri Gönderim Testi:** Trendyol Test ortamına eşleştirilmesi yapılmış gerçek 10 adet ürün yollanıp hatalar (API response'ları) incelenecek.
+- [x] **Kategori Eşleştirme UI/UX:** Admin panelindeki mevcut kategorilerin sağında "Trendyol Kategori Bul", "N11 Kategori Bul" şeklinde seçici arayüzler eklenecek.
+- [x] **Marka Eşleştirme (Brand Mapping):** Sistemdeki markalar, her pazar yeri için otomatik sorgulanıp veritabanına (`brand` tablosuna `trendyolBrandId` vs.) kaydedilecek.
+- [x] **Product Variant Barcode Düzeltmeleri:** Pazar yerleri kesinlikle barcodsuz varyant kabul etmez. Veritabanındaki ürünlerde eksik barkodların uyarılarak tamamlatılması sağlanacak.
+- [x] **Gerçek Veri Gönderim Testi:** Trendyol Test ortamına eşleştirilmesi yapılmış gerçek 10 adet ürün yollanıp hatalar (API response'ları) incelenecek.
 
 ---
 
 ## ⚡ Faz 3: Sipariş & Gerçek Zamanlı Stok Senkronizasyonu
 Stoklar arasında "Yok Satma" (Overselling) problemini önleyecek akıllı mimarinin kurulması.
 
-- [ ] **Order Created (Sipariş Oluştu) Event'i Yazılması:** Web sitenizden veya N11/Trendyol'dan sipariş geldiği saniye bir *Event* tetiklenecek.
-- [ ] **Veritabanı Stok Düşme İşleminin Eklenmesi:** Mevcut kodlardaki eksik giderilecek, satılan ürünün `Product` ve `ProductVariant` tablolarındaki stoğu güvenli bir db Transaction'u ile `-1` eksiltilecek.
-- [ ] **Webhooks Dinleyicisi (Listener) Tanımlanması:** Pazar yeri sipariş iptalleri (iptal olduysa stoku otomatik geri ekleme) işlemleri dinlenecek.
-- [ ] **Kritik Stok Fren Sistemi:** Kodlanan mevcut schema'daki `criticalStock` alanına ulaşıldığında ürünü pazar yerlerinde "Tükendi" göstermesi sağlanacak. (Yalnızca kendi kârlı ve asistan sitenizde kalacak).
+- [x] **Order Created (Sipariş Oluştu) Event'i Yazılması:** Web sitenizden veya N11/Trendyol'dan sipariş geldiği saniye bir *Event* tetiklenecek. (Checkout entegrasyonu tamamlandı).
+- [x] **Veritabanı Stok Düşme İşleminin Eklenmesi:** Mevcut kodlardaki eksik giderilecek, satılan ürünün `Product` ve `ProductVariant` tablolarındaki stoğu güvenli bir db Transaction'u ile `-1` eksiltilecek.
+- [ ] **Webhooks Dinleyicisi (Listener) Tanımlanması:** Pazar yeri sipariş iptalleri (iptal olduysa stoku otomatik geri ekleme) işlemleri dinlenecek. (Pazaryeri Webhook ayarları bekliyor).
+- [x] **Kritik Stok Fren Sistemi:** Kodlanan mevcut schema'daki `criticalStock` alanına ulaşıldığında ürünü pazar yerlerinde "Tükendi" göstermesi sağlanacak. (Yalnızca kendi kârlı ve asistan sitenizde kalacak).
 
 ---
 
