@@ -22,7 +22,8 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { X, Plus, Pencil, Trash2 } from "lucide-react";
+import { X, Plus, Pencil, Trash2, Search, Loader2 } from "lucide-react";
+import { getTrendyolCategories } from "@/app/admin/(protected)/integrations/trendyol/actions";
 import {
     Select,
     SelectContent,
@@ -185,6 +186,126 @@ function slugify(text: string): string {
         .replace(/ç/g, "c")
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
+}
+
+// --- Trendyol Category Search Component ---
+interface TrendyolCategory {
+    id: number;
+    name: string;
+    parentId?: number | null;
+}
+
+function TrendyolCategorySearch({
+    value,
+    onChange,
+}: {
+    value?: number;
+    onChange: (id: number | undefined) => void;
+}) {
+    const [search, setSearch] = useState("");
+    const [results, setResults] = useState<TrendyolCategory[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [selectedName, setSelectedName] = useState<string>("");
+    const [error, setError] = useState<string>("");
+
+    const handleSearch = async (q: string) => {
+        setSearch(q);
+        if (q.length < 2) { setResults([]); return; }
+        setLoading(true);
+        setError("");
+        try {
+            const res = await getTrendyolCategories();
+            if (res.success && res.data) {
+                const filtered = (res.data as TrendyolCategory[]).filter(c =>
+                    c.name.toLowerCase().includes(q.toLowerCase())
+                ).slice(0, 20);
+                setResults(filtered);
+                setOpen(true);
+            } else {
+                setError(res.message || "Kategoriler alınamadı. Trendyol entegrasyonunu kontrol edin.");
+            }
+        } catch {
+            setError("Bağlantı hatası.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelect = (cat: TrendyolCategory) => {
+        onChange(cat.id);
+        setSelectedName(cat.name);
+        setSearch("");
+        setResults([]);
+        setOpen(false);
+    };
+
+    const handleClear = () => {
+        onChange(undefined);
+        setSelectedName("");
+        setSearch("");
+        setResults([]);
+    };
+
+    return (
+        <div className="space-y-2">
+            {value && selectedName ? (
+                <div className="flex items-center gap-2 p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-sm">
+                    <span className="font-medium text-orange-800 dark:text-orange-300 flex-1 truncate">✓ {selectedName}</span>
+                    <span className="text-xs text-orange-600 font-mono">#{value}</span>
+                    <button type="button" onClick={handleClear} className="text-orange-500 hover:text-red-600">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : value ? (
+                <div className="flex items-center gap-2 p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-sm">
+                    <span className="font-medium text-orange-800 dark:text-orange-300 flex-1">Mevcut ID: <span className="font-mono">#{value}</span></span>
+                    <button type="button" onClick={handleClear} className="text-orange-500 hover:text-red-600">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : null}
+
+            <div className="relative">
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input
+                        className="pl-8 border-orange-200"
+                        placeholder="Kategori adıyla arayın (min. 2 karakter)..."
+                        value={search}
+                        onChange={(e) => handleSearch(e.target.value)}
+                    />
+                    {loading && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-orange-500" />}
+                </div>
+
+                {error && (
+                    <p className="text-xs text-red-500 mt-1">{error}</p>
+                )}
+
+                {open && results.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-orange-200 rounded-lg shadow-xl">
+                        {results.map((cat) => (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => handleSelect(cat)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                            >
+                                <span className="truncate">{cat.name}</span>
+                                <span className="text-xs text-gray-400 font-mono shrink-0">#{cat.id}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {open && results.length === 0 && search.length >= 2 && !loading && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-orange-200 rounded-lg shadow-xl p-3 text-sm text-gray-500 text-center">
+                        Sonuç bulunamadı.
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
 
 export function CategoriesTable({ categories }: CategoriesTableProps) {
@@ -505,7 +626,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                             Yeni Kategori
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>
                                 {editCategory ? "Kategori Düzenle" : "Yeni Kategori"}
@@ -541,27 +662,24 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                                         required
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="trendyolCategoryId" className="text-orange-600">Trendyol Kategori ID</Label>
-                                    <Input
-                                        id="trendyolCategoryId"
-                                        type="number"
-                                        value={trendyolCategoryId || ""}
-                                        onChange={(e) => setTrendyolCategoryId(e.target.value ? Number(e.target.value) : undefined)}
-                                        placeholder="Örn: 1234"
-                                        className="border-orange-200"
+                                <div className="space-y-2 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                                    <Label htmlFor="trendyolCategoryId" className="text-orange-700 dark:text-orange-400 font-semibold text-xs uppercase tracking-wide">🟠 Trendyol Kategori ID</Label>
+                                    <TrendyolCategorySearch
+                                        value={trendyolCategoryId}
+                                        onChange={setTrendyolCategoryId}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="n11CategoryId" className="text-purple-600">N11 Kategori ID</Label>
+                                <div className="space-y-2 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                                    <Label htmlFor="n11CategoryId" className="text-purple-700 dark:text-purple-400 font-semibold text-xs uppercase tracking-wide">🟣 N11 Kategori ID</Label>
                                     <Input
                                         id="n11CategoryId"
                                         type="number"
                                         value={n11CategoryId || ""}
                                         onChange={(e) => setN11CategoryId(e.target.value ? Number(e.target.value) : undefined)}
-                                        placeholder="Örn: 10001"
-                                        className="border-purple-200"
+                                        placeholder="N11 kategori ID'si giriniz (Örn: 10001)"
+                                        className="border-purple-200 dark:border-purple-700"
                                     />
+                                    <p className="text-[10px] text-purple-600">N11 Kategori ID'sini N11 entegrasyonu sayfasından bulabilirsiniz.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="hbCategoryId" className="text-orange-600">Hepsiburada Kategori ID</Label>
