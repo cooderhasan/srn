@@ -48,16 +48,28 @@ export class TrendyolClient {
     }
 
     /**
-     * Test connection by fetching brands (lightweight)
+     * Test connection by fetching products (Requires Auth)
      */
     async checkConnection(): Promise<boolean> {
         try {
             await this.init();
-            const response = await fetch(`${this.baseUrl}/brands?size=1`, {
+            if (!this.creds) return false;
+
+            const response = await fetch(`${this.baseUrl}/suppliers/${this.creds.supplierId}/products?size=1`, {
                 headers: { "Authorization": this.getAuthHeader() }
             });
-            return response.ok;
+            
+            if (!response.ok) {
+                console.error("Trendyol Auth Error:", await response.text());
+                return false;
+            }
+            
+            return true;
         } catch (error) {
+            console.error("Trendyol Connection Error:", error);
+            return false;
+        }
+    }
             console.error("Trendyol connection check failed:", error);
             return false;
         }
