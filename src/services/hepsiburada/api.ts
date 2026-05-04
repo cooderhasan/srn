@@ -113,6 +113,8 @@ export class HepsiburadaClient {
         }
 
         return await response.json();
+    }
+
     /**
      * Get Category Attributes (Metadata)
      */

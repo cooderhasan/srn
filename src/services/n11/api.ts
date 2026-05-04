@@ -151,6 +151,8 @@ export class N11Client {
         // We will do a basic regex extraction for Order Numbers as a proof of concept
         // Or we could return raw XML for now.
         return { raw: response };
+    }
+
     // --- Category Service ---
 
     async getCategoryAttributes(categoryId: number) {
