@@ -49,6 +49,10 @@ export function initializeWorker() {
         {
             connection: redisConnection,
             concurrency: 1, // Sadece 1 işlem aynı anda çalışsın, sunucuyu boğmasın
+            limiter: {
+                max: 1,         // Belirtilen süre içinde en fazla 1 görev işlensin
+                duration: 2000, // 2 saniyede bir (API limitlerine takılmamak için global throttle)
+            }
         }
     );
 
