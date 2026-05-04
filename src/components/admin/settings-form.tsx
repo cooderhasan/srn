@@ -455,6 +455,15 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                             placeholder="https://linkedin.com/in/..."
                                         />
                                     </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="tiktok">TikTok URL</Label>
+                                        <Input
+                                            id="tiktok"
+                                            value={settings.tiktokUrl || ""}
+                                            onChange={(e) => updateField("tiktokUrl", e.target.value)}
+                                            placeholder="https://tiktok.com/@..."
+                                        />
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

@@ -111,6 +111,19 @@ export function StorefrontFooter({ settings, policies }: StorefrontFooterProps) 
                                     </svg>
                                 </a>
                             )}
+                            {settings?.tiktokUrl && (
+                                <a
+                                    href={settings.tiktokUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-10 h-10 bg-white/5 hover:bg-[#000000] hover:text-white rounded-xl flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-lg backdrop-blur-sm border border-white/5"
+                                    title="TikTok"
+                                >
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.89-.6-4.13-1.47-.13-.08-.27-.17-.41-.26v8.43c.02 1.62-.27 3.27-1.03 4.71-.9 1.73-2.43 3.12-4.25 3.8-1.72.65-3.63.74-5.4.31-1.74-.4-3.33-1.39-4.48-2.75-1.18-1.38-1.85-3.17-1.89-4.99-.04-1.9.5-3.83 1.62-5.38 1.11-1.55 2.78-2.67 4.63-3.1 1.75-.42 3.63-.23 5.25.54.02.16.05.32.05.48-.01 1.4-.01 2.8 0 4.2-.08-.04-.15-.07-.22-.12-1.02-.62-2.31-.75-3.44-.35-.95.32-1.77 1.05-2.22 1.95-.49.95-.56 2.1-.2 3.1.34.99 1.07 1.83 2 2.3 1.01.53 2.25.56 3.28.08 1.02-.45 1.78-1.41 1.98-2.5.09-.54.08-1.1.08-1.65V0h.02z" />
+                                    </svg>
+                                </a>
+                            )}
                         </div>
                     </div>
 

@@ -41,6 +41,7 @@ export default async function SettingsPage() {
         instagramUrl: "",
         twitterUrl: "",
         linkedinUrl: "",
+        tiktokUrl: "",
 
         // Bank / Payment
         bankName: "",
