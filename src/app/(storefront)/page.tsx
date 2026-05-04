@@ -6,7 +6,7 @@ import { FeaturedProducts } from "@/components/storefront/featured-products";
 import { CategorySectionModern } from "@/components/storefront/category-section-modern";
 import Link from "next/link";
 import Image from "next/image";
-import { Truck, Shield, HeadphonesIcon } from "lucide-react";
+import { Truck, Shield, HeadphonesIcon, ArrowRight } from "lucide-react";
 
 export const dynamic = 'force-dynamic';
 
@@ -212,20 +212,26 @@ export default async function HomePage() {
                                 key={banner.id}
                                 href={banner.linkUrl || "#"}
                                 className={cn(
-                                    "relative h-48 md:h-64 bg-white rounded-2xl overflow-hidden group block",
+                                    "group block",
                                     !banner.linkUrl && "cursor-default"
                                 )}
                             >
-                                <Image
-                                    src={banner.imageUrl}
-                                    alt={banner.title || "Banner"}
-                                    fill
-                                    className="object-cover transition-transform duration-500 group-hover:scale-110"
-                                />
+                                <div className="relative h-48 md:h-64 bg-white rounded-2xl overflow-hidden mb-4 ring-1 ring-black/5 dark:ring-white/10 group-hover:shadow-xl transition-all duration-500">
+                                    <Image
+                                        src={banner.imageUrl}
+                                        alt={banner.title || "Banner"}
+                                        fill
+                                        className="object-cover transition-transform duration-500 group-hover:scale-110"
+                                    />
+                                </div>
                                 {banner.title && (
-                                    <div className="absolute bottom-4 left-4 right-4 z-10 flex">
-                                        <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-sm border border-white/50 transition-transform duration-300 group-hover:-translate-y-1">
-                                            <h3 className="text-gray-900 font-bold text-sm md:text-base">{banner.title}</h3>
+                                    <div className="space-y-1.5 px-1">
+                                        <h3 className="text-gray-900 dark:text-white font-bold text-lg group-hover:text-[#009AD0] transition-colors">
+                                            {banner.title}
+                                        </h3>
+                                        <div className="flex items-center gap-1.5 text-[#009AD0] font-bold">
+                                            <span className="text-xs uppercase tracking-wider">Ürünleri İncele</span>
+                                            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1.5" />
                                         </div>
                                     </div>
                                 )}

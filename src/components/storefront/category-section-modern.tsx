@@ -49,7 +49,7 @@ export function CategorySectionModern({ categories }: CategorySectionProps) {
                                     {category.name}
                                 </h3>
                                 <div className="flex items-center gap-2 text-[#009AD0] font-bold">
-                                    <span className="text-xs uppercase tracking-widest">Koleksiyonu İncele</span>
+                                    <span className="text-xs uppercase tracking-widest">Ürünleri İncele</span>
                                     <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-2" />
                                 </div>
                             </div>
