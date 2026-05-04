@@ -41,10 +41,14 @@ export class TrendyolClient {
         };
     }
 
-    private getAuthHeader(): string {
+    private getHeaders(): Record<string, string> {
         if (!this.creds) throw new Error("Client not initialized.");
         const pair = `${this.creds.apiKey}:${this.creds.apiSecret}`;
-        return `Basic ${Buffer.from(pair).toString("base64")}`;
+        return {
+            "Authorization": `Basic ${Buffer.from(pair).toString("base64")}`,
+            "User-Agent": `${this.creds.supplierId} - SelfIntegration`,
+            "Content-Type": "application/json"
+        };
     }
 
     /**
@@ -56,7 +60,7 @@ export class TrendyolClient {
             if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
             const response = await fetch(`${this.baseUrl}/suppliers/${this.creds.supplierId}/products?size=1`, {
-                headers: { "Authorization": this.getAuthHeader() }
+                headers: this.getHeaders()
             });
             
             if (response.ok) {
@@ -93,7 +97,7 @@ export class TrendyolClient {
     async getBrands(page = 0, size = 100) {
         await this.init();
         const response = await fetch(`${this.baseUrl}/brands?page=${page}&size=${size}`, {
-            headers: { "Authorization": this.getAuthHeader() }
+            headers: this.getHeaders()
         });
 
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
@@ -106,7 +110,7 @@ export class TrendyolClient {
     async getCategories() {
         await this.init();
         const response = await fetch(`${this.baseUrl}/product-categories`, {
-            headers: { "Authorization": this.getAuthHeader() }
+            headers: this.getHeaders()
         });
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
         return await response.json();
@@ -124,10 +128,7 @@ export class TrendyolClient {
 
         const response = await fetch(url, {
             method: "POST",
-            headers: {
-                "Authorization": this.getAuthHeader(),
-                "Content-Type": "application/json"
-            },
+            headers: this.getHeaders(),
             body: JSON.stringify({ items })
         });
 
@@ -147,10 +148,7 @@ export class TrendyolClient {
 
         const response = await fetch(url, {
             method: "POST",
-            headers: {
-                "Authorization": this.getAuthHeader(),
-                "Content-Type": "application/json"
-            },
+            headers: this.getHeaders(),
             body: JSON.stringify({ items })
         });
 
@@ -164,7 +162,7 @@ export class TrendyolClient {
     async getCategoryAttributes(categoryId: number) {
         await this.init();
         const response = await fetch(`${this.baseUrl}/product-categories/${categoryId}/attributes`, {
-            headers: { "Authorization": this.getAuthHeader() }
+            headers: this.getHeaders()
         });
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
         return await response.json();
