@@ -86,16 +86,16 @@ export async function syncProductsToN11(productId?: string) {
         let successCount = 0;
         let failCount = 0;
 
-        for (const p of products) {
-            // Logic: Loop variants OR main product
-            const itemsToSync = [];
+        // 1. Collect all items to sync across all products
+        const allItemsToSync = [];
 
+        for (const p of products) {
             const basePrice = Number((p as any).n11Price) || Number(p.listPrice);
 
             if ((p as any).variants?.length > 0) {
                 for (const v of (p as any).variants) {
                     if (v.barcode) {
-                        itemsToSync.push({
+                        allItemsToSync.push({
                             stockCode: v.sku || v.barcode, // Usually N11 uses stockSellerCode which is our SKU/Barcode
                             quantity: v.stock,
                             price: basePrice + Number(v.priceAdjustment || 0)
@@ -103,26 +103,42 @@ export async function syncProductsToN11(productId?: string) {
                     }
                 }
             } else if ((p as any).barcode) {
-                itemsToSync.push({
+                allItemsToSync.push({
                     stockCode: p.sku || p.barcode,
                     quantity: p.stock,
                     price: basePrice
                 });
             }
+        }
 
-            for (const item of itemsToSync) {
-                // 1. Try Update Stock
-                const stockRes = await client.updateStock({ sellerStockCode: item.stockCode, quantity: item.quantity });
+        // 2. Process in chunks to avoid rate limits
+        const CHUNK_SIZE = 50; // N11 tekil işlem yaptığı için batch boyutunu küçük tutuyoruz
+        const chunks = [];
+        for (let i = 0; i < allItemsToSync.length; i += CHUNK_SIZE) {
+            chunks.push(allItemsToSync.slice(i, i + CHUNK_SIZE));
+        }
 
-                // 2. Try Update Price
-                const priceRes = await client.updatePrice({ sellerStockCode: item.stockCode, price: item.price });
+        for (const chunk of chunks) {
+            // Process chunk items concurrently
+            await Promise.all(
+                chunk.map(async (item) => {
+                    try {
+                        const stockRes = await client.updateStock({ sellerStockCode: item.stockCode, quantity: item.quantity });
+                        const priceRes = await client.updatePrice({ sellerStockCode: item.stockCode, price: item.price });
 
-                if (stockRes.success || priceRes.success) {
-                    successCount++;
-                } else {
-                    failCount++;
-                }
-            }
+                        if (stockRes.success || priceRes.success) {
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } catch (e) {
+                        failCount++;
+                    }
+                })
+            );
+
+            // Sleep 500ms between chunks
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         return { success: true, message: `N11 Senkronizasyonu Tamamlandı. Başarılı: ${successCount}, Başarısız: ${failCount} (Ürün N11'de eşleşmediyse başarısız olur).` };

@@ -232,12 +232,34 @@ export async function syncProductsToTrendyol(productId?: string) {
                 listPrice: i.listPrice
             }));
 
-            const result = await client.updatePriceAndInventory(stockUpdateItems);
+            // Chunking: Split stockUpdateItems into batches of 500 to avoid API timeouts
+            const CHUNK_SIZE = 500;
+            const chunks = [];
+            for (let i = 0; i < stockUpdateItems.length; i += CHUNK_SIZE) {
+                chunks.push(stockUpdateItems.slice(i, i + CHUNK_SIZE));
+            }
 
-            if (result.ok) {
-                return { success: true, message: `${items.length} ürün için Fiyat/Stok güncellemesi gönderildi.` };
+            let successCount = 0;
+            let errorMessages: string[] = [];
+
+            for (const chunk of chunks) {
+                const result = await client.updatePriceAndInventory(chunk);
+                if (result.ok) {
+                    successCount += chunk.length;
+                } else {
+                    errorMessages.push(result.errors?.[0]?.message || "Bilinmeyen hata");
+                }
+                
+                // Sleep 500ms between chunks to respect API rate limits
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            if (successCount > 0 && errorMessages.length === 0) {
+                return { success: true, message: `${successCount} ürün için Fiyat/Stok güncellemesi gönderildi.` };
+            } else if (successCount > 0 && errorMessages.length > 0) {
+                return { success: true, message: `Kısmi Başarı: ${successCount} ürün güncellendi. Hatalar: ${errorMessages[0]}` };
             } else {
-                return { success: false, message: "Trendyol Hatası: " + (result.errors?.[0]?.message || "Bilinmeyen hata") };
+                return { success: false, message: "Trendyol Hatası: " + (errorMessages[0] || "Bilinmeyen hata") };
             }
 
         } catch (apiError: any) {
