@@ -336,6 +336,28 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
 
                         <nav className="flex items-center justify-center w-full relative">
+                            {/* Anasayfa (Home) Link */}
+                            <div
+                                className="group"
+                                onMouseEnter={() => setHoveredCategory('home')}
+                                onMouseLeave={() => setHoveredCategory(null)}
+                            >
+                                <Link
+                                    href="/"
+                                    onClick={() => setHoveredCategory(null)}
+                                    className={`flex flex-col items-center justify-center px-4 py-4 md:px-6 md:py-5 transition-colors duration-150 ${
+                                        hoveredCategory === 'home' ? "bg-white" : "hover:bg-white/10"
+                                    }`}
+                                >
+                                    <span className={`flex items-center gap-2 text-sm font-bold transition-colors text-center whitespace-nowrap ${
+                                        hoveredCategory === 'home' ? "text-[#009AD0]" : "text-white"
+                                    }`}>
+                                        <Home className="w-4 h-4" />
+                                        Anasayfa
+                                    </span>
+                                </Link>
+                            </div>
+
                             {categories
                                 .filter(c => c.name !== "Home" && c.name !== "Root")
                                 .map((category) => {
@@ -445,10 +467,18 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
                         {/* Mobile Categories - Expandable Sidebar Style */}
                         <div className="space-y-1.5">
-                            <p className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2">Kategoriler</p>
+                            <p className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2">Menü</p>
+                            <Link
+                                href="/"
+                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-[#009AD0] hover:bg-blue-50 rounded-lg transition-colors"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <Home className="w-4 h-4" />
+                                Anasayfa
+                            </Link>
                             <Link
                                 href="/products"
-                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-[#009AD0] hover:bg-blue-50 rounded-lg"
+                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-[#009AD0] hover:bg-blue-50 rounded-lg transition-colors"
                                 onClick={() => setIsMobileMenuOpen(false)}
                             >
                                 <span className="w-1.5 h-1.5 rounded-full bg-[#009AD0]" />
