@@ -37,11 +37,33 @@ export async function saveHepsiburadaConfig(prevState: any, formData: FormData) 
             });
         }
 
-        revalidatePath("/admin/integrations/hepsiburada");
         return { success: true, message: "Ayarlar kaydedildi." };
     } catch (error) {
         console.error("HB Save Error:", error);
         return { success: false, message: "Kaydetme hatası." };
+    }
+}
+
+export async function testHepsiburadaConnection() {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst();
+        if (!config) return { success: false, message: "Ayarlar bulunamadı." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId
+        });
+
+        const result = await client.checkConnectionDetailed();
+
+        if (result.success) {
+            return { success: true, message: "Bağlantı Başarılı! Hepsiburada API ile iletişim kuruldu." };
+        } else {
+            return { success: false, message: "Bağlantı Başarısız: " + result.message };
+        }
+    } catch (error: any) {
+        return { success: false, message: "Sistem Hatası: " + error.message };
     }
 }
 

@@ -36,10 +36,31 @@ export async function saveN11Config(prevState: any, formData: FormData) {
             });
         }
 
-        revalidatePath("/admin/integrations/n11");
         return { success: true, message: "Ayarlar kaydedildi." };
     } catch (error) {
         return { success: false, message: "Kaydetme hatası." };
+    }
+}
+
+export async function testN11Connection() {
+    try {
+        const config = await (prisma as any).n11Config.findFirst();
+        if (!config) return { success: false, message: "Ayarlar bulunamadı." };
+
+        const client = new N11Client({
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const result = await client.checkConnectionDetailed();
+
+        if (result.success) {
+            return { success: true, message: "Bağlantı Başarılı! N11 API ile iletişim kuruldu." };
+        } else {
+            return { success: false, message: "Bağlantı Başarısız: " + result.message };
+        }
+    } catch (error: any) {
+        return { success: false, message: "Sistem Hatası: " + error.message };
     }
 }
 

@@ -48,6 +48,41 @@ export class N11Client {
         return await response.text();
     }
 
+    /**
+     * Test connection with detailed error reporting
+     */
+    async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
+        try {
+            await this.init();
+            if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
+
+            const xml = `
+                <sch:GetTopLevelCategoriesRequest>
+                    <auth>
+                        <appKey>${this.creds.apiKey}</appKey>
+                        <appSecret>${this.creds.apiSecret}</appSecret>
+                    </auth>
+                </sch:GetTopLevelCategoriesRequest>`;
+
+            const response = await this.callSoap(this.categoryServiceUrl, "GetTopLevelCategories", xml);
+            
+            if (response.includes("<status>success</status>")) {
+                return { success: true, message: "Tamam" };
+            }
+
+            // Extract error message from XML
+            const errorMatch = response.match(/<errorMessage>(.*?)<\/errorMessage>/);
+            const errorCodeMatch = response.match(/<errorCode>(.*?)<\/errorCode>/);
+            const errorMsg = errorMatch ? errorMatch[1] : "Bilinmeyen N11 Hatası";
+            const errorCode = errorCodeMatch ? errorCodeMatch[1] : "SOAP_ERR";
+
+            return { success: false, message: `${errorMsg} (${errorCode})` };
+
+        } catch (error: any) {
+            return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
+        }
+    }
+
     // --- Product Service ---
 
     async saveProduct(product: any) {

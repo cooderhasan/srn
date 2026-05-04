@@ -43,20 +43,34 @@ export class HepsiburadaClient {
     }
 
     /**
-     * Check Connection (Simple GET to Listings)
+     * Test connection with detailed error reporting
      */
-    async checkConnection(): Promise<boolean> {
+    async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
-            if (!this.creds?.merchantId) return false;
+            if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
-            const response = await fetch(`${this.listingBaseUrl}/listings/merchantid/${this.creds.merchantId}?limit=1`, {
+            // Try to fetch categories (Public-ish but confirms auth works if hitting protected paths)
+            const response = await fetch(`${this.listingBaseUrl}/common/categories`, {
                 headers: { "Authorization": this.getAuthHeader() }
             });
-            return response.ok;
-        } catch (error) {
-            console.error("HB Check Connection Error:", error);
-            return false;
+            
+            if (response.ok) {
+                return { success: true, message: "Tamam" };
+            }
+
+            if (response.status === 401) {
+                return { success: false, message: "Yetkisiz Erişim (401). Kullanıcı Adı veya Şifre hatalı." };
+            }
+
+            if (response.status === 403) {
+                return { success: false, message: "Erişim Reddedildi (403). Merchant ID yetkisi kısıtlı olabilir." };
+            }
+
+            return { success: false, message: `HB Hatası (${response.status})` };
+
+        } catch (error: any) {
+            return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
         }
     }
 
