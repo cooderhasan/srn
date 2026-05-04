@@ -307,17 +307,22 @@ export async function syncOrdersFromTrendyol() {
 
             if (existing) continue;
 
-            // Create Order
-            // Note: Mapping Trendyol customer and items to our Schema is complex.
-            // Simplified logic:
-
-            // 1. Create Items
-            const orderItems = [];
+            // Resolve order items and find matching products/variants by barcode
+            const resolvedItems: Array<{
+                productId: string;
+                variantId: string | null;
+                productName: string;
+                quantity: number;
+                unitPrice: number;
+                discountRate: number;
+                vatRate: number;
+                lineTotal: number;
+            }> = [];
             let total = 0;
 
             for (const line of tOrder.lines) {
                 let productId = "";
-                let variantId = null;
+                let variantId: string | null = null;
 
                 // 1. Try to find VARIANT by barcode
                 const variant = await prisma.productVariant.findFirst({
@@ -333,55 +338,70 @@ export async function syncOrdersFromTrendyol() {
                     const product = await prisma.product.findFirst({
                         where: { barcode: line.barcode }
                     });
-
                     if (product) {
                         productId = product.id;
                     }
                 }
 
                 if (productId) {
-                    // Fetch product name if we only have ID (from variant)
-                    // If we found variant, we have product in include.
-                    // If we found product, we have product.
-                    // Actually let's keep it simple.
-
-                    orderItems.push({
-                        productId: productId,
-                        variantId: variantId,
+                    resolvedItems.push({
+                        productId,
+                        variantId,
                         productName: line.productName,
                         quantity: line.quantity,
                         unitPrice: line.price,
                         discountRate: 0,
-                        vatRate: 20, // Default
+                        vatRate: 20,
                         lineTotal: line.price * line.quantity
                     });
                     total += line.price * line.quantity;
                 }
             }
 
-            if (orderItems.length > 0) {
-                await prisma.order.create({
-                    data: {
-                        orderNumber: tOrder.orderNumber,
-                        status: "PENDING",
-                        total: total,
-                        subtotal: total,
-                        discountAmount: 0,
-                        appliedDiscountRate: 0,
-                        vatAmount: total * 0.2, // Rough calc
-                        // Guest User Info (We assume guest for marketplace orders for now)
-                        guestEmail: tOrder.customerEmail || "trendyol@customer.com",
-                        shippingAddress: {
-                            fullName: tOrder.shipmentAddress.fullName,
-                            address: tOrder.shipmentAddress.fullAddress,
-                            city: tOrder.shipmentAddress.city,
-                            district: tOrder.shipmentAddress.district
-                        },
-                        items: {
-                            create: orderItems
+            if (resolvedItems.length > 0) {
+                // Use $transaction to atomically create the order AND decrement stock
+                await prisma.$transaction(async (tx) => {
+                    // 1. Create the order
+                    await tx.order.create({
+                        data: {
+                            orderNumber: tOrder.orderNumber,
+                            status: "PENDING",
+                            total,
+                            subtotal: total,
+                            discountAmount: 0,
+                            appliedDiscountRate: 0,
+                            vatAmount: total * 0.2,
+                            guestEmail: tOrder.customerEmail || "trendyol@customer.com",
+                            shippingAddress: {
+                                fullName: tOrder.shipmentAddress?.fullName ?? "",
+                                address: tOrder.shipmentAddress?.fullAddress ?? "",
+                                city: tOrder.shipmentAddress?.city ?? "",
+                                district: tOrder.shipmentAddress?.district ?? ""
+                            },
+                            items: {
+                                create: resolvedItems
+                            }
+                        }
+                    });
+
+                    // 2. Decrement stock atomically for each item
+                    for (const item of resolvedItems) {
+                        if (item.variantId) {
+                            // Variant stock decrement
+                            await tx.productVariant.update({
+                                where: { id: item.variantId },
+                                data: { stock: { decrement: item.quantity } }
+                            });
+                        } else {
+                            // Product stock decrement
+                            await tx.product.update({
+                                where: { id: item.productId },
+                                data: { stock: { decrement: item.quantity } }
+                            });
                         }
                     }
                 });
+
                 importedCount++;
             }
         }
