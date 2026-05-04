@@ -286,7 +286,7 @@ export async function getTrendyolBrands(search: string = "") {
             apiSecret: config.apiSecret
         });
 
-        const data = await client.getBrands(0, 500);
+        const data = await client.getBrands(0, 50, search || undefined);
 
         if (!data || !data.brands) return { success: false, message: "Markalar alınamadı." };
 

@@ -91,11 +91,14 @@ export class TrendyolClient {
     }
 
     /**
-     * Get Brands from Trendyol
+     * Get Brands from Trendyol (with optional name filter)
      */
-    async getBrands(page = 0, size = 100) {
+    async getBrands(page = 0, size = 100, name?: string) {
         await this.init();
-        const response = await fetch(`${this.gatewayUrl}/integration/product/brands?page=${page}&size=${size}`, {
+        let url = `${this.gatewayUrl}/integration/product/brands?page=${page}&size=${size}`;
+        if (name) url += `&name=${encodeURIComponent(name)}`;
+        
+        const response = await fetch(url, {
             headers: this.getHeaders()
         });
 
