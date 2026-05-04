@@ -84,7 +84,7 @@ export async function enqueueTrendyolSync() {
     }
 }
 
-export async function syncProductsToTrendyol(productId?: string) {
+export async function syncProductsToTrendyol(productIds?: string[]) {
     try {
         // 1. Check Config
         const config = await (prisma as any).trendyolConfig.findFirst({
@@ -110,8 +110,8 @@ export async function syncProductsToTrendyol(productId?: string) {
             barcode: { not: null },
         };
 
-        if (productId) {
-            whereClause.id = productId;
+        if (productIds && productIds.length > 0) {
+            whereClause.id = { in: productIds };
         }
 
         const products = await (prisma as any).product.findMany({
@@ -163,16 +163,17 @@ export async function syncProductsToTrendyol(productId?: string) {
 
                     // Variant specific
                     const variantListPrice = baseListPrice + Number(v.priceAdjustment || 0);
-                    // Sale price logic: if base has specialized trendyol price, add adjustment.
-                    // If base uses listPrice, uses variantListPrice.
-                    // Simplified: Variant Sale Price = Base Sale Price + Adjustment
                     const variantSalePrice = baseSalePrice + Number(v.priceAdjustment || 0);
+
+                    // Critical stock calculation
+                    const criticalStock = p.criticalStock || 10;
+                    const availableStock = Math.max(0, v.stock - criticalStock);
 
                     items.push({
                         ...baseItem,
                         barcode: v.barcode,
                         stockCode: v.sku || v.barcode, // Stok Kodu (Merchant SKU)
-                        quantity: v.stock,
+                        quantity: availableStock,
                         listPrice: variantListPrice,
                         salePrice: variantSalePrice,
                         dimensionalWeight: 1, // Desi logic needed per variant if possible, else 1
@@ -186,11 +187,14 @@ export async function syncProductsToTrendyol(productId?: string) {
             } else {
                 // Single Product (No variants)
                 if (p.barcode) {
+                    const criticalStock = p.criticalStock || 10;
+                    const availableStock = Math.max(0, p.stock - criticalStock);
+
                     items.push({
                         ...baseItem,
                         barcode: p.barcode,
                         stockCode: p.sku || p.barcode,
-                        quantity: p.stock,
+                        quantity: availableStock,
                         listPrice: baseListPrice,
                         salePrice: baseSalePrice,
                         dimensionalWeight: p.desi ? Number(p.desi) : 1

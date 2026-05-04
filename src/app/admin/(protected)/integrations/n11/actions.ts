@@ -56,7 +56,7 @@ export async function enqueueN11Sync() {
     }
 }
 
-export async function syncProductsToN11(productId?: string) {
+export async function syncProductsToN11(productIds?: string[]) {
     try {
         const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -66,8 +66,8 @@ export async function syncProductsToN11(productId?: string) {
             isN11Active: true
         };
 
-        if (productId) {
-            whereClause.id = productId;
+        if (productIds && productIds.length > 0) {
+            whereClause.id = { in: productIds };
         }
 
         // Fetch products with variants
@@ -91,21 +91,24 @@ export async function syncProductsToN11(productId?: string) {
 
         for (const p of products) {
             const basePrice = Number((p as any).n11Price) || Number(p.listPrice);
+            const criticalStock = p.criticalStock || 10;
 
             if ((p as any).variants?.length > 0) {
                 for (const v of (p as any).variants) {
                     if (v.barcode) {
+                        const availableStock = Math.max(0, v.stock - criticalStock);
                         allItemsToSync.push({
                             stockCode: v.sku || v.barcode, // Usually N11 uses stockSellerCode which is our SKU/Barcode
-                            quantity: v.stock,
+                            quantity: availableStock,
                             price: basePrice + Number(v.priceAdjustment || 0)
                         });
                     }
                 }
             } else if ((p as any).barcode) {
+                const availableStock = Math.max(0, p.stock - criticalStock);
                 allItemsToSync.push({
                     stockCode: p.sku || p.barcode,
-                    quantity: p.stock,
+                    quantity: availableStock,
                     price: basePrice
                 });
             }

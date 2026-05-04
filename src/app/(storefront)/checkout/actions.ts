@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { generateOrderNumber } from "@/lib/helpers";
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
+import { addMarketplaceSyncJob } from "@/lib/queue/producer";
 
 interface OrderItem {
     productId: string;
@@ -185,7 +186,7 @@ export async function createOrder(data: CreateOrderData) {
         const orderNumber = generateOrderNumber();
 
         // Create order with transaction
-        const order = await prisma.$transaction(async (tx) => {
+        const transactionResult = await prisma.$transaction(async (tx) => {
             // Check Critical Limit for Current Account (only for logged in users)
             if (paymentMethod === "CURRENT_ACCOUNT" && userId) {
                 const user = await tx.user.findUnique({
@@ -314,8 +315,22 @@ export async function createOrder(data: CreateOrderData) {
                 }
             }
 
-            return newOrder;
+            // Return the list of affected product IDs as well
+            const affectedProductIds = Array.from(new Set(data.items.map(i => i.productId)));
+
+            return { newOrder, affectedProductIds };
         });
+
+        const { newOrder: order, affectedProductIds } = transactionResult;
+
+        // --- ENQUEUE MARKETPLACE SYNC JOB ---
+        // Fire and forget: Immediately notify BullMQ to sync stocks of sold products to marketplaces
+        if (affectedProductIds.length > 0) {
+            Promise.all([
+                addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: affectedProductIds }).catch(console.error),
+                addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: affectedProductIds }).catch(console.error)
+            ]).catch(console.error);
+        }
 
         // Fetch User Company Name for email (if logged in)
         let userForEmail = null;
@@ -332,7 +347,6 @@ export async function createOrder(data: CreateOrderData) {
         });
         const settings = settingsRecord?.value as any || {};
 
-        // Send confirmation email (to user email or guest email)
         // Send confirmation email (to user email or guest email)
         // ONLY if payment method is NOT Credit Card. 
         // For Credit Card, we will send email in the PayTR Callback (success)

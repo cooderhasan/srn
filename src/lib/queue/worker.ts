@@ -20,14 +20,13 @@ export function initializeWorker() {
             
             try {
                 if (job.data.marketplace === "trendyol") {
-                    // For now, we sync all. We can enhance this to process batches if productIds is provided.
-                    const result = await syncProductsToTrendyol();
+                    const result = await syncProductsToTrendyol(job.data.productIds);
                     if (!result.success) {
                         throw new Error(result.message);
                     }
                     console.log(`✅ Tamamlandı: Trendyol Sync - ${result.message}`);
                 } else if (job.data.marketplace === "n11") {
-                    const result = await syncProductsToN11();
+                    const result = await syncProductsToN11(job.data.productIds);
                     if (!result.success) {
                         throw new Error(result.message);
                     }
