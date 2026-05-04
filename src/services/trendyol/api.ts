@@ -63,16 +63,24 @@ export class TrendyolClient {
                 return { success: true, message: "Tamam" };
             }
 
+            const errorText = await response.text();
+            let detail = "";
+            try {
+                const parsed = JSON.parse(errorText);
+                detail = parsed.message || parsed.errorMessage || errorText;
+            } catch {
+                detail = errorText;
+            }
+
             if (response.status === 401) {
-                return { success: false, message: "Yetkisiz Erişim (401). API Key veya Secret hatalı olabilir." };
+                return { success: false, message: "Yetkisiz Erişim (401). API Key veya Secret hatalı." };
             }
 
             if (response.status === 403) {
-                return { success: false, message: "Erişim Reddedildi (403). Satıcı ID'nizin bu API'ye yetkisi olmayabilir." };
+                return { success: false, message: `Erişim Reddedildi (403). Trendyol Mesajı: ${detail}` };
             }
 
-            const errorText = await response.text();
-            return { success: false, message: `Trendyol Hatası (${response.status}): ${errorText}` };
+            return { success: false, message: `Trendyol Hatası (${response.status}): ${detail}` };
 
         } catch (error: any) {
             return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
