@@ -85,7 +85,7 @@ export default async function ContactPage() {
                                 <div>
                                     <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-1">Firma Ünvanı</p>
                                     <p className="text-sm font-bold text-gray-900 dark:text-white">
-                                        Konya Serin Motor Motosiklet Parça Satış Hizmetleri
+                                        {settings.companyName || "Konya Serin Motor Motosiklet Parça Satış Hizmetleri"}
                                     </p>
                                 </div>
 
@@ -122,12 +122,18 @@ export default async function ContactPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Çalışma Saatleri</p>
-                                        <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">
-                                            Hafta içi ve Cumartesi: 08:00 - 20:00
-                                        </p>
-                                        <p className="text-xs text-red-500 font-semibold mt-0.5">
-                                            Pazar: Kapalı
-                                        </p>
+                                        <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+                                            {settings.workingHours ? (
+                                                <p>{settings.workingHours}</p>
+                                            ) : (
+                                                <>
+                                                    <p>Hafta içi ve Cumartesi: 08:00 - 20:00</p>
+                                                    <p className="text-xs text-red-500 font-semibold mt-0.5">
+                                                        Pazar: Kapalı
+                                                    </p>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -139,7 +145,7 @@ export default async function ContactPage() {
                                     <div>
                                         <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Vergi Bilgileri</p>
                                         <p className="text-sm text-gray-700 dark:text-gray-300">
-                                            V.D.: <span className="font-semibold">Meram</span> &nbsp;|&nbsp; V.N.: <span className="font-semibold">2030321343</span>
+                                            V.D.: <span className="font-semibold">{settings.taxOffice || "Meram"}</span> &nbsp;|&nbsp; V.N.: <span className="font-semibold">{settings.taxNumber || "2030321343"}</span>
                                         </p>
                                     </div>
                                 </div>

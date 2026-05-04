@@ -102,6 +102,24 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                             placeholder="Firma Ltd. Şti."
                                         />
                                     </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="taxOffice">Vergi Dairesi</Label>
+                                        <Input
+                                            id="taxOffice"
+                                            value={settings.taxOffice || ""}
+                                            onChange={(e) => updateField("taxOffice", e.target.value)}
+                                            placeholder="Meram"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="taxNumber">Vergi Numarası</Label>
+                                        <Input
+                                            id="taxNumber"
+                                            value={settings.taxNumber || ""}
+                                            onChange={(e) => updateField("taxNumber", e.target.value)}
+                                            placeholder="2030321343"
+                                        />
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -155,6 +173,15 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                                         onChange={(e) => updateField("address", e.target.value)}
                                         placeholder="İstanbul, Türkiye"
                                         rows={3}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="workingHours">Çalışma Saatleri</Label>
+                                    <Input
+                                        id="workingHours"
+                                        value={settings.workingHours || ""}
+                                        onChange={(e) => updateField("workingHours", e.target.value)}
+                                        placeholder="Hafta içi ve Cumartesi: 08:00 - 20:00 Pazar: Kapalı"
                                     />
                                 </div>
                                 <div className="space-y-2">

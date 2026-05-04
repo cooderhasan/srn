@@ -18,6 +18,9 @@ export default async function SettingsPage() {
         email: "",
         address: "",
         whatsappNumber: "",
+        taxOffice: "",
+        taxNumber: "",
+        workingHours: "",
 
         // Branding
         logoUrl: "",
