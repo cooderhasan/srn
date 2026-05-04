@@ -61,15 +61,15 @@ export async function testTrendyolConnection() {
             apiSecret: config.apiSecret
         });
 
-        const isConnected = await client.checkConnection();
+        const result = await client.checkConnectionDetailed();
 
-        if (isConnected) {
-            return { success: true, message: "Bağlantı Başarılı!" };
+        if (result.success) {
+            return { success: true, message: "Bağlantı Başarılı! Trendyol ile iletişim kuruldu." };
         } else {
-            return { success: false, message: "Bağlantı Başarısız. Anahtar bilgilerinizi kontrol edin." };
+            return { success: false, message: "Bağlantı Başarısız: " + result.message };
         }
     } catch (error: any) {
-        return { success: false, message: "Bağlantı Hatası: " + error.message };
+        return { success: false, message: "Sistem Hatası: " + error.message };
     }
 }
 

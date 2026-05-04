@@ -48,30 +48,34 @@ export class TrendyolClient {
     }
 
     /**
-     * Test connection by fetching products (Requires Auth)
+     * Test connection with detailed error reporting
      */
-    async checkConnection(): Promise<boolean> {
+    async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
-            if (!this.creds) return false;
+            if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
             const response = await fetch(`${this.baseUrl}/suppliers/${this.creds.supplierId}/products?size=1`, {
                 headers: { "Authorization": this.getAuthHeader() }
             });
             
-            if (!response.ok) {
-                console.error("Trendyol Auth Error:", await response.text());
-                return false;
+            if (response.ok) {
+                return { success: true, message: "Tamam" };
             }
-            
-            return true;
-        } catch (error) {
-            console.error("Trendyol Connection Error:", error);
-            return false;
-        }
-    }
-            console.error("Trendyol connection check failed:", error);
-            return false;
+
+            if (response.status === 401) {
+                return { success: false, message: "Yetkisiz Erişim (401). API Key veya Secret hatalı olabilir." };
+            }
+
+            if (response.status === 403) {
+                return { success: false, message: "Erişim Reddedildi (403). Satıcı ID'nizin bu API'ye yetkisi olmayabilir." };
+            }
+
+            const errorText = await response.text();
+            return { success: false, message: `Trendyol Hatası (${response.status}): ${errorText}` };
+
+        } catch (error: any) {
+            return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
         }
     }
 
