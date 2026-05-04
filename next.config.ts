@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    instrumentationHook: true,
+  },
   images: {
     remotePatterns: [
       {

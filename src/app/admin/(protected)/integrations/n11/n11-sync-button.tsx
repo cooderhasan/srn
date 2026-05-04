@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, RefreshCw } from "lucide-react";
-import { syncProductsToN11 } from "./actions";
+import { enqueueN11Sync } from "./actions";
 
 export function N11SyncButton() {
     const [loading, setLoading] = useState(false);
@@ -13,7 +13,7 @@ export function N11SyncButton() {
     const handleSync = async () => {
         setLoading(true);
         try {
-            const res = await syncProductsToN11();
+            const res = await enqueueN11Sync();
             if (res.success) {
                 toast.success(res.message);
             } else {

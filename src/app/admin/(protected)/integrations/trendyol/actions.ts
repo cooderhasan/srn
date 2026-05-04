@@ -73,6 +73,17 @@ export async function testTrendyolConnection() {
     }
 }
 
+import { addMarketplaceSyncJob } from "@/lib/queue/producer";
+
+export async function enqueueTrendyolSync() {
+    try {
+        await addMarketplaceSyncJob({ marketplace: "trendyol", type: "products" });
+        return { success: true, message: "Senkronizasyon işlemi kuyruğa alındı. Arka planda işlenecektir." };
+    } catch (error: any) {
+        return { success: false, message: "Kuyruğa eklenirken hata oluştu: " + error.message };
+    }
+}
+
 export async function syncProductsToTrendyol(productId?: string) {
     try {
         // 1. Check Config

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RefreshCw, Loader2 } from "lucide-react";
-import { syncProductsToTrendyol } from "./actions";
+import { enqueueTrendyolSync } from "./actions";
 import { toast } from "sonner";
 
 export function TrendyolSyncButton() {
@@ -14,7 +14,7 @@ export function TrendyolSyncButton() {
     async function handleSync() {
         setLoading(true);
         try {
-            const result = await syncProductsToTrendyol();
+            const result = await enqueueTrendyolSync();
             if (result.success) {
                 toast.success(result.message);
             } else {

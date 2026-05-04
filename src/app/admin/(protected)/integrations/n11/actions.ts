@@ -45,6 +45,17 @@ export async function saveN11Config(prevState: any, formData: FormData) {
 
 import { N11Client } from "@/services/n11/api";
 
+import { addMarketplaceSyncJob } from "@/lib/queue/producer";
+
+export async function enqueueN11Sync() {
+    try {
+        await addMarketplaceSyncJob({ marketplace: "n11", type: "products" });
+        return { success: true, message: "Senkronizasyon işlemi kuyruğa alındı. Arka planda işlenecektir." };
+    } catch (error: any) {
+        return { success: false, message: "Kuyruğa eklenirken hata oluştu: " + error.message };
+    }
+}
+
 export async function syncProductsToN11(productId?: string) {
     try {
         const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
