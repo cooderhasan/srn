@@ -9,7 +9,7 @@ interface TrendyolCreds {
 }
 
 export class TrendyolClient {
-    private baseUrl = "https://apigw.trendyol.com/integration";
+    private baseUrl = "https://apigw.trendyol.com/sapigw";
     private creds: TrendyolCreds | null = null;
 
     constructor(creds?: TrendyolCreds) {
