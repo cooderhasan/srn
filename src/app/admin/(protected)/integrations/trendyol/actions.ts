@@ -311,7 +311,28 @@ export async function getTrendyolCategories() {
 
         if (!data || !data.categories) return { success: false, message: "Kategoriler alınamadı." };
 
-        return { success: true, data: data.categories };
+        // Flatten the category tree so subcategories are searchable with full path
+        interface TrendyolCat {
+            id: number;
+            name: string;
+            subCategories?: TrendyolCat[];
+        }
+
+        function flattenCategories(cats: TrendyolCat[], parentPath: string = ""): { id: number; name: string }[] {
+            const result: { id: number; name: string }[] = [];
+            for (const cat of cats) {
+                const fullPath = parentPath ? `${parentPath} > ${cat.name}` : cat.name;
+                result.push({ id: cat.id, name: fullPath });
+                if (cat.subCategories && cat.subCategories.length > 0) {
+                    result.push(...flattenCategories(cat.subCategories, fullPath));
+                }
+            }
+            return result;
+        }
+
+        const flatCategories = flattenCategories(data.categories);
+
+        return { success: true, data: flatCategories };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
