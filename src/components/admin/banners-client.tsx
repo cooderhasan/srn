@@ -85,6 +85,9 @@ export function BannersClient({ initialBanners }: BannersClientProps) {
                     <p className="text-muted-foreground">
                         Anasayfa altındaki 3'lü banner alanını buradan yönetebilirsiniz.
                     </p>
+                    <div className="mt-2 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-2 rounded-md border border-blue-100 dark:border-blue-800 inline-block">
+                        <span className="font-bold">İdeal Banner Ölçüsü:</span> 800x500px | <span className="font-bold">Format:</span> JPG/WebP
+                    </div>
                 </div>
                 <Dialog open={open} onOpenChange={(val) => {
                     setOpen(val);
