@@ -14,15 +14,7 @@ export async function GET() {
             "Content-Type": "application/json"
         };
 
-        // 1. Config bilgileri
-        const configInfo = {
-            supplierId: config.supplierId,
-            cargoCompanyId: config.cargoCompanyId,
-            shipmentAddressId: config.shipmentAddressId,
-            returningAddressId: config.returningAddressId,
-        };
-
-        // 2. Son gönderilen ürünleri kontrol et (TrendyolProduct tablosundan)
+        // 1. Son gönderilen ürünleri DB'den al
         let lastSyncedProducts: any[] = [];
         try {
             lastSyncedProducts = await (prisma as any).trendyolProduct.findMany({
@@ -32,98 +24,88 @@ export async function GET() {
             });
         } catch (e) {}
 
-        // 3. Batch request sonuçlarını kontrol et - son ürünlerin durumunu Trendyol'dan çek
-        // Tüm mevcut ürünleri Trendyol'dan sorgula
-        let trendyolProducts: any = null;
-        try {
-            const prodRes = await fetch(
-                `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products?page=0&size=10`,
-                { headers }
-            );
-            if (prodRes.ok) {
-                trendyolProducts = await prodRes.json();
-            } else {
-                trendyolProducts = { status: prodRes.status, text: await prodRes.text() };
+        // 2. Her birinin barkodunu Trendyol'da ara
+        const barcodeSearchResults: any = {};
+        for (const sp of lastSyncedProducts) {
+            const barcode = sp.barcode || sp.product?.barcode;
+            if (!barcode) continue;
+            
+            try {
+                const url = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products?barcode=${barcode}`;
+                const res = await fetch(url, { headers });
+                if (res.ok) {
+                    const data = await res.json();
+                    barcodeSearchResults[barcode] = {
+                        found: data.totalElements > 0,
+                        totalElements: data.totalElements,
+                        products: data.content?.map((p: any) => ({
+                            title: p.title,
+                            approved: p.approved,
+                            rejected: p.rejected,
+                            onSale: p.onSale,
+                            rejectReasonDetails: p.rejectReasonDetails,
+                            quantity: p.quantity,
+                            listPrice: p.listPrice,
+                            salePrice: p.salePrice,
+                        }))
+                    };
+                } else {
+                    barcodeSearchResults[barcode] = { status: res.status, text: (await res.text()).substring(0, 200) };
+                }
+            } catch (e: any) {
+                barcodeSearchResults[barcode] = { error: e.message };
             }
-        } catch (e: any) {
-            trendyolProducts = { error: e.message };
         }
 
-        // 4. Test: Basit bir ürün oluşturma isteğini simüle et (gerçek göndermeden payload'u göster)
-        let testProduct: any = null;
+        // 3. Trendyol'un toplam ürün sayısı
+        let totalProductCount = 0;
         try {
-            testProduct = await prisma.product.findFirst({
-                where: { 
-                    isActive: true,
-                    barcode: { not: null }
-                },
-                include: {
-                    brand: true,
-                    categories: true,
-                    variants: true
-                },
-                orderBy: { updatedAt: "desc" }
-            });
+            const countRes = await fetch(`${gatewayUrl}/integration/product/sellers/${config.supplierId}/products?page=0&size=1`, { headers });
+            if (countRes.ok) {
+                const countData = await countRes.json();
+                totalProductCount = countData.totalElements;
+            }
         } catch (e) {}
 
-        let samplePayload: any = null;
-        if (testProduct) {
-            const mappedCat = (testProduct as any).categories?.find((c: any) => c.trendyolCategoryId !== null);
-            const brandId = (testProduct as any).brand?.trendyolBrandId;
-            
-            const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.serinmotor.com";
-            const imageUrls = testProduct.images
-                .map((url: string) => url.startsWith("http") ? url : `${siteUrl}${url.startsWith("/") ? "" : "/"}${url}`)
-                .filter((url: string) => url.startsWith("https://"));
-
-            samplePayload = {
-                productName: testProduct.name,
-                barcode: testProduct.barcode,
-                sku: testProduct.sku,
-                brandId: brandId,
-                categoryId: mappedCat?.trendyolCategoryId,
-                categoryName: mappedCat?.name,
-                cargoCompanyId: Number(config.cargoCompanyId),
-                shipmentAddressId: Number(config.shipmentAddressId),
-                returningAddressId: Number(config.returningAddressId),
-                imageUrls,
-                stock: testProduct.stock,
-                listPrice: Number(testProduct.listPrice),
-                vatRate: testProduct.vatRate,
-                issues: [
-                    !testProduct.barcode ? "❌ Barkod yok" : "✅ Barkod var",
-                    !brandId ? "❌ Marka eşleşmemiş" : "✅ Marka eşleşmiş",
-                    !mappedCat ? "❌ Kategori eşleşmemiş" : "✅ Kategori eşleşmiş",
-                    imageUrls.length === 0 ? "❌ HTTPS görsel yok" : `✅ ${imageUrls.length} görsel`,
-                    !config.cargoCompanyId ? "❌ Kargo firması seçilmemiş" : "✅ Kargo firması var",
-                    !config.shipmentAddressId ? "❌ Sevkiyat adresi seçilmemiş" : "✅ Sevkiyat adresi var",
-                    !config.returningAddressId ? "❌ İade adresi seçilmemiş" : "✅ İade adresi var",
-                ]
-            };
-        }
-
-        // 5. Adresleri kontrol et
-        let addresses: any = null;
+        // 4. Onay bekleyen (approved=false, rejected=false) ürünleri ara
+        let pendingProducts: any = null;
         try {
-            const addrRes = await fetch(`${gatewayUrl}/integration/sellers/${config.supplierId}/addresses`, { headers });
-            if (addrRes.ok) addresses = await addrRes.json();
-            else addresses = { status: addrRes.status, text: await addrRes.text() };
+            const pendingRes = await fetch(
+                `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products?approved=false&page=0&size=10`,
+                { headers }
+            );
+            if (pendingRes.ok) {
+                const pendingData = await pendingRes.json();
+                pendingProducts = {
+                    totalElements: pendingData.totalElements,
+                    products: pendingData.content?.map((p: any) => ({
+                        title: p.title,
+                        barcode: p.barcode,
+                        approved: p.approved,
+                        rejected: p.rejected,
+                        onSale: p.onSale,
+                        rejectReasonDetails: p.rejectReasonDetails,
+                        createDateTime: new Date(p.createDateTime).toISOString(),
+                    }))
+                };
+            } else {
+                pendingProducts = { status: pendingRes.status, text: (await pendingRes.text()).substring(0, 200) };
+            }
         } catch (e: any) {
-            addresses = { error: e.message };
+            pendingProducts = { error: e.message };
         }
 
         return NextResponse.json({
-            configInfo,
-            lastSyncedProducts: lastSyncedProducts.map((p: any) => ({
-                productName: p.product?.name,
+            totalApprovedProducts: totalProductCount,
+            lastSyncedFromDB: lastSyncedProducts.map((p: any) => ({
+                name: p.product?.name,
                 barcode: p.barcode,
                 isSynced: p.isSynced,
                 lastSyncedAt: p.lastSyncedAt,
                 lastSyncError: p.lastSyncError
             })),
-            trendyolProducts,
-            samplePayload,
-            addresses
+            barcodeSearchResults,
+            pendingProducts
         }, { status: 200 });
     } catch (e: any) {
         return NextResponse.json({ error: e.message, stack: e.stack });
