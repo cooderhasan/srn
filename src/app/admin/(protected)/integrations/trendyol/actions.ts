@@ -717,28 +717,28 @@ export async function getTrendyolCargoAndAddresses() {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
 
-        const client = new TrendyolClient({
-            supplierId: config.supplierId,
-            apiKey: config.apiKey,
-            apiSecret: config.apiSecret
-        });
-
-        await client.init();
-
         let providers = [];
         let addresses = [];
 
         try {
-            const provRes = await fetch(`${client.gatewayUrl}/integration/cargo/sellers/${config.supplierId}/providers`, { headers: client.getHeaders() });
+            const gatewayUrl = "https://apigw.trendyol.com";
+            const pair = `${config.apiKey}:${config.apiSecret}`;
+            const headers = {
+                "Authorization": `Basic ${Buffer.from(pair).toString("base64")}`,
+                "User-Agent": `${config.supplierId} - SelfIntegration`,
+                "Content-Type": "application/json"
+            };
+
+            const provRes = await fetch(`${gatewayUrl}/integration/cargo/sellers/${config.supplierId}/providers`, { headers });
             if (provRes.ok) providers = await provRes.json();
             
-            const addrRes = await fetch(`${client.gatewayUrl}/integration/cargo/sellers/${config.supplierId}/addresses`, { headers: client.getHeaders() });
+            const addrRes = await fetch(`${gatewayUrl}/integration/cargo/sellers/${config.supplierId}/addresses`, { headers });
             if (addrRes.ok) {
                 const addrData = await addrRes.json();
                 addresses = addrData.supplierAddresses || [];
             }
         } catch (e) {
-            console.error(e);
+            console.error("Trendyol Fetch Error:", e);
         }
 
         return {
