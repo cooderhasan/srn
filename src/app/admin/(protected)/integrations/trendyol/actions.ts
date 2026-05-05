@@ -648,7 +648,7 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             shipmentAddressId: Number(shipmentAddressId),
             returningAddressId: Number(returningAddressId),
             deliveryOption: {
-                deliveryDuration: 3,
+                deliveryDuration: 1,
                 fastDeliveryType: "SAME_DAY_SHIPPING"
             },
             images: imageUrls.map((url: string) => ({ url })),
