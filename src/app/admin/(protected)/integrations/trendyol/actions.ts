@@ -717,7 +717,18 @@ export async function getTrendyolCargoAndAddresses() {
         const config = await (prisma as any).trendyolConfig.findFirst();
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
 
-        let providers = [];
+        // Trendyol Kargo Firmaları (Sabit Liste - API 556 hatası önlemi)
+        const providers = [
+            { id: 4, name: "Yurtiçi Kargo" },
+            { id: 7, name: "Aras Kargo" },
+            { id: 9, name: "Sürat Kargo" },
+            { id: 10, name: "MNG Kargo" },
+            { id: 17, name: "Trendyol Express" },
+            { id: 19, name: "PTT Kargo" },
+            { id: 6, name: "Horoz Lojistik" },
+            { id: 38, name: "Kolay Gelsin" },
+        ];
+
         let addresses = [];
 
         try {
@@ -729,10 +740,8 @@ export async function getTrendyolCargoAndAddresses() {
                 "Content-Type": "application/json"
             };
 
-            const provRes = await fetch(`${gatewayUrl}/integration/cargo/sellers/${config.supplierId}/providers`, { headers });
-            if (provRes.ok) providers = await provRes.json();
-            
-            const addrRes = await fetch(`${gatewayUrl}/integration/cargo/sellers/${config.supplierId}/addresses`, { headers });
+            // Adresleri başarılı olan endpoint üzerinden çek
+            const addrRes = await fetch(`${gatewayUrl}/integration/sellers/${config.supplierId}/addresses`, { headers });
             if (addrRes.ok) {
                 const addrData = await addrRes.json();
                 addresses = addrData.supplierAddresses || [];
@@ -744,7 +753,7 @@ export async function getTrendyolCargoAndAddresses() {
         return {
             success: true,
             data: {
-                providers: Array.isArray(providers) ? providers : [],
+                providers,
                 addresses: Array.isArray(addresses) ? addresses : []
             }
         };

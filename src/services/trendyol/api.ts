@@ -226,17 +226,8 @@ export class TrendyolClient {
         let returningAddressId = 0;
 
         try {
-            // Get Providers
-            const provRes = await fetch(`${this.gatewayUrl}/integration/cargo/sellers/${this.creds.supplierId}/providers`, { headers: this.getHeaders() });
-            if (provRes.ok) {
-                const provData = await provRes.json();
-                if (Array.isArray(provData) && provData.length > 0) {
-                    cargoCompanyId = provData[0].id || provData[0].cargoCompanyId;
-                }
-            }
-
-            // Get Addresses
-            const addrRes = await fetch(`${this.gatewayUrl}/integration/cargo/sellers/${this.creds.supplierId}/addresses`, { headers: this.getHeaders() });
+            // Get Addresses directly from correct endpoint
+            const addrRes = await fetch(`${this.gatewayUrl}/integration/sellers/${this.creds.supplierId}/addresses`, { headers: this.getHeaders() });
             if (addrRes.ok) {
                 const addrData = await addrRes.json();
                 if (addrData && addrData.supplierAddresses && addrData.supplierAddresses.length > 0) {
