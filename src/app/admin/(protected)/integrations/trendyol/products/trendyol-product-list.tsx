@@ -283,6 +283,12 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                             <RefreshCcw className="w-10 h-10 animate-spin text-orange-500" />
                             <p className="text-sm text-muted-foreground animate-pulse">Özellikler yükleniyor...</p>
                         </div>
+                    ) : categoryAttrs.length === 0 ? (
+                        <div className="py-8 flex flex-col items-center text-center gap-2">
+                            <Box className="w-12 h-12 text-muted-foreground/30 mb-2" />
+                            <p className="text-sm font-medium">Bu kategori için özellik bulunamadı.</p>
+                            <p className="text-xs text-muted-foreground">Trendyol bu kategori ("{selectedProduct?.categories.find((c: any) => c.trendyolCategoryId)?.name}") için zorunlu bir özellik (Menşei vb.) talep etmiyor. Direkt gönderebilirsiniz.</p>
+                        </div>
                     ) : (
                         <div className="space-y-4 py-4">
                             {categoryAttrs.map((attr: any) => {

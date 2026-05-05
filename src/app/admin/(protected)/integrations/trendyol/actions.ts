@@ -488,11 +488,46 @@ export async function getTrendyolCategoryAttributes(categoryId: number) {
         });
 
         const data = await client.getCategoryAttributes(categoryId);
+        console.log(`[Trendyol API] Category Attributes for ${categoryId}:`, JSON.stringify(data).substring(0, 500));
         
-        // Trendyol v2 API bazen direkt array bazen { categoryAttributes: [...] } dönebilir
-        const attrs = data.categoryAttributes || (Array.isArray(data) ? data : []);
+        let attrs: any[] = [];
+        if (Array.isArray(data)) {
+            attrs = data;
+        } else if (data && typeof data === 'object') {
+            if (Array.isArray(data.categoryAttributes)) attrs = data.categoryAttributes;
+            else if (Array.isArray(data.attributes)) attrs = data.attributes;
+            else if (Array.isArray(data.data)) attrs = data.data;
+            else {
+                // Bazen farklı bir key içinde gelebilir, objenin içindeki ilk diziyi bulalım
+                const firstArray = Object.values(data).find(v => Array.isArray(v));
+                if (firstArray) attrs = firstArray as any[];
+            }
+        }
         
-        return { success: true, data: attrs };
+        // Normalize attribute structure to ensure UI compatibility
+        const normalizedAttrs = attrs.map(attr => {
+            // Eğer zaten beklediğimiz V1/V2 formatındaysa (içinde attribute objesi varsa)
+            if (attr.attribute && attr.attribute.id !== undefined) {
+                return attr; 
+            } 
+            // Eğer Trendyol direkt { id: 1, name: "Renk", required: true } şeklinde gönderiyorsa
+            else if (attr.id !== undefined && attr.name) {
+                return {
+                    attribute: {
+                        id: attr.id,
+                        name: attr.name
+                    },
+                    required: attr.required || false,
+                    allowCustom: attr.allowCustom || false,
+                    attributeValues: attr.attributeValues || []
+                };
+            }
+            // Anlaşılamayan format
+            return attr;
+        });
+        
+        console.log(`[Trendyol API] Parsed ${normalizedAttrs.length} normalized attributes.`);
+        return { success: true, data: normalizedAttrs };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
