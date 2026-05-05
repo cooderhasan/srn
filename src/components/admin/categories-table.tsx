@@ -219,7 +219,7 @@ function TrendyolCategorySearch({
             if (res.success && res.data) {
                 const filtered = (res.data as TrendyolCategory[]).filter(c =>
                     c.name.toLowerCase().includes(q.toLowerCase())
-                ).slice(0, 20);
+                ).slice(0, 100);
                 setResults(filtered);
                 setOpen(true);
             } else {
