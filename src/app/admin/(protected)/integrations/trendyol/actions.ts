@@ -880,12 +880,22 @@ export async function syncBatchStatuses() {
                         
                         // İlgili ürünün sonucunu bul
                         if (batchData.items) {
-                            const itemRes = batchData.items.find((i: any) => i.requestItem?.product?.barcode === tp.barcode || i.requestItem?.barcode === tp.barcode);
+                            let itemRes = batchData.items.find((i: any) => 
+                                i.requestItem?.product?.barcode === tp.barcode || 
+                                i.requestItem?.barcode === tp.barcode ||
+                                i.barcode === tp.barcode
+                            );
+                            
+                            // Eğer barkod eşleşmediyse ama batch içinde sadece 1 item varsa (zaten tekli yolluyoruz) onu kabul et
+                            if (!itemRes && batchData.items.length === 1) {
+                                itemRes = batchData.items[0];
+                            }
+
                             if (itemRes) {
                                 if (itemRes.status === "FAILED") {
                                     isSynced = false;
                                     lastSyncError = itemRes.failureReasons?.map((r: any) => typeof r === "string" ? r : r.message).join("; ") || "Bilinmeyen hata";
-                                } else if (itemRes.status === "COMPLETED") {
+                                } else if (itemRes.status === "SUCCESS" || itemRes.status === "COMPLETED") {
                                     isSynced = true;
                                 }
                             }
