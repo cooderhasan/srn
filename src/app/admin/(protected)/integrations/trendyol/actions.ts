@@ -286,11 +286,18 @@ export async function getTrendyolBrands(search: string = "") {
             apiSecret: config.apiSecret
         });
 
-        const data = await client.getBrands(0, 50, search || undefined);
-
-        if (!data || !data.brands) return { success: false, message: "Markalar alınamadı." };
-
-        return { success: true, data: data.brands };
+        if (search && search.length >= 2) {
+            // Use the specific by-name endpoint when searching
+            const data = await client.getBrandByName(search);
+            // by-name returns an array directly: [ { id: 123, name: "brand" } ]
+            if (!Array.isArray(data)) return { success: false, message: "Markalar alınamadı." };
+            return { success: true, data: data };
+        } else {
+            // Fallback to general list if no search query
+            const data = await client.getBrands(0, 500);
+            if (!data || !data.brands) return { success: false, message: "Markalar alınamadı." };
+            return { success: true, data: data.brands };
+        }
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }

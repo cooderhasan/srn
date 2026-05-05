@@ -91,19 +91,31 @@ export class TrendyolClient {
     }
 
     /**
-     * Get Brands from Trendyol (with optional name filter)
+     * Get Brands from Trendyol
      */
-    async getBrands(page = 0, size = 100, name?: string) {
+    async getBrands(page = 0, size = 100) {
         await this.init();
-        let url = `${this.gatewayUrl}/integration/product/brands?page=${page}&size=${size}`;
-        if (name) url += `&name=${encodeURIComponent(name)}`;
-        
-        const response = await fetch(url, {
+        const response = await fetch(`${this.gatewayUrl}/integration/product/brands?page=${page}&size=${size}`, {
             headers: this.getHeaders()
         });
 
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
         return await response.json();
+    }
+
+    /**
+     * Search Brands by Name
+     * GET /integration/product/brands/by-name?name={name}
+     */
+    async getBrandByName(name: string) {
+        await this.init();
+        const url = `${this.gatewayUrl}/integration/product/brands/by-name?name=${encodeURIComponent(name)}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
+        return await response.json(); // Returns an array of {id, name}
     }
 
     /**
