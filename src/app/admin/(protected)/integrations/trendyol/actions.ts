@@ -23,6 +23,10 @@ export async function saveTrendyolConfig(prevState: any, formData: FormData) {
         const apiKey = formData.get("apiKey") as string;
         const apiSecret = formData.get("apiSecret") as string;
         const isActive = formData.get("isActive") === "on";
+        
+        const cargoCompanyId = formData.get("cargoCompanyId") as string || null;
+        const shipmentAddressId = formData.get("shipmentAddressId") as string || null;
+        const returningAddressId = formData.get("returningAddressId") as string || null;
 
         if (!supplierId || !apiKey || !apiSecret) {
             return { success: false, message: "Tüm alanlar zorunludur." };
@@ -34,11 +38,11 @@ export async function saveTrendyolConfig(prevState: any, formData: FormData) {
         if (existing) {
             await (prisma as any).trendyolConfig.update({
                 where: { id: existing.id },
-                data: { supplierId, apiKey, apiSecret, isActive }
+                data: { supplierId, apiKey, apiSecret, isActive, cargoCompanyId, shipmentAddressId, returningAddressId }
             });
         } else {
             await (prisma as any).trendyolConfig.create({
-                data: { supplierId, apiKey, apiSecret, isActive }
+                data: { supplierId, apiKey, apiSecret, isActive, cargoCompanyId, shipmentAddressId, returningAddressId }
             });
         }
 
@@ -594,8 +598,18 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         
         if (imageUrls.length === 0) return { success: false, message: "Geçerli görsel bulunamadı. Ürüne https:// ile erişilebilen en az 1 görsel ekleyin." };
 
-        // 3. Kargo ve Adres Bilgilerini Otomatik Çek
-        const cargoAndAddresses = await client.getDefaultCargoAndAddresses();
+        // 3. Kargo ve Adres Bilgilerini Al
+        // Önce kullanıcının ayarlarda seçtiği değerleri kontrol et, yoksa otomatik çek
+        let cargoCompanyId = config.cargoCompanyId;
+        let shipmentAddressId = config.shipmentAddressId;
+        let returningAddressId = config.returningAddressId;
+
+        if (!cargoCompanyId || !shipmentAddressId || !returningAddressId) {
+            const autoCargoAndAddresses = await client.getDefaultCargoAndAddresses();
+            cargoCompanyId = cargoCompanyId || autoCargoAndAddresses.cargoCompanyId;
+            shipmentAddressId = shipmentAddressId || autoCargoAndAddresses.shipmentAddressId;
+            returningAddressId = returningAddressId || autoCargoAndAddresses.returningAddressId;
+        }
 
         const items: any[] = [];
         const baseItem = {
@@ -606,9 +620,9 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             description: product.description || product.name,
             currencyType: "TRY",
             vatRate: product.vatRate,
-            cargoCompanyId: cargoAndAddresses.cargoCompanyId,
-            shipmentAddressId: cargoAndAddresses.shipmentAddressId,
-            returningAddressId: cargoAndAddresses.returningAddressId,
+            cargoCompanyId: Number(cargoCompanyId),
+            shipmentAddressId: Number(shipmentAddressId),
+            returningAddressId: Number(returningAddressId),
             deliveryOption: {
                 deliveryDuration: 3, // Teslimat süresi varsayılan 3 gün
                 fastDeliveryType: "SAME_DAY_SHIPPING"
@@ -693,6 +707,47 @@ export async function checkTrendyolBatchRequest(batchRequestId: string) {
         const data = await response.json();
         
         return { success: true, data };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function getTrendyolCargoAndAddresses() {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        await client.init();
+
+        let providers = [];
+        let addresses = [];
+
+        try {
+            const provRes = await fetch(`${client.gatewayUrl}/integration/cargo/sellers/${config.supplierId}/providers`, { headers: client.getHeaders() });
+            if (provRes.ok) providers = await provRes.json();
+            
+            const addrRes = await fetch(`${client.gatewayUrl}/integration/cargo/sellers/${config.supplierId}/addresses`, { headers: client.getHeaders() });
+            if (addrRes.ok) {
+                const addrData = await addrRes.json();
+                addresses = addrData.supplierAddresses || [];
+            }
+        } catch (e) {
+            console.error(e);
+        }
+
+        return {
+            success: true,
+            data: {
+                providers: Array.isArray(providers) ? providers : [],
+                addresses: Array.isArray(addresses) ? addresses : []
+            }
+        };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }

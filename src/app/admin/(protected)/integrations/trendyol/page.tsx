@@ -1,5 +1,5 @@
 
-import { getTrendyolConfig } from "./actions";
+import { getTrendyolConfig, getTrendyolCargoAndAddresses } from "./actions";
 import { TrendyolSettingsForm } from "./trendyol-settings-form";
 import { TrendyolSyncButton } from "./trendyol-sync-button";
 import { TrendyolOrderSyncButton } from "./trendyol-order-sync-button";
@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 
 export default async function TrendyolIntegrationPage() {
     const { data: config } = await getTrendyolConfig();
+    let options = { providers: [], addresses: [] };
+    
+    if (config?.isActive) {
+        const optRes = await getTrendyolCargoAndAddresses();
+        if (optRes.success && optRes.data) {
+            options = optRes.data;
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -18,7 +26,7 @@ export default async function TrendyolIntegrationPage() {
 
             <div className="grid gap-6 md:grid-cols-2">
                 <div>
-                    <TrendyolSettingsForm initialData={config} />
+                    <TrendyolSettingsForm initialData={config} options={options} />
                 </div>
 
                 <div className="space-y-6">

@@ -17,7 +17,7 @@ const initialState = {
     message: "",
 };
 
-export function TrendyolSettingsForm({ initialData }: { initialData: any }) {
+export function TrendyolSettingsForm({ initialData, options }: { initialData: any, options?: any }) {
     const [state, formAction] = useActionState(saveTrendyolConfig, initialState);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [isTesting, setIsTesting] = useState(false);
@@ -89,6 +89,60 @@ export function TrendyolSettingsForm({ initialData }: { initialData: any }) {
                                 required
                             />
                         </div>
+
+                        {options && options.providers && options.providers.length > 0 && (
+                            <div className="grid gap-2 pt-4 border-t">
+                                <Label htmlFor="cargoCompanyId">Varsayılan Kargo Firması</Label>
+                                <select 
+                                    id="cargoCompanyId" 
+                                    name="cargoCompanyId"
+                                    defaultValue={initialData?.cargoCompanyId || ""}
+                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    required
+                                >
+                                    <option value="" disabled>Seçiniz</option>
+                                    {options.providers.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {options && options.addresses && options.addresses.length > 0 && (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="shipmentAddressId">Varsayılan Sevkiyat Adresi</Label>
+                                    <select 
+                                        id="shipmentAddressId" 
+                                        name="shipmentAddressId"
+                                        defaultValue={initialData?.shipmentAddressId || ""}
+                                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        required
+                                    >
+                                        <option value="" disabled>Seçiniz</option>
+                                        {options.addresses.filter(a => a.addressTypes?.includes("Shipment")).map(a => (
+                                            <option key={a.id} value={a.id}>{a.addressName} - {a.fullAddress.substring(0, 40)}...</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="returningAddressId">Varsayılan İade Adresi</Label>
+                                    <select 
+                                        id="returningAddressId" 
+                                        name="returningAddressId"
+                                        defaultValue={initialData?.returningAddressId || ""}
+                                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        required
+                                    >
+                                        <option value="" disabled>Seçiniz</option>
+                                        {options.addresses.filter(a => a.addressTypes?.includes("Returning")).map(a => (
+                                            <option key={a.id} value={a.id}>{a.addressName} - {a.fullAddress.substring(0, 40)}...</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
 
                         <div className="flex items-center gap-4 pt-4">
                             <SubmitButton />
