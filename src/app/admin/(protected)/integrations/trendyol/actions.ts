@@ -1018,6 +1018,34 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
         const trendyolPrice = Number(tProduct.salePrice || tProduct.listPrice || 0);
         const sitePrice = Number((trendyolPrice * (1 - discountRate / 100)).toFixed(2));
 
+        // Handle Brand
+        let brandId = undefined;
+        if (tProduct.brand) {
+            const brandName = typeof tProduct.brand === 'string' ? tProduct.brand : tProduct.brand.name;
+            const tBrandId = typeof tProduct.brand === 'object' ? tProduct.brand.id : null;
+
+            let existingBrand = await prisma.brand.findFirst({
+                where: { name: { equals: brandName, mode: 'insensitive' } }
+            });
+
+            if (!existingBrand) {
+                existingBrand = await prisma.brand.create({
+                    data: {
+                        name: brandName,
+                        slug: generateSlug(brandName),
+                        trendyolBrandId: tBrandId ? Number(tBrandId) : null
+                    }
+                });
+            } else if (tBrandId && !existingBrand.trendyolBrandId) {
+                // Update existing brand with Trendyol ID if missing
+                await prisma.brand.update({
+                    where: { id: existingBrand.id },
+                    data: { trendyolBrandId: Number(tBrandId) }
+                });
+            }
+            brandId = existingBrand.id;
+        }
+
         const newProduct = await prisma.product.create({
             data: {
                 name: tProduct.title,
@@ -1032,6 +1060,7 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
                 images: tProduct.images?.map((img: any) => img.url) || [],
                 isActive: true,
                 isTrendyolActive: true,
+                brandId: brandId,
                 categories: targetCategoryId ? { connect: { id: targetCategoryId } } : undefined
             }
         });
