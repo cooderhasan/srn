@@ -21,7 +21,12 @@ export async function GET(request: Request) {
         if (testBarcode) {
             // Sadece test gönderimi yap ve sonucu dön
             const testProduct = await prisma.product.findFirst({
-                where: { variants: { some: { barcode: testBarcode } } },
+                where: { 
+                    OR: [
+                        { barcode: testBarcode },
+                        { variants: { some: { barcode: testBarcode } } }
+                    ]
+                },
                 include: { categories: true, brand: true, variants: true }
             });
 
@@ -62,11 +67,12 @@ export async function GET(request: Request) {
             };
 
             const variant = (testProduct.variants as any[]).find(v => v.barcode === testBarcode);
-            if (variant) {
-                const baseListPrice = Number(testProduct.listPrice);
-                let baseSalePrice = testProduct.trendyolPrice ? Number(testProduct.trendyolPrice) : baseListPrice;
-                if (baseSalePrice > baseListPrice) baseSalePrice = baseListPrice;
+            
+            const baseListPrice = Number(testProduct.listPrice);
+            let baseSalePrice = testProduct.trendyolPrice ? Number(testProduct.trendyolPrice) : baseListPrice;
+            if (baseSalePrice > baseListPrice) baseSalePrice = baseListPrice;
 
+            if (variant) {
                 const variantListPrice = baseListPrice + Number(variant.priceAdjustment || 0);
                 let variantSalePrice = baseSalePrice + Number(variant.priceAdjustment || 0);
                 if (variantSalePrice > variantListPrice) variantSalePrice = variantListPrice;
@@ -82,6 +88,22 @@ export async function GET(request: Request) {
                     salePrice: variantSalePrice,
                     dimensionalWeight: 1,
                 });
+            } else if (testProduct.barcode === testBarcode) {
+                const availableStock = Math.max(0, testProduct.stock - (testProduct.criticalStock || 0));
+                
+                items.push({
+                    ...baseItem,
+                    barcode: testProduct.barcode,
+                    stockCode: testProduct.sku || testProduct.barcode,
+                    quantity: availableStock,
+                    listPrice: baseListPrice,
+                    salePrice: baseSalePrice,
+                    dimensionalWeight: testProduct.desi ? Number(testProduct.desi) : 1,
+                });
+            }
+
+            if (items.length === 0) {
+                return NextResponse.json({ error: "Barkodlu varyant veya ürün bulunamadı", testBarcode });
             }
 
             const sendUrl = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products`;
