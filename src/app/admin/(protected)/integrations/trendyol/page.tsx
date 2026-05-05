@@ -41,12 +41,20 @@ export default async function TrendyolIntegrationPage() {
                             <li>Sipariş Entegrasyonu (Manuel/Otomatik)</li>
                         </ul>
 
-                        <a href="/admin/integrations/trendyol/products">
-                            <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-500/20">
-                                <Box className="w-4 h-4" />
-                                Trendyol Ürünlerini Yönet
-                            </Button>
-                        </a>
+                        <div className="flex flex-col gap-3">
+                            <a href="/admin/integrations/trendyol/products">
+                                <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-500/20">
+                                    <Box className="w-4 h-4" />
+                                    Trendyol Ürünlerini Yönet
+                                </Button>
+                            </a>
+                            <a href="/admin/integrations/trendyol/batches">
+                                <Button variant="outline" className="w-full gap-2 border-orange-200 text-orange-700 hover:bg-orange-50">
+                                    <Box className="w-4 h-4" />
+                                    İşlem (Batch) Geçmişini İzle
+                                </Button>
+                            </a>
+                        </div>
                     </div>
 
                     <TrendyolSyncButton />

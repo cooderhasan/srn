@@ -733,17 +733,18 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
                 // Trendyol batch'i işledi ama reddetti
                 await (prisma as any).trendyolProduct.upsert({
                     where: { productId: product.id },
-                    update: { isSynced: false, lastSyncedAt: new Date(), lastSyncError: batchErrors.join("; ") },
-                    create: { productId: product.id, barcode: product.barcode || items[0].barcode, isSynced: false, lastSyncedAt: new Date(), lastSyncError: batchErrors.join("; ") }
+                    update: { isSynced: false, lastSyncedAt: new Date(), lastSyncError: batchErrors.join("; "), batchRequestId: batchId, batchStatus: "FAILED" },
+                    create: { productId: product.id, barcode: product.barcode || items[0].barcode, isSynced: false, lastSyncedAt: new Date(), lastSyncError: batchErrors.join("; "), batchRequestId: batchId, batchStatus: "FAILED" }
                 });
                 return { success: false, message: `Trendyol Reddetme Sebebi: ${batchErrors.join(" | ")}`, batchRequestId: batchId };
             }
 
             // Batch henüz işleniyor veya başarılı
+            const isCompleted = batchStatus === "COMPLETED";
             await (prisma as any).trendyolProduct.upsert({
                 where: { productId: product.id },
-                update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null },
-                create: { productId: product.id, barcode: product.barcode || items[0].barcode, isSynced: true, lastSyncedAt: new Date() }
+                update: { isSynced: isCompleted, lastSyncedAt: new Date(), lastSyncError: null, batchRequestId: batchId, batchStatus: batchStatus },
+                create: { productId: product.id, barcode: product.barcode || items[0].barcode, isSynced: isCompleted, lastSyncedAt: new Date(), batchRequestId: batchId, batchStatus: batchStatus }
             });
 
             return { success: true, message: `Ürün Trendyol'a gönderildi. Batch Durumu: ${batchStatus}`, batchRequestId: batchId };
@@ -824,6 +825,98 @@ export async function getTrendyolCargoAndAddresses() {
             }
         };
     } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function syncBatchStatuses() {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        // İşleniyor durumundaki ürünleri bul (Son 7 gün)
+        const pendingProducts = await (prisma as any).trendyolProduct.findMany({
+            where: {
+                batchRequestId: { not: null },
+                OR: [
+                    { batchStatus: "PROCESSING" },
+                    { batchStatus: null },
+                    { isSynced: false }
+                ]
+            },
+            include: { product: true }
+        });
+
+        if (pendingProducts.length === 0) {
+            return { success: true, message: "Kontrol edilecek işlem yok.", updatedCount: 0 };
+        }
+
+        let updatedCount = 0;
+        
+        // Tekilleştirilmiş batch ID'leri çıkar (aynı batch içinde birden çok ürün olabilir)
+        const uniqueBatchIds = Array.from(new Set(pendingProducts.map((p: any) => p.batchRequestId)));
+
+        for (const batchId of uniqueBatchIds) {
+            try {
+                const url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
+                const response = await fetch(url, { headers: client.getHeaders() });
+                
+                if (response.ok) {
+                    const batchData = await response.json();
+                    const batchStatus = batchData.status || "UNKNOWN";
+                    
+                    // Bu batch ID'ye ait tüm ürünleri bul
+                    const batchProducts = pendingProducts.filter((p: any) => p.batchRequestId === batchId);
+                    
+                    for (const tp of batchProducts) {
+                        let isSynced = batchStatus === "COMPLETED";
+                        let lastSyncError = null;
+                        
+                        // İlgili ürünün sonucunu bul
+                        if (batchData.items) {
+                            const itemRes = batchData.items.find((i: any) => i.requestItem?.product?.barcode === tp.barcode || i.requestItem?.barcode === tp.barcode);
+                            if (itemRes) {
+                                if (itemRes.status === "FAILED") {
+                                    isSynced = false;
+                                    lastSyncError = itemRes.failureReasons?.map((r: any) => typeof r === "string" ? r : r.message).join("; ") || "Bilinmeyen hata";
+                                } else if (itemRes.status === "COMPLETED") {
+                                    isSynced = true;
+                                }
+                            }
+                        }
+
+                        // Eğer genel batch status FAILED ise ve özel item hatası yoksa
+                        if (batchStatus === "FAILED" && !lastSyncError) {
+                            isSynced = false;
+                            lastSyncError = "Toplu İşlem Reddedildi";
+                        }
+
+                        await (prisma as any).trendyolProduct.update({
+                            where: { id: tp.id },
+                            data: {
+                                isSynced,
+                                batchStatus,
+                                lastSyncError,
+                                lastSyncedAt: new Date()
+                            }
+                        });
+                        updatedCount++;
+                    }
+                }
+            } catch (e) {
+                console.error(`Batch ${batchId} check failed:`, e);
+            }
+        }
+
+        return { success: true, message: `${updatedCount} ürünün durumu güncellendi.`, updatedCount };
+    } catch (error: any) {
+        console.error("syncBatchStatuses error:", error);
         return { success: false, message: "Hata: " + error.message };
     }
 }
