@@ -289,10 +289,10 @@ function TrendyolCategorySearch({
                                 key={cat.id}
                                 type="button"
                                 onClick={() => handleSelect(cat)}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-start justify-between gap-3 border-b border-gray-100 dark:border-gray-700 last:border-0"
                             >
-                                <span className="truncate">{cat.name}</span>
-                                <span className="text-xs text-gray-400 font-mono shrink-0">#{cat.id}</span>
+                                <span className="whitespace-normal leading-relaxed text-xs">{cat.name}</span>
+                                <span className="text-xs text-gray-400 font-mono shrink-0 pt-0.5">#{cat.id}</span>
                             </button>
                         ))}
                     </div>
@@ -626,7 +626,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                             Yeni Kategori
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>
                                 {editCategory ? "Kategori Düzenle" : "Yeni Kategori"}

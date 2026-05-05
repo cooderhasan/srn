@@ -56,10 +56,15 @@ async function getHomeData() {
                 }
             }),
             prisma.banner.findMany({
-                where: { isActive: true },
+                where: { 
+                    isActive: true,
+                    imageUrl: { not: "" }
+                },
                 orderBy: { order: "asc" },
             })
         ]);
+
+    const validBanners = banners.filter((b: any) => b.imageUrl && b.imageUrl.trim() !== "");
 
     const transformProduct = (product: any) => ({
         ...product,
@@ -101,7 +106,7 @@ async function getHomeData() {
         bestSellers: bestSellers.map(transformProduct),
         categories: categories.map(transformCategory),
         sidebarCategories: sidebarCategories,
-        banners: banners.map(transformBanner),
+        banners: validBanners.map(transformBanner),
     };
 }
 
