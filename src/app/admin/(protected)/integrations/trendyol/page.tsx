@@ -4,6 +4,7 @@ import { TrendyolSettingsForm } from "./trendyol-settings-form";
 import { TrendyolSyncButton } from "./trendyol-sync-button";
 import { TrendyolOrderSyncButton } from "./trendyol-order-sync-button";
 import { TrendyolDataHelper } from "./trendyol-data-helper";
+import { TrendyolImportWizard } from "./trendyol-import-wizard";
 import { Box } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -60,6 +61,8 @@ export default async function TrendyolIntegrationPage() {
                     <TrendyolSyncButton />
 
                     <TrendyolOrderSyncButton />
+
+                    <TrendyolImportWizard />
 
                     <TrendyolDataHelper isEnabled={!!config} />
                 </div>

@@ -979,3 +979,75 @@ export async function syncBatchStatuses() {
         return { success: false, message: "Hata: " + error.message };
     }
 }
+export async function getTrendyolSellersProducts(page = 0, size = 50) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon yok." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const data = await client.getSellersProducts(page, size);
+        return { success: true, data };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function importTrendyolProduct(tProduct: any) {
+    try {
+        // Find if product exists by barcode
+        let existingProduct = await prisma.product.findFirst({
+            where: { barcode: tProduct.barcode }
+        });
+
+        if (existingProduct) {
+            // Just link it
+            await (prisma as any).trendyolProduct.upsert({
+                where: { productId: existingProduct.id },
+                update: { isSynced: true, lastSyncedAt: new Date() },
+                create: { productId: existingProduct.id, barcode: tProduct.barcode, isSynced: true, lastSyncedAt: new Date() }
+            });
+            return { success: true, message: "Ürün mevcuttu, Trendyol ile eşleştirildi.", productId: existingProduct.id };
+        }
+
+        // Create new product
+        // Note: Category mapping is tricky here, we'll use a placeholder or the first matched category
+        const categories = await prisma.category.findMany({ take: 1 });
+        const categoryId = categories[0]?.id;
+
+        const newProduct = await prisma.product.create({
+            data: {
+                name: tProduct.title,
+                slug: generateSlug(tProduct.title) + "-" + Math.floor(Math.random() * 1000),
+                barcode: tProduct.barcode,
+                sku: tProduct.stockCode,
+                stock: tProduct.quantity || 0,
+                listPrice: tProduct.listPrice || 0,
+                salePrice: tProduct.salePrice || tProduct.listPrice || 0,
+                description: tProduct.description || tProduct.title,
+                images: tProduct.images?.map((img: any) => img.url) || [],
+                isActive: true,
+                isTrendyolActive: true,
+                categories: categoryId ? { connect: { id: categoryId } } : undefined
+            }
+        });
+
+        await (prisma as any).trendyolProduct.create({
+            data: {
+                productId: newProduct.id,
+                barcode: tProduct.barcode,
+                isSynced: true,
+                lastSyncedAt: new Date(),
+                batchStatus: "COMPLETED"
+            }
+        });
+
+        return { success: true, message: "Ürün başarıyla içeri aktarıldı.", productId: newProduct.id };
+    } catch (error: any) {
+        return { success: false, message: "İçeri aktarma hatası: " + error.message };
+    }
+}

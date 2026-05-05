@@ -246,4 +246,20 @@ export class TrendyolClient {
 
         return { cargoCompanyId, shipmentAddressId, returningAddressId };
     }
+    /**
+     * Get Seller's Products from Trendyol
+     * GET /integration/product/sellers/{sellerId}/products
+     */
+    async getSellersProducts(page = 0, size = 100) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products?approvedPage=${page}&size=${size}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
+        return await response.json();
+    }
 }
