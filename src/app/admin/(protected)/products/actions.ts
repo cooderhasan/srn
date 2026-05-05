@@ -291,6 +291,19 @@ export async function updateProduct(productId: string, formData: FormData) {
     revalidatePath(`/products/${validatedData.slug}`);
     revalidatePath("/");
 
+    // --- OTOMATİK PAZARYERİ SENKRONİZASYONU ---
+    // Ürün güncellendiğinde (stok/fiyat değişmiş olabilir), arka planda pazaryerlerini güncelle
+    try {
+        const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+        await Promise.all([
+            addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: [productId] }).catch(console.error),
+            addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: [productId] }).catch(console.error),
+            addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds: [productId] }).catch(console.error)
+        ]);
+    } catch (e) {
+        console.error("Marketplace sync queue error:", e);
+    }
+
     return { success: true };
 }
 

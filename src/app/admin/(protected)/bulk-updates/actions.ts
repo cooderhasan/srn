@@ -121,6 +121,21 @@ export async function executeBulkUpdate(
         revalidatePath("/admin/products");
         revalidatePath("/");
 
+        // --- OTOMATİK PAZARYERİ SENKRONİZASYONU ---
+        try {
+            const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+            const productIds = preview.map(p => p.id);
+            if (productIds.length > 0) {
+                await Promise.all([
+                    addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds }).catch(console.error),
+                    addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds }).catch(console.error),
+                    addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds }).catch(console.error)
+                ]);
+            }
+        } catch (e) {
+            console.error("Bulk price sync queue error:", e);
+        }
+
         return { success: true, count: preview.length };
     } catch (error) {
         console.error("Bulk update error:", error);
@@ -224,6 +239,21 @@ export async function executeBulkStockUpdate(
 
         revalidatePath("/admin/products");
         revalidatePath("/");
+
+        // --- OTOMATİK PAZARYERİ SENKRONİZASYONU ---
+        try {
+            const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+            const productIds = preview.map(p => p.id);
+            if (productIds.length > 0) {
+                await Promise.all([
+                    addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds }).catch(console.error),
+                    addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds }).catch(console.error),
+                    addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds }).catch(console.error)
+                ]);
+            }
+        } catch (e) {
+            console.error("Bulk stock sync queue error:", e);
+        }
 
         return { success: true, count: preview.length };
     } catch (error) {
