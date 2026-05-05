@@ -997,7 +997,7 @@ export async function getTrendyolSellersProducts(page = 0, size = 50) {
     }
 }
 
-export async function importTrendyolProduct(tProduct: any) {
+export async function importTrendyolProduct(tProduct: any, targetCategoryId?: string, discountRate: number = 20) {
     try {
         // Find if product exists by barcode
         let existingProduct = await prisma.product.findFirst({
@@ -1014,10 +1014,9 @@ export async function importTrendyolProduct(tProduct: any) {
             return { success: true, message: "Ürün mevcuttu, Trendyol ile eşleştirildi.", productId: existingProduct.id };
         }
 
-        // Create new product
-        // Note: Category mapping is tricky here, we'll use a placeholder or the first matched category
-        const categories = await prisma.category.findMany({ take: 1 });
-        const categoryId = categories[0]?.id;
+        // Calculate Price: 20% lower than Trendyol sale price
+        const trendyolPrice = Number(tProduct.salePrice || tProduct.listPrice || 0);
+        const sitePrice = Number((trendyolPrice * (1 - discountRate / 100)).toFixed(2));
 
         const newProduct = await prisma.product.create({
             data: {
@@ -1026,13 +1025,14 @@ export async function importTrendyolProduct(tProduct: any) {
                 barcode: tProduct.barcode,
                 sku: tProduct.stockCode,
                 stock: tProduct.quantity || 0,
-                listPrice: tProduct.listPrice || 0,
-                salePrice: tProduct.salePrice || tProduct.listPrice || 0,
+                listPrice: sitePrice, // Sitedeki liste fiyatı Trendyol'un %20 altı olacak
+                salePrice: null,
+                trendyolPrice: trendyolPrice, // Orijinal Trendyol fiyatını saklayalım
                 description: tProduct.description || tProduct.title,
                 images: tProduct.images?.map((img: any) => img.url) || [],
                 isActive: true,
                 isTrendyolActive: true,
-                categories: categoryId ? { connect: { id: categoryId } } : undefined
+                categories: targetCategoryId ? { connect: { id: targetCategoryId } } : undefined
             }
         });
 
