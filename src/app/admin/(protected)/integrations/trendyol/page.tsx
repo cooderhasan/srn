@@ -11,7 +11,7 @@ export default async function TrendyolIntegrationPage() {
     const { data: config } = await getTrendyolConfig();
     let options = { providers: [], addresses: [] };
     
-    if (config?.isActive) {
+    if (config && config.supplierId && config.apiKey && config.apiSecret) {
         const optRes = await getTrendyolCargoAndAddresses();
         if (optRes.success && optRes.data) {
             options = optRes.data;

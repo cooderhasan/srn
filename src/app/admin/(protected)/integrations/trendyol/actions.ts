@@ -714,7 +714,7 @@ export async function checkTrendyolBatchRequest(batchRequestId: string) {
 
 export async function getTrendyolCargoAndAddresses() {
     try {
-        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        const config = await (prisma as any).trendyolConfig.findFirst();
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
 
         let providers = [];
