@@ -233,8 +233,8 @@ export class TrendyolClient {
                 if (addrData && addrData.supplierAddresses && addrData.supplierAddresses.length > 0) {
                     const addresses = addrData.supplierAddresses;
                     // Try to find default ones
-                    const defaultShipment = addresses.find((a: any) => a.addressTypes?.includes('Shipment') && a.default);
-                    const defaultReturning = addresses.find((a: any) => a.addressTypes?.includes('Returning') && a.default);
+                    const defaultShipment = addresses.find((a: any) => ((a.addressTypes && a.addressTypes.includes('Shipment')) || a.addressType === 'Shipment') && a.default);
+                    const defaultReturning = addresses.find((a: any) => ((a.addressTypes && a.addressTypes.includes('Returning')) || a.addressType === 'Returning' || a.addressType === 'Return') && a.default);
                     
                     shipmentAddressId = defaultShipment ? defaultShipment.id : addresses[0].id;
                     returningAddressId = defaultReturning ? defaultReturning.id : addresses[0].id;

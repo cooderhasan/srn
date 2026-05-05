@@ -120,8 +120,12 @@ export function TrendyolSettingsForm({ initialData, options }: { initialData: an
                                         required
                                     >
                                         <option value="" disabled>Seçiniz</option>
-                                        {options.addresses.filter(a => a.addressTypes?.includes("Shipment")).map(a => (
-                                            <option key={a.id} value={a.id}>{a.addressName} - {a.fullAddress.substring(0, 40)}...</option>
+                                        {options.addresses.filter((a: any) => 
+                                            (a.addressTypes && a.addressTypes.includes("Shipment")) || 
+                                            a.addressType === "Shipment" ||
+                                            a.addressType === "Default"
+                                        ).map((a: any) => (
+                                            <option key={a.id} value={a.id}>{a.addressName} - {a.fullAddress?.substring(0, 40)}...</option>
                                         ))}
                                     </select>
                                 </div>
@@ -135,8 +139,13 @@ export function TrendyolSettingsForm({ initialData, options }: { initialData: an
                                         required
                                     >
                                         <option value="" disabled>Seçiniz</option>
-                                        {options.addresses.filter(a => a.addressTypes?.includes("Returning")).map(a => (
-                                            <option key={a.id} value={a.id}>{a.addressName} - {a.fullAddress.substring(0, 40)}...</option>
+                                        {options.addresses.filter((a: any) => 
+                                            (a.addressTypes && a.addressTypes.includes("Returning")) || 
+                                            a.addressType === "Returning" ||
+                                            a.addressType === "Default" ||
+                                            a.addressType === "Return"
+                                        ).map((a: any) => (
+                                            <option key={a.id} value={a.id}>{a.addressName} - {a.fullAddress?.substring(0, 40)}...</option>
                                         ))}
                                     </select>
                                 </div>
