@@ -283,17 +283,16 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                             <RefreshCcw className="w-10 h-10 animate-spin text-orange-500" />
                             <p className="text-sm text-muted-foreground animate-pulse">Özellikler yükleniyor...</p>
                         </div>
-                    ) : categoryAttrs.length === 0 ? (
-                        <div className="py-8 flex flex-col items-center text-center gap-2">
-                            <Box className="w-12 h-12 text-muted-foreground/30 mb-2" />
-                            <p className="text-sm font-medium">Bu kategori için özellik bulunamadı.</p>
-                            <p className="text-xs text-muted-foreground">Trendyol bu kategori ("{selectedProduct?.categories.find((c: any) => c.trendyolCategoryId)?.name}") için zorunlu bir özellik (Menşei vb.) talep etmiyor. Direkt gönderebilirsiniz.</p>
-                        </div>
                     ) : (
                         <div className="space-y-4 py-4">
+                            {categoryAttrs.length === 0 && (
+                                <div className="text-center pb-2">
+                                    <p className="text-xs text-muted-foreground">Bu kategori için ek özellik bulunamadı. Aşağıdaki zorunlu alanları doldurun.</p>
+                                </div>
+                            )}
+
+                            {/* Kategori bazlı özellikler */}
                             {categoryAttrs.map((attr: any) => {
-                                // Simple auto-mapping for Color and Size based on attribute name
-                                // In real app, we could look into product.variants
                                 return (
                                     <div key={attr.attribute.id} className="space-y-2">
                                         <Label className="flex items-center gap-1">
@@ -326,6 +325,33 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                                     </div>
                                 );
                             })}
+
+                            {/* Her zaman görünen zorunlu alanlar */}
+                            <div className="border-t pt-4 mt-4">
+                                <p className="text-xs font-semibold text-orange-600 mb-3">📋 Zorunlu Bilgiler</p>
+                                
+                                <div className="space-y-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="flex items-center gap-1 text-sm">
+                                            Birincil İthalatçı Adı <span className="text-red-500">*</span>
+                                        </Label>
+                                        <Input 
+                                            placeholder="Örn: Serinmotor, GMS, RBK..." 
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, 1216: e.target.value }))}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="flex items-center gap-1 text-sm">
+                                            Kullanım Talimatı / Uyarıları <span className="text-red-500">*</span>
+                                        </Label>
+                                        <Input 
+                                            placeholder="Örn: Ustanıza danışınız" 
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, 1116: e.target.value }))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
