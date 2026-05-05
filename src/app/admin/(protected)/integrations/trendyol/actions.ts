@@ -575,6 +575,9 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         
         if (imageUrls.length === 0) return { success: false, message: "Geçerli görsel bulunamadı. Ürüne https:// ile erişilebilen en az 1 görsel ekleyin." };
 
+        // 3. Kargo ve Adres Bilgilerini Otomatik Çek
+        const cargoAndAddresses = await client.getDefaultCargoAndAddresses();
+
         const items: any[] = [];
         const baseItem = {
             title: product.name,
@@ -584,6 +587,13 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             description: product.description || product.name,
             currencyType: "TRY",
             vatRate: product.vatRate,
+            cargoCompanyId: cargoAndAddresses.cargoCompanyId,
+            shipmentAddressId: cargoAndAddresses.shipmentAddressId,
+            returningAddressId: cargoAndAddresses.returningAddressId,
+            deliveryOption: {
+                deliveryDuration: 3, // Teslimat süresi varsayılan 3 gün
+                fastDeliveryType: "SAME_DAY_SHIPPING"
+            },
             images: imageUrls.map((url: string) => ({ url })),
             attributes: attributeMappings // Kullanıcıdan gelen eşleşmeler
         };

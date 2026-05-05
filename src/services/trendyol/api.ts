@@ -212,4 +212,47 @@ export class TrendyolClient {
         }
         return await response.json();
     }
+
+    /**
+     * Get Default Cargo and Addresses
+     * Fetches providers and addresses, returns the default or first ones.
+     */
+    async getDefaultCargoAndAddresses() {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        let cargoCompanyId = 10; // Default MNG (usually 10 or 11)
+        let shipmentAddressId = 0;
+        let returningAddressId = 0;
+
+        try {
+            // Get Providers
+            const provRes = await fetch(`${this.gatewayUrl}/integration/cargo/sellers/${this.creds.supplierId}/providers`, { headers: this.getHeaders() });
+            if (provRes.ok) {
+                const provData = await provRes.json();
+                if (Array.isArray(provData) && provData.length > 0) {
+                    cargoCompanyId = provData[0].id || provData[0].cargoCompanyId;
+                }
+            }
+
+            // Get Addresses
+            const addrRes = await fetch(`${this.gatewayUrl}/integration/cargo/sellers/${this.creds.supplierId}/addresses`, { headers: this.getHeaders() });
+            if (addrRes.ok) {
+                const addrData = await addrRes.json();
+                if (addrData && addrData.supplierAddresses && addrData.supplierAddresses.length > 0) {
+                    const addresses = addrData.supplierAddresses;
+                    // Try to find default ones
+                    const defaultShipment = addresses.find((a: any) => a.addressTypes?.includes('Shipment') && a.default);
+                    const defaultReturning = addresses.find((a: any) => a.addressTypes?.includes('Returning') && a.default);
+                    
+                    shipmentAddressId = defaultShipment ? defaultShipment.id : addresses[0].id;
+                    returningAddressId = defaultReturning ? defaultReturning.id : addresses[0].id;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch default cargo/addresses from Trendyol", e);
+        }
+
+        return { cargoCompanyId, shipmentAddressId, returningAddressId };
+    }
 }
