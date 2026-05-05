@@ -655,19 +655,28 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             attributes: finalAttributes
         };
 
-        const baseListPrice = Number(product.listPrice);
         let baseSalePrice = product.trendyolPrice ? Number(product.trendyolPrice) : Number(product.listPrice);
+        let baseListPrice = Number(product.listPrice);
+        
         // Trendyol kuralı: salePrice <= listPrice olmalı
-        if (baseSalePrice > baseListPrice) baseSalePrice = baseListPrice;
+        // Eğer kullanıcının girdiği Trendyol Satış Fiyatı, sitedeki Liste Fiyatından yüksekse,
+        // Trendyol'a gönderilecek Liste (üstü çizili) Fiyatını da yukarı çekmeliyiz.
+        if (baseSalePrice > baseListPrice) {
+            baseListPrice = baseSalePrice;
+        }
 
         if (product.variants && product.variants.length > 0) {
             for (const v of product.variants) {
                 if (!v.barcode) continue;
                 
-                const variantListPrice = baseListPrice + Number(v.priceAdjustment || 0);
                 let variantSalePrice = baseSalePrice + Number(v.priceAdjustment || 0);
+                let variantListPrice = baseListPrice + Number(v.priceAdjustment || 0);
+                
                 // Trendyol kuralı: salePrice <= listPrice
-                if (variantSalePrice > variantListPrice) variantSalePrice = variantListPrice;
+                if (variantSalePrice > variantListPrice) {
+                    variantListPrice = variantSalePrice;
+                }
+                
                 const availableStock = Math.max(0, v.stock - (product.criticalStock || 0));
 
                 items.push({
