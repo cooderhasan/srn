@@ -488,7 +488,11 @@ export async function getTrendyolCategoryAttributes(categoryId: number) {
         });
 
         const data = await client.getCategoryAttributes(categoryId);
-        return { success: true, data: data.categoryAttributes };
+        
+        // Trendyol v2 API bazen direkt array bazen { categoryAttributes: [...] } dönebilir
+        const attrs = data.categoryAttributes || (Array.isArray(data) ? data : []);
+        
+        return { success: true, data: attrs };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
