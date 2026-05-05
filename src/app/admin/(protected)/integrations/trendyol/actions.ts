@@ -764,10 +764,28 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
 
             // Batch henüz işleniyor veya başarılı
             const isCompleted = batchStatus === "COMPLETED";
+            
+            // Kritik Düzeltme: Eğer ürün zaten senkronizeyse ve şu an sadece stok/fiyat güncelliyorsak, 
+            // işlem henüz bitmemiş (PROCESSING) olsa bile isSynced durumunu bozma (true kalsın).
+            const finalIsSynced = isAlreadySynced ? true : isCompleted;
+
             await (prisma as any).trendyolProduct.upsert({
                 where: { productId: product.id },
-                update: { isSynced: isCompleted, lastSyncedAt: new Date(), lastSyncError: null, batchRequestId: batchId, batchStatus: batchStatus },
-                create: { productId: product.id, barcode: product.barcode || items[0].barcode, isSynced: isCompleted, lastSyncedAt: new Date(), batchRequestId: batchId, batchStatus: batchStatus }
+                update: { 
+                    isSynced: finalIsSynced, 
+                    lastSyncedAt: new Date(), 
+                    lastSyncError: null, 
+                    batchRequestId: batchId, 
+                    batchStatus: batchStatus 
+                },
+                create: { 
+                    productId: product.id, 
+                    barcode: product.barcode || items[0].barcode, 
+                    isSynced: finalIsSynced, 
+                    lastSyncedAt: new Date(), 
+                    batchRequestId: batchId, 
+                    batchStatus: batchStatus 
+                }
             });
 
             return { success: true, message: `Ürün Trendyol'a gönderildi. Batch Durumu: ${batchStatus}`, batchRequestId: batchId };
