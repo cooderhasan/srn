@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
         const config = await (prisma as any).trendyolConfig.findFirst();
         if (!config) return NextResponse.json({ error: "No config found" });
@@ -13,6 +13,112 @@ export async function GET() {
             "User-Agent": `${config.supplierId} - SelfIntegration`,
             "Content-Type": "application/json"
         };
+
+        // --- YENİ EKLENEN: TEST GÖNDERİMİ ---
+        const url = new URL(request.url);
+        const testBarcode = url.searchParams.get("testBarcode");
+
+        if (testBarcode) {
+            // Sadece test gönderimi yap ve sonucu dön
+            const testProduct = await prisma.product.findFirst({
+                where: { variants: { some: { barcode: testBarcode } } },
+                include: { categories: true, brand: true, variants: true }
+            });
+
+            if (!testProduct) {
+                return NextResponse.json({ error: "Ürün bulunamadı", testBarcode });
+            }
+
+            const mappedCat = (testProduct as any).categories?.find((c: any) => c.trendyolCategoryId !== null);
+            const brandId = (testProduct as any).brand?.trendyolBrandId;
+
+            const defaultAttributes = [
+                { attributeId: 1192, attributeValueId: 10617300 },
+                { attributeId: 338, attributeValueId: 6821 },
+                { attributeId: 1201, attributeValueId: 10621829 },
+                { attributeId: 1209, attributeValueId: 10621791 }
+            ];
+
+            const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.serinmotor.com";
+            const imageUrls = testProduct.images
+                .map((url: string) => url.startsWith("http") ? url : `${siteUrl}${url.startsWith("/") ? "" : "/"}${url}`)
+                .filter((url: string) => url.startsWith("https://"));
+
+            const items: any[] = [];
+            const baseItem = {
+                title: testProduct.name,
+                productMainId: testProduct.sku || testProduct.id,
+                brandId: Number(brandId),
+                categoryId: Number(mappedCat?.trendyolCategoryId),
+                description: testProduct.description || testProduct.name,
+                currencyType: "TRY",
+                vatRate: testProduct.vatRate,
+                cargoCompanyId: Number(config.cargoCompanyId),
+                shipmentAddressId: Number(config.shipmentAddressId),
+                returningAddressId: Number(config.returningAddressId),
+                deliveryOption: { deliveryDuration: 3, fastDeliveryType: "SAME_DAY_SHIPPING" },
+                images: imageUrls.map((u: string) => ({ url: u })),
+                attributes: defaultAttributes
+            };
+
+            const variant = (testProduct.variants as any[]).find(v => v.barcode === testBarcode);
+            if (variant) {
+                const baseListPrice = Number(testProduct.listPrice);
+                let baseSalePrice = testProduct.trendyolPrice ? Number(testProduct.trendyolPrice) : baseListPrice;
+                if (baseSalePrice > baseListPrice) baseSalePrice = baseListPrice;
+
+                const variantListPrice = baseListPrice + Number(variant.priceAdjustment || 0);
+                let variantSalePrice = baseSalePrice + Number(variant.priceAdjustment || 0);
+                if (variantSalePrice > variantListPrice) variantSalePrice = variantListPrice;
+
+                const availableStock = Math.max(0, variant.stock - (testProduct.criticalStock || 0));
+
+                items.push({
+                    ...baseItem,
+                    barcode: variant.barcode,
+                    stockCode: variant.sku || variant.barcode,
+                    quantity: availableStock,
+                    listPrice: variantListPrice,
+                    salePrice: variantSalePrice,
+                    dimensionalWeight: 1,
+                });
+            }
+
+            const sendUrl = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products`;
+            const sendRes = await fetch(sendUrl, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ items })
+            });
+
+            const sendData = await sendRes.json();
+            
+            let batchResult = null;
+            if (sendData.batchRequestId) {
+                // Wait 10 seconds for batch to process
+                await new Promise(r => setTimeout(r, 10000));
+                
+                try {
+                    const batchUrl = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products/batch-requests/${sendData.batchRequestId}`;
+                    const bRes = await fetch(batchUrl, { headers });
+                    if (bRes.ok) {
+                        batchResult = await bRes.json();
+                    } else {
+                        batchResult = { error: bRes.status, text: await bRes.text() };
+                    }
+                } catch (e: any) {
+                    batchResult = { error: e.message };
+                }
+            }
+
+            return NextResponse.json({
+                testBarcode,
+                payloadSent: items,
+                trendyolResponse: sendData,
+                batchResultAfter10s: batchResult
+            });
+        }
+        // --- TEST GÖNDERİMİ BİTİŞ ---
 
         // 1. Son gönderilen ürünleri DB'den al
         let lastSyncedProducts: any[] = [];
