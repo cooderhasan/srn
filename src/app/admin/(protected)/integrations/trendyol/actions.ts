@@ -656,14 +656,18 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         };
 
         const baseListPrice = Number(product.listPrice);
-        const baseSalePrice = product.trendyolPrice ? Number(product.trendyolPrice) : Number(product.listPrice);
+        let baseSalePrice = product.trendyolPrice ? Number(product.trendyolPrice) : Number(product.listPrice);
+        // Trendyol kuralı: salePrice <= listPrice olmalı
+        if (baseSalePrice > baseListPrice) baseSalePrice = baseListPrice;
 
         if (product.variants && product.variants.length > 0) {
             for (const v of product.variants) {
                 if (!v.barcode) continue;
                 
                 const variantListPrice = baseListPrice + Number(v.priceAdjustment || 0);
-                const variantSalePrice = baseSalePrice + Number(v.priceAdjustment || 0);
+                let variantSalePrice = baseSalePrice + Number(v.priceAdjustment || 0);
+                // Trendyol kuralı: salePrice <= listPrice
+                if (variantSalePrice > variantListPrice) variantSalePrice = variantListPrice;
                 const availableStock = Math.max(0, v.stock - (product.criticalStock || 0));
 
                 items.push({
