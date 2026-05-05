@@ -647,3 +647,24 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         return { success: false, message: "Hata: " + error.message };
     }
 }
+
+export async function checkTrendyolBatchRequest(batchRequestId: string) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchRequestId}`;
+        const response = await fetch(url, { headers: client.getHeaders() });
+        const data = await response.json();
+        
+        return { success: true, data };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
