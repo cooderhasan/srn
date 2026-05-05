@@ -185,14 +185,13 @@ export class TrendyolClient {
 
     /**
      * Get Orders
-     * GET /integration/oms/sellers/{sellerId}/orders
+     * GET /integration/order/sellers/{sellerId}/orders
      */
     async getOrders(status: string = "Created", size: number = 50) {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
         // Convert common status words to Trendyol specific
-        // Trendyol statuses: Created, Picking, Invoiced, Shipped, Cancelled, Delivered, UnDelivered, Returned, Repack, ...
         let queryParams = `?size=${size}&status=${status}`;
 
         // To get the past 1 week of orders by default
@@ -201,7 +200,7 @@ export class TrendyolClient {
         queryParams += `&startDate=${oneWeekAgo.getTime()}`;
         queryParams += `&endDate=${new Date().getTime()}`;
 
-        const url = `${this.gatewayUrl}/integration/oms/sellers/${this.creds.supplierId}/orders${queryParams}`;
+        const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/orders${queryParams}`;
 
         const response = await fetch(url, {
             headers: this.getHeaders()
@@ -209,7 +208,7 @@ export class TrendyolClient {
 
         if (!response.ok) {
             const err = await response.text();
-            throw new Error(`Trendyol API Error: ${response.status} - ${err}`);
+            throw new Error(`${response.status} - ${err}`);
         }
         return await response.json();
     }
