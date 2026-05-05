@@ -613,13 +613,13 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
 
         // Varsayılan zorunlu özellikler - Trendyol bu alanları zorunlu tutuyor
         // Kullanıcı kendi eşleştirmesi yapmadıysa varsayılanları ekle
+        // NOT: İthalatçı Adı ve Kullanım Talimatı ürüne göre değiştiği için buraya eklenmez,
+        // kullanıcı "Düzenle" ekranından elle girer.
         const defaultAttributes = [
             { attributeId: 1192, attributeValueId: 10617300 },  // Menşei: CN
             { attributeId: 338, attributeValueId: 6821 },       // Beden: Tek Ebat
             { attributeId: 1201, attributeValueId: 10621829 },  // Tamir Edilebilirlik: Tamir Edilmez
             { attributeId: 1209, attributeValueId: 10621791 },  // ECE Uygunluk: Görselinde bulunmuyor
-            { attributeId: 1216, customAttributeValue: "Serinmotor" }, // Birincil İthalatçı Adı
-            { attributeId: 1116, customAttributeValue: "Ustanıza danışınız" }, // Kullanım Talimatı
         ];
 
         // Kullanıcı eşleştirmesi varsa onu kullan, yoksa varsayılanları ekle
