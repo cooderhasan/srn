@@ -706,9 +706,23 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
 
         if (items.length === 0) return { success: false, message: "Gönderilecek geçerli (Barkodlu) varyant bulunamadı." };
 
-        console.log("[Trendyol] Sending payload:", JSON.stringify(items[0], null, 2));
+        const tpRecord = await (prisma as any).trendyolProduct.findUnique({ where: { productId: product.id } });
+        const isAlreadySynced = !!tpRecord?.isSynced;
 
-        const result = await client.createProducts(items);
+        let result;
+        if (isAlreadySynced) {
+            const updateItems = items.map((i: any) => ({
+                barcode: i.barcode,
+                quantity: i.quantity,
+                salePrice: i.salePrice,
+                listPrice: i.listPrice
+            }));
+            console.log("[Trendyol] Updating price/stock for synced product:", JSON.stringify(updateItems, null, 2));
+            result = await client.updatePriceAndInventory(updateItems);
+        } else {
+            console.log("[Trendyol] Sending new product payload:", JSON.stringify(items[0], null, 2));
+            result = await client.createProducts(items);
+        }
 
         if (result.ok) {
             const batchId = result.batchRequestId;
@@ -902,8 +916,16 @@ export async function syncBatchStatuses() {
 
                             if (itemRes) {
                                 if (itemRes.status === "FAILED") {
-                                    isSynced = false;
-                                    lastSyncError = itemRes.failureReasons?.map((r: any) => typeof r === "string" ? r : r.message).join("; ") || "Bilinmeyen hata";
+                                    const errorText = itemRes.failureReasons?.map((r: any) => typeof r === "string" ? r : r.message).join("; ") || "Bilinmeyen hata";
+                                    
+                                    // Eğer Trendyol "Bu barkod sende zaten var" diyorsa, bunu hata değil başarı (eşleşme) kabul et!
+                                    if (errorText.includes("Aynı barkodlu") || errorText.includes("already exists")) {
+                                        isSynced = true;
+                                        lastSyncError = "Ürün Trendyol'da mevcut. Eşleştirildi (Fiyat/Stok güncelleyebilirsiniz).";
+                                    } else {
+                                        isSynced = false;
+                                        lastSyncError = errorText;
+                                    }
                                 } else if (itemRes.status === "SUCCESS" || itemRes.status === "COMPLETED") {
                                     isSynced = true;
                                 }
