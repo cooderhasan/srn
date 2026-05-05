@@ -356,13 +356,17 @@ export async function syncOrdersFromTrendyol() {
             apiSecret: config.apiSecret
         });
 
-        // 1. Fetch Orders (Created status by default)
-        const data = await client.getOrders("Created");
-        const orders = data.content || [];
+        // 1. Fetch Orders (Created and Picking statuses)
+        const createdData = await client.getOrders("Created");
+        const pickingData = await client.getOrders("Picking");
+        
+        const orders = [...(createdData.content || []), ...(pickingData.content || [])];
 
         if (orders.length === 0) return { success: true, message: "Yeni sipariş bulunamadı." };
 
         let importedCount = 0;
+        let skippedCount = 0;
+        let skippedBarcodes: string[] = [];
 
         for (const tOrder of orders) {
             // Check if exists
@@ -384,6 +388,7 @@ export async function syncOrdersFromTrendyol() {
                 lineTotal: number;
             }> = [];
             let total = 0;
+            let missingBarcodeForThisOrder = false;
 
             for (const line of tOrder.lines) {
                 let productId = "";
@@ -420,6 +425,11 @@ export async function syncOrdersFromTrendyol() {
                         lineTotal: line.price * line.quantity
                     });
                     total += line.price * line.quantity;
+                } else {
+                    missingBarcodeForThisOrder = true;
+                    if (!skippedBarcodes.includes(line.barcode)) {
+                        skippedBarcodes.push(line.barcode);
+                    }
                 }
             }
 
@@ -468,10 +478,19 @@ export async function syncOrdersFromTrendyol() {
                 });
 
                 importedCount++;
+            } else {
+                if (missingBarcodeForThisOrder) {
+                    skippedCount++;
+                }
             }
         }
 
-        return { success: true, message: `${importedCount} sipariş başarıyla çekildi.` };
+        let finalMessage = `${importedCount} sipariş başarıyla çekildi.`;
+        if (skippedCount > 0) {
+            finalMessage += ` Ancak ${skippedCount} sipariş, içindeki barkodlar sitede bulunamadığı için atlandı. (Bulunamayan Barkodlar: ${skippedBarcodes.join(", ")})`;
+        }
+
+        return { success: true, message: finalMessage };
     } catch (error: any) {
         return { success: false, message: "Sipariş Hatası: " + error.message };
     }
