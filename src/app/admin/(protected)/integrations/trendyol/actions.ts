@@ -763,18 +763,23 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         const tpRecord = await (prisma as any).trendyolProduct.findUnique({ where: { productId: product.id } });
         const isAlreadySynced = !!tpRecord?.isSynced;
 
+        // KRİTİK DÜZELTME: Eğer kullanıcı nitelik eşleştirmesi yapmışsa, ürün daha önce 
+        // senkronize edilmiş olsa bile mutlaka 'createProducts' (Ürün Güncelleme) API'sini 
+        // kullanmalıyız. 'updatePriceAndInventory' sadece stok/fiyat günceller, nitelikleri görmezden gelir.
+        const hasAttributeMappings = attributeMappings && attributeMappings.length > 0;
+
         let result;
-        if (isAlreadySynced) {
+        if (isAlreadySynced && !hasAttributeMappings) {
             const updateItems = items.map((i: any) => ({
                 barcode: i.barcode,
                 quantity: i.quantity,
                 salePrice: i.salePrice,
                 listPrice: i.listPrice
             }));
-            console.log("[Trendyol] Updating price/stock for synced product:", JSON.stringify(updateItems, null, 2));
+            console.log("[Trendyol] Updating price/stock only for synced product:", JSON.stringify(updateItems, null, 2));
             result = await client.updatePriceAndInventory(updateItems);
         } else {
-            console.log("[Trendyol] Sending new product payload:", JSON.stringify(items[0], null, 2));
+            console.log("[Trendyol] Sending full product payload (Create/Update):", JSON.stringify(items[0], null, 2));
             result = await client.createProducts(items);
         }
 
@@ -788,16 +793,27 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             let batchErrors: string[] = [];
             
             try {
-                const batchUrl = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
-                const batchRes = await fetch(batchUrl, { headers: client.getHeaders() });
+                // Deneme 1: Product API üzerinden sorgula
+                let batchUrl = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
+                let batchRes = await fetch(batchUrl, { headers: client.getHeaders() });
+                
+                // Eğer 404 aldıysak, bu muhtemelen bir stok güncellemesidir, Inventory API'den dene
+                if (batchRes.status === 404) {
+                    batchUrl = `https://apigw.trendyol.com/integration/inventory/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
+                    batchRes = await fetch(batchUrl, { headers: client.getHeaders() });
+                }
+
                 if (batchRes.ok) {
                     const batchData = await batchRes.json();
-                    batchStatus = batchData.status || "UNKNOWN";
+                    
+                    // KRİTİK: Stok güncellemelerinde Trendyol en üst seviyede 'status' dönmeyebilir.
+                    // Bu durumda items içindeki ilk öğenin durumuna bakıyoruz.
+                    batchStatus = batchData.status || (batchData.items?.[0]?.status) || "UNKNOWN";
                     
                     if (batchData.items) {
                         for (const item of batchData.items) {
                             if (item.status === "FAILED" && item.failureReasons) {
-                                batchErrors.push(...item.failureReasons.map((r: any) => r.message || r));
+                                batchErrors.push(...item.failureReasons.map((r: any) => typeof r === 'string' ? r : (r.message || r)));
                             }
                         }
                     }
@@ -959,18 +975,27 @@ export async function syncBatchStatuses() {
 
         for (const batchId of uniqueBatchIds) {
             try {
-                const url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
-                const response = await fetch(url, { headers: client.getHeaders() });
+                // Deneme 1: Product API
+                let url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
+                let response = await fetch(url, { headers: client.getHeaders() });
                 
+                // Fallback: Inventory API (Stok/Fiyat güncellemeleri burada olabilir)
+                if (response.status === 404) {
+                    url = `https://apigw.trendyol.com/integration/inventory/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
+                    response = await fetch(url, { headers: client.getHeaders() });
+                }
+
                 if (response.ok) {
                     const batchData = await response.json();
-                    const batchStatus = batchData.status || "UNKNOWN";
+                    
+                    // Stok güncellemeleri için 'status' fallback
+                    const batchStatus = batchData.status || (batchData.items?.[0]?.status) || "UNKNOWN";
                     
                     // Bu batch ID'ye ait tüm ürünleri bul
                     const batchProducts = pendingProducts.filter((p: any) => p.batchRequestId === batchId);
                     
                     for (const tp of batchProducts) {
-                        let isSynced = batchStatus === "COMPLETED";
+                        let isSynced = batchStatus === "COMPLETED" || batchStatus === "SUCCESS";
                         let lastSyncError = null;
                         
                         // İlgili ürünün sonucunu bul
@@ -981,7 +1006,7 @@ export async function syncBatchStatuses() {
                                 i.barcode === tp.barcode
                             );
                             
-                            // Eğer barkod eşleşmediyse ama batch içinde sadece 1 item varsa (zaten tekli yolluyoruz) onu kabul et
+                            // Eğer barkod eşleşmediyse ama batch içinde sadece 1 item varsa onu kabul et
                             if (!itemRes && batchData.items.length === 1) {
                                 itemRes = batchData.items[0];
                             }
@@ -990,10 +1015,9 @@ export async function syncBatchStatuses() {
                                 if (itemRes.status === "FAILED") {
                                     const errorText = itemRes.failureReasons?.map((r: any) => typeof r === "string" ? r : r.message).join("; ") || "Bilinmeyen hata";
                                     
-                                    // Eğer Trendyol "Bu barkod sende zaten var" diyorsa, bunu hata değil başarı (eşleşme) kabul et!
                                     if (errorText.includes("Aynı barkodlu") || errorText.includes("already exists")) {
                                         isSynced = true;
-                                        lastSyncError = "Ürün Trendyol'da mevcut. Eşleştirildi (Fiyat/Stok güncelleyebilirsiniz).";
+                                        lastSyncError = "Ürün Trendyol'da mevcut. Eşleştirildi.";
                                     } else {
                                         isSynced = false;
                                         lastSyncError = errorText;
