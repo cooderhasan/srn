@@ -44,7 +44,7 @@ export class TrendyolClient {
         const pair = `${this.creds.apiKey}:${this.creds.apiSecret}`;
         return {
             "Authorization": `Basic ${Buffer.from(pair).toString("base64")}`,
-            "User-Agent": `${this.creds.supplierId} - SelfIntegration`,
+            "User-Agent": "SelfIntegration",
             "Content-Type": "application/json"
         };
     }
