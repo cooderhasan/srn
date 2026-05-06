@@ -4,6 +4,7 @@
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { TrendyolClient } from "@/services/trendyol/api";
+import { generateSlug } from "@/lib/helpers";
 
 // We use 'any' cast for prisma.trendyolConfig because the client types might not be regenerated 
 // due to the dev server lock, but the runtime works if DB schema is updated.
