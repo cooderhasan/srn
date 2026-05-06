@@ -143,6 +143,8 @@ export function TrendyolBatchList({ initialData }: { initialData: BatchItem[] })
                                         <div className="text-xs text-red-600 bg-red-50 p-2 rounded-md font-medium whitespace-pre-wrap">
                                             {item.lastSyncError}
                                         </div>
+                                    ) : item.batchStatus === "PROCESSING" || item.batchStatus === "IN_PROGRESS" ? (
+                                        <span className="text-xs text-amber-600 font-medium">Güncelleme işleniyor, lütfen bekleyin...</span>
                                     ) : item.isSynced ? (
                                         <span className="text-xs text-green-600 font-medium">Trendyol panelinde listelendi.</span>
                                     ) : (

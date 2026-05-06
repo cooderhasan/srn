@@ -880,10 +880,21 @@ export async function checkTrendyolBatchRequest(batchRequestId: string) {
             apiSecret: config.apiSecret
         });
 
-        const url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchRequestId}`;
-        const response = await fetch(url, { headers: client.getHeaders() });
-        const data = await response.json();
+        // Deneme 1: Product API
+        let url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchRequestId}`;
+        let response = await fetch(url, { headers: client.getHeaders() });
         
+        // Fallback: Inventory API
+        if (response.status === 404) {
+            url = `https://apigw.trendyol.com/integration/inventory/sellers/${config.supplierId}/products/batch-requests/${batchRequestId}`;
+            response = await fetch(url, { headers: client.getHeaders() });
+        }
+
+        if (!response.ok) {
+            return { success: false, message: `Trendyol Hatası (${response.status})` };
+        }
+
+        const data = await response.json();
         return { success: true, data };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
