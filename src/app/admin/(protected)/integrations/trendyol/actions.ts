@@ -1307,18 +1307,35 @@ export async function getTrendyolShippingLabel(orderId: string) {
             attempts++;
             console.log(`[Trendyol] Barkod denemesi ${attempts}/3...`);
 
-            // 1. Yol: Common Label API (Dokümanda önerilen, Anlaşmalı Kargo)
+            // 1. Yol: Common Label API (Resmi - Yerel)
             if (order.cargoTrackingNumber) {
                 try {
                     const res = await client.getCommonLabel(order.cargoTrackingNumber);
                     labelUrl = res.data?.[0]?.label;
                     if (labelUrl) console.log("[Trendyol] Common Label başarılı.");
                 } catch (err: any) {
-                    console.error(`[Trendyol] Common Label Hatası:`, err.message);
+                    // Eğer hata 400 (NOT_FOUND) ise, sessizce diğer yola geç
+                    if (!err.message.includes("400")) {
+                        console.error(`[Trendyol] Common Label Hatası:`, err.message);
+                    }
                 }
             }
 
-            // 2. Yol: Alternatif Servis
+            // 2. Yol: International Label API (DHL ve Yurt dışı için)
+            if (!labelUrl && order.shipmentPackageId) {
+                try {
+                    console.log(`[Trendyol] Uluslararası barkod deneniyor (Paket ID: ${order.shipmentPackageId})...`);
+                    const res = await client.getInternationalLabel(order.shipmentPackageId);
+                    labelUrl = res.data?.[0]?.label || res.label;
+                    if (labelUrl) console.log("[Trendyol] International Label başarılı.");
+                } catch (err: any) {
+                    if (!err.message.includes("400")) {
+                        console.warn("[Trendyol] International Label hatası:", err.message);
+                    }
+                }
+            }
+
+            // 3. Yol: Alternatif Servis (Fallback)
             if (!labelUrl && order.cargoTrackingNumber) {
                 try {
                     const res = await client.getShippingLabels(order.cargoTrackingNumber);
@@ -1327,7 +1344,7 @@ export async function getTrendyolShippingLabel(orderId: string) {
             }
 
             if (!labelUrl && attempts < 3) {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 sn bekle ve tekrar dene
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
 

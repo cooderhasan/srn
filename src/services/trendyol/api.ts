@@ -321,4 +321,24 @@ export class TrendyolClient {
         }
         return await response.json(); 
     }
+
+    /**
+     * Get International Label (DHL etc.)
+     * GET /integration/sellers/{sellerId}/international-label/query?id={shipmentPackageId}
+     */
+    async getInternationalLabel(shipmentPackageId: string) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const url = `${this.gatewayUrl}/integration/sellers/${this.creds.supplierId}/international-label/query?id=${shipmentPackageId}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Trendyol International Label Error: ${response.status} - ${errText}`);
+        }
+        return await response.json(); 
+    }
 }
