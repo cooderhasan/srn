@@ -366,15 +366,16 @@ export async function syncOrdersFromTrendyol() {
             apiSecret: config.apiSecret
         });
 
-        // 1. Fetch Orders (Created and Picking statuses)
-        const createdData = await client.getOrders("Created");
-        const pickingData = await client.getOrders("Picking");
+        // 1. Fetch Orders with multiple statuses to catch updates
+        const statuses = ["Created", "Picking", "Shipped", "Delivered", "Cancelled"];
+        const allOrders = await Promise.all(statuses.map(s => client.getOrders(s)));
         
-        const orders = [...(createdData.content || []), ...(pickingData.content || [])];
+        const orders = allOrders.flatMap(res => res.content || []);
 
-        if (orders.length === 0) return { success: true, message: "Yeni sipariş bulunamadı." };
+        if (orders.length === 0) return { success: true, message: "Sipariş bulunamadı." };
 
         let importedCount = 0;
+        let updatedCount = 0;
         let skippedCount = 0;
         let skippedBarcodes: string[] = [];
 
@@ -384,7 +385,33 @@ export async function syncOrdersFromTrendyol() {
                 where: { orderNumber: tOrder.orderNumber }
             });
 
-            if (existing) continue;
+            // Status Mapping
+            let newStatus: any = "CONFIRMED";
+            if (tOrder.status === "Created") newStatus = "CONFIRMED";
+            if (tOrder.status === "Picking") newStatus = "PROCESSING";
+            if (tOrder.status === "Shipped") newStatus = "SHIPPED";
+            if (tOrder.status === "Delivered") newStatus = "DELIVERED";
+            if (tOrder.status === "Cancelled") newStatus = "CANCELLED";
+
+            if (existing) {
+                const updates: any = {};
+                if (existing.status !== newStatus) updates.status = newStatus;
+                
+                const cargoTrackingNumber = tOrder.cargoTrackingNumber?.toString();
+                if (cargoTrackingNumber && existing.cargoTrackingNumber !== cargoTrackingNumber) {
+                    updates.cargoTrackingNumber = cargoTrackingNumber;
+                    updates.cargoCompany = tOrder.cargoProviderName;
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    await prisma.order.update({
+                        where: { id: existing.id },
+                        data: updates
+                    });
+                    updatedCount++;
+                }
+                continue;
+            }
 
             // Resolve order items and find matching products/variants by barcode
             const resolvedItems: Array<{
@@ -498,7 +525,7 @@ export async function syncOrdersFromTrendyol() {
             }
         }
 
-        let finalMessage = `${importedCount} sipariş başarıyla çekildi.`;
+        let finalMessage = `${importedCount} yeni sipariş aktarıldı, ${updatedCount} sipariş güncellendi.`;
         if (skippedCount > 0) {
             finalMessage += ` Ancak ${skippedCount} sipariş, içindeki barkodlar sitede bulunamadığı için atlandı. (Bulunamayan Barkodlar: ${skippedBarcodes.join(", ")})`;
         }
