@@ -1262,22 +1262,37 @@ export async function getTrendyolShippingLabel(orderId: string) {
             console.log(`[Trendyol] Sipariş statüsü 'Picking' yapılıyor (Paket ID: ${order.shipmentPackageId})...`);
             try {
                 await updateTrendyolOrderToPicking(order.shipmentPackageId);
-                // Trendyol'un takip numarasını oluşturması ve statü işlemesi için bekle
-                await new Promise(resolve => setTimeout(resolve, 2000));
                 
-                // --- KRİTİK: Verileri Trendyol'dan tazele (Takip No çekmek için) ---
-                console.log("[Trendyol] Sipariş verileri tazeleniyor...");
-                const syncRes = await syncOrdersFromTrendyol(); 
-                if (syncRes.success) {
-                    // Veritabanından güncel veriyi tekrar oku
-                    const updatedOrder = await prisma.order.findUnique({
-                        where: { id: orderId },
-                        select: { cargoTrackingNumber: true, shipmentPackageId: true }
-                    });
-                    if (updatedOrder?.cargoTrackingNumber) {
-                        (order as any).cargoTrackingNumber = updatedOrder.cargoTrackingNumber;
-                        console.log(`[Trendyol] Yeni Takip No Alındı: ${updatedOrder.cargoTrackingNumber}`);
+                // --- ADIM 1.5: TAKİP NUMARASI OLUŞANA KADAR BEKLE VE TAZELER ---
+                let refreshedTrackingNumber = order.cargoTrackingNumber;
+                let refreshAttempts = 0;
+
+                while (!refreshedTrackingNumber && refreshAttempts < 2) {
+                    refreshAttempts++;
+                    console.log(`[Trendyol] Takip numarası bekleniyor (Deneme ${refreshAttempts})...`);
+                    await new Promise(resolve => setTimeout(resolve, 2500)); // 2.5 sn bekle
+
+                    const freshOrderData = await client.getOrderDetails(order.orderNumber!);
+                    if (freshOrderData?.cargoTrackingNumber) {
+                        refreshedTrackingNumber = freshOrderData.cargoTrackingNumber.toString();
+                        console.log(`[Trendyol] Yeni Takip No Atandı: ${refreshedTrackingNumber}`);
+                        
+                        // Veritabanını hemen güncelle
+                        await prisma.order.update({
+                            where: { id: orderId },
+                            data: { 
+                                cargoTrackingNumber: refreshedTrackingNumber,
+                                cargoCompany: freshOrderData.cargoProviderName
+                            }
+                        });
+                        break;
                     }
+                }
+                
+                if (refreshedTrackingNumber) {
+                    (order as any).cargoTrackingNumber = refreshedTrackingNumber;
+                } else {
+                    console.warn("[Trendyol] Statü değişti ama Takip Numarası hala oluşmadı.");
                 }
             } catch (err) {
                 console.warn("[Trendyol] Statü güncelleme veya tazeleme hatası:", err);

@@ -215,6 +215,24 @@ export class TrendyolClient {
         return await response.json();
     }
 
+    /**
+     * Get Single Order Details
+     * GET /integration/order/sellers/{sellerId}/orders?orderNumber={orderNumber}
+     */
+    async getOrderDetails(orderNumber: string) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/orders?orderNumber=${orderNumber}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
+        const data = await response.json();
+        return data.content?.[0] || null;
+    }
+
 
 
     /**
