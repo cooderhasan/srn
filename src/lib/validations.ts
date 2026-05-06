@@ -48,12 +48,17 @@ export const productSchema = z.object({
     isBestSeller: z.boolean().default(false),
     isActive: z.boolean().default(true),
     isBundle: z.boolean().default(false),
+    // Marketplace Visibility
+    isTrendyolActive: z.boolean().default(false),
+    isN11Active: z.boolean().default(false),
+    isHepsiburadaActive: z.boolean().default(false),
+    isGoogleActive: z.boolean().default(false),
     // Kargo & Desi
-    weight: z.number().min(0, "Ağırlık negatif olamaz").nullable().optional(),
-    width: z.number().min(0, "Genişlik negatif olamaz").nullable().optional(),
-    height: z.number().min(0, "Yükseklik negatif olamaz").nullable().optional(),
-    length: z.number().min(0, "Uzunluk negatif olamaz").nullable().optional(),
-    desi: z.number().min(0, "Desi negatif olamaz").nullable().optional(),
+    weight: z.coerce.number().min(0, "Ağırlık negatif olamaz").nullable().optional(),
+    width: z.coerce.number().min(0, "Genişlik negatif olamaz").nullable().optional(),
+    height: z.coerce.number().min(0, "Yükseklik negatif olamaz").nullable().optional(),
+    length: z.coerce.number().min(0, "Uzunluk negatif olamaz").nullable().optional(),
+    desi: z.coerce.number().min(0, "Desi negatif olamaz").nullable().optional(),
     referenceUrl: z.string().url("Geçerli bir URL giriniz").or(z.literal("")).nullable().optional(),
 });
 
