@@ -190,6 +190,8 @@ export function TrendyolImportWizard() {
         title: t.title,
         barcode: t.barcode,
         stockCode: t.stockCode,
+        modelCode: t.modelCode,
+        productCode: t.productCode,
         quantity: t.quantity,
         listPrice: t.listPrice,
         salePrice: t.salePrice,
@@ -393,7 +395,7 @@ export function TrendyolImportWizard() {
                                                     <div className="flex items-center gap-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
                                                         <span className="text-[8px] font-bold text-orange-400 uppercase">SKU:</span>
                                                         <span className="text-[10px] font-mono text-orange-700 uppercase tracking-tighter font-bold">
-                                                            {p.stockCode}
+                                                            {p.stockCode || p.modelCode || p.barcode}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-1 ml-auto">
