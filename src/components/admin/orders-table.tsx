@@ -548,22 +548,14 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                         title="Trendyol Barkodu Yazdır"
                                                         onClick={async () => {
                                                             const { getTrendyolShippingLabel } = await import("@/app/admin/(protected)/integrations/trendyol/actions");
-                                                            const res = await getTrendyolShippingLabel(order.cargoTrackingNumber || "");
+                                                            const res = await getTrendyolShippingLabel(order.id);
                                                             
-                                                            // Trendyol can return an array or a single object
-                                                            let labelUrl = "";
-                                                            if (res.success && res.data) {
-                                                                if (Array.isArray(res.data) && res.data[0]?.labelUrl) {
-                                                                    labelUrl = res.data[0].labelUrl;
-                                                                } else if ((res.data as any).labelUrl) {
-                                                                    labelUrl = (res.data as any).labelUrl;
-                                                                }
-                                                            }
+                                                            const labelUrl = (res.data as any)?.labelUrl;
 
                                                             if (labelUrl) {
                                                                 window.open(labelUrl, '_blank');
                                                             } else {
-                                                                toast.error("Barkod linki alınamadı. Siparişin kargo etiketi henüz oluşmamış olabilir.");
+                                                                toast.error(res.message || "Barkod linki alınamadı. Siparişin kargo etiketi henüz oluşmamış olabilir.");
                                                             }
                                                         }}
                                                     >

@@ -308,6 +308,7 @@ model Order {
   shippingDesi         Decimal?      @db.Decimal(8, 2)  // Toplam sipariş desisi
   cargoCompany         String?       // Kargo Firması
   cargoTrackingNumber  String?       // Kargo Takip Numarası
+  shipmentPackageId    String?       // Trendyol Paket Numarası
   trackingUrl          String?       // Kargo Takip Linki
   cargoLabelUrl        String?       // Trendyol vb. için Kargo Barkod/Etiket Linki
   source               String        @default("WEB") // WEB, TRENDYOL, N11, HEPSIBURADA

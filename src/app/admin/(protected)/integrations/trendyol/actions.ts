@@ -416,9 +416,14 @@ export async function syncOrdersFromTrendyol() {
                 if (existing.status !== newStatus) updates.status = newStatus;
                 
                 const cargoTrackingNumber = tOrder.cargoTrackingNumber?.toString();
+                const shipmentPackageId = tOrder.id?.toString();
+
                 if (cargoTrackingNumber && existing.cargoTrackingNumber !== cargoTrackingNumber) {
                     updates.cargoTrackingNumber = cargoTrackingNumber;
                     updates.cargoCompany = tOrder.cargoProviderName;
+                }
+                if (shipmentPackageId && existing.shipmentPackageId !== shipmentPackageId) {
+                    updates.shipmentPackageId = shipmentPackageId;
                 }
 
                 if (Object.keys(updates).length > 0) {
@@ -505,6 +510,7 @@ export async function syncOrdersFromTrendyol() {
                             guestEmail: tOrder.customerEmail || `trendyol_${tOrder.orderNumber}@customer.com`,
                             cargoCompany: tOrder.cargoProviderName,
                             cargoTrackingNumber: tOrder.cargoTrackingNumber?.toString(),
+                            shipmentPackageId: tOrder.id?.toString(),
                             shippingAddress: {
                                 fullName: tOrder.shipmentAddress?.fullName ?? tOrder.customerFirstName + " " + tOrder.customerLastName,
                                 address: tOrder.shipmentAddress?.fullAddress ?? "",
@@ -1193,9 +1199,14 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
     }
 }
 
-export async function getTrendyolShippingLabel(cargoTrackingNumber: string) {
+export async function getTrendyolShippingLabel(orderId: string) {
     try {
-        if (!cargoTrackingNumber) return { success: false, message: "Takip numarası bulunamadı." };
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            select: { cargoTrackingNumber: true, shipmentPackageId: true }
+        });
+
+        if (!order) return { success: false, message: "Sipariş bulunamadı." };
 
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -1206,25 +1217,44 @@ export async function getTrendyolShippingLabel(cargoTrackingNumber: string) {
             apiSecret: config.apiSecret
         });
 
-        // Trendyol can be slow to generate the label after status change
-        // We will try up to 3 times with a short delay
-        let data: any = null;
-        let attempts = 0;
-        
-        while (attempts < 3) {
-            data = await client.getShippingLabels(cargoTrackingNumber);
-            console.log(`[Trendyol API] Shipping Label Response (Attempt ${attempts + 1}):`, JSON.stringify(data));
-            
-            const labelUrl = Array.isArray(data) ? data[0]?.labelUrl : data?.labelUrl;
-            if (labelUrl) break;
-            
-            attempts++;
-            if (attempts < 3) {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
+        let labelUrl = "";
+
+        // 1. Yol: Takip Numarası ile deneme (Eski Tip)
+        if (order.cargoTrackingNumber) {
+            console.log(`[Trendyol] Barkod deneniyor (Takip No: ${order.cargoTrackingNumber})...`);
+            try {
+                const res = await client.getShippingLabels(order.cargoTrackingNumber);
+                labelUrl = Array.isArray(res) ? res[0]?.labelUrl : res?.labelUrl;
+            } catch (err) {
+                console.warn("[Trendyol] Takip no ile barkod alma başarısız, diğer yöntem denenecek.");
             }
         }
 
-        return { success: true, data };
+        // 2. Yol: Shipment Package ID ile deneme (Yeni Tip / Modern)
+        if (!labelUrl && order.shipmentPackageId) {
+            console.log(`[Trendyol] Barkod deneniyor (Paket ID: ${order.shipmentPackageId})...`);
+            try {
+                // Yeni nesil endpoint: /suppliers/{supplierId}/shipment-packages/{shipmentPackageId}/label
+                const url = `https://apigw.trendyol.com/suppliers/${config.supplierId}/shipment-packages/${order.shipmentPackageId}/label`;
+                const response = await fetch(url, {
+                    headers: client.getHeaders()
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    // Bu servis genelde direkt bir liste veya link döner
+                    labelUrl = Array.isArray(data) ? data[0]?.labelUrl : data?.labelUrl;
+                }
+            } catch (err) {
+                console.error("[Trendyol] Paket ID ile barkod alma hatası:", err);
+            }
+        }
+
+        if (!labelUrl) {
+            return { success: false, message: "Barkod henüz oluşmamış veya yetki hatası var. Lütfen 1-2 dakika bekleyip siparişleri tekrar senkronize edin." };
+        }
+
+        return { success: true, data: { labelUrl } };
     } catch (error: any) {
         console.error("[Trendyol] getShippingLabel Error:", error);
         return { success: false, message: "Etiket alınamadı: " + error.message };
