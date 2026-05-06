@@ -450,15 +450,18 @@ export async function syncOrdersFromTrendyol() {
                     await tx.order.create({
                         data: {
                             orderNumber: tOrder.orderNumber,
+                            source: "TRENDYOL",
                             status: "PENDING",
                             total,
                             subtotal: total,
                             discountAmount: 0,
                             appliedDiscountRate: 0,
                             vatAmount: total * 0.2,
-                            guestEmail: tOrder.customerEmail || "trendyol@customer.com",
+                            guestEmail: tOrder.customerEmail || `trendyol_${tOrder.orderNumber}@customer.com`,
+                            cargoCompany: tOrder.cargoProviderName,
+                            cargoTrackingNumber: tOrder.cargoTrackingNumber?.toString(),
                             shippingAddress: {
-                                fullName: tOrder.shipmentAddress?.fullName ?? "",
+                                fullName: tOrder.shipmentAddress?.fullName ?? tOrder.customerFirstName + " " + tOrder.customerLastName,
                                 address: tOrder.shipmentAddress?.fullAddress ?? "",
                                 city: tOrder.shipmentAddress?.city ?? "",
                                 district: tOrder.shipmentAddress?.district ?? ""
@@ -1092,5 +1095,23 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
         return { success: true, message: "Ürün başarıyla içeri aktarıldı.", productId: newProduct.id };
     } catch (error: any) {
         return { success: false, message: "İçeri aktarma hatası: " + error.message };
+    }
+}
+
+export async function getTrendyolShippingLabel(cargoTrackingNumber: string) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const data = await client.getShippingLabels(cargoTrackingNumber);
+        return { success: true, data };
+    } catch (error: any) {
+        return { success: false, message: "Etiket alınamadı: " + error.message };
     }
 }

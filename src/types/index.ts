@@ -111,9 +111,12 @@ export interface OrderWithItems {
     shippingCost: number | null;
     shippingDesi: number | null;
     status: string;
-    shippingAddress: unknown;
+    shippingAddress: any;
     cargoCompany: string | null;
+    cargoTrackingNumber: string | null;
     trackingUrl: string | null;
+    cargoLabelUrl: string | null;
+    source: string;
     ykCargoKey: string | null;
     ykJobId: number | null;
     ykDocId: string | null;

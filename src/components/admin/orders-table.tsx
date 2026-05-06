@@ -451,56 +451,70 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                             />
                                         </TableCell>
                                         <TableCell className="font-medium">
-                                            #{order.orderNumber}
+                                            <div className="flex items-center gap-2">
+                                                {order.source === "TRENDYOL" && (
+                                                    <Badge className="bg-[#f27a1a] hover:bg-[#ef6c00] text-white border-none px-1.5 py-0 text-[10px] font-bold">
+                                                        TRENDYOL
+                                                    </Badge>
+                                                )}
+                                                {order.source === "N11" && (
+                                                    <Badge className="bg-[#5c3dbc] hover:bg-[#4a2fac] text-white border-none px-1.5 py-0 text-[10px] font-bold">
+                                                        N11
+                                                    </Badge>
+                                                )}
+                                                <span>#{order.orderNumber}</span>
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-col">
                                                 <span className="font-medium">
-                                                    {(order.shippingAddress as any)?.name || order.user?.name || order.user?.companyName || order.user?.email || order.guestEmail || "Misafir"}
+                                                    {order.shippingAddress?.fullName || (order.shippingAddress as any)?.name || order.user?.name || order.user?.companyName || order.user?.email || order.guestEmail || "Misafir"}
                                                 </span>
-                                                {(() => {
-                                                    const phone = order.user?.phone || (order.shippingAddress as any)?.phone;
-                                                    return (
-                                                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                                                            {phone || "-"}
-                                                            {phone && (
-                                                                <a
-                                                                    href={`https://wa.me/${phone.replace(/\D/g, "").replace(/^0/, "90").replace(/^5/, "905")}?text=${encodeURIComponent(`Merhaba Serin Motor'dan #${order.orderNumber} numaralı siparişiniz için yazıyorum`)}`}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-green-500 hover:text-green-600 p-1 hover:bg-green-50 rounded-full transition-colors"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    title="WhatsApp ile İletişime Geç"
-                                                                >
-                                                                    <MessageCircle className="h-3.5 w-3.5" />
-                                                                </a>
-                                                            )}
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    {order.cargoCompany && (
+                                                        <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase font-bold tracking-tight">
+                                                            <Truck className="h-2.5 w-2.5" />
+                                                            {order.cargoCompany}
                                                         </span>
-                                                    );
-                                                })()}
+                                                    )}
+                                                    {(() => {
+                                                        const phone = order.user?.phone || (order.shippingAddress as any)?.phone;
+                                                        return phone ? (
+                                                            <a
+                                                                href={`https://wa.me/${phone.replace(/\D/g, "").replace(/^0/, "90").replace(/^5/, "905")}?text=${encodeURIComponent(`Merhaba Serin Motor'dan #${order.orderNumber} numaralı siparişiniz için yazıyorum`)}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-green-500 hover:text-green-600 flex items-center gap-0.5 text-[10px]"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <MessageCircle className="h-2.5 w-2.5" />
+                                                                WhatsApp
+                                                            </a>
+                                                        ) : null;
+                                                    })()}
+                                                </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell>{formatDate(order.createdAt)}</TableCell>
+                                        <TableCell className="text-xs text-gray-500">{formatDate(order.createdAt)}</TableCell>
                                         <TableCell className="font-medium">
                                             <div className="flex flex-col">
                                                 <span>{formatPrice(Number(order.total))}</span>
                                                 {order.payment && order.payment.method !== "BANK_TRANSFER" && order.payment.amount > 0 && Math.abs(order.payment.amount - Number(order.total)) > 0.5 && (
                                                     <span className="text-[10px] text-blue-600 font-bold">
                                                         Net: {formatPrice(order.payment.amount)}
-                                                        {order.payment.providerData?.installment_count && Number(order.payment.providerData.installment_count) > 1 && (
-                                                            ` (${order.payment.providerData.installment_count} Taksit)`
-                                                        )}
                                                     </span>
                                                 )}
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-1.5">
-                                                <Truck className="h-3.5 w-3.5 text-gray-400" />
-                                                <span className="text-sm font-medium">
-                                                    {order.cargoCompany === "YURTICI" ? "Yurtiçi Kargo" : order.cargoCompany || "-"}
-                                                </span>
-                                            </div>
+                                            {order.cargoTrackingNumber ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[10px] text-gray-400 uppercase font-bold">TAKİP NO</span>
+                                                    <span className="text-xs font-mono select-all bg-gray-50 dark:bg-gray-800/50 px-1 rounded">{order.cargoTrackingNumber}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-400">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell onClick={(e) => e.stopPropagation()}>
                                             <div className="w-[180px] flex flex-col gap-1">
@@ -522,43 +536,44 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
-                                                <span className="text-[10px] text-gray-500 font-medium px-2">
-                                                    {order.payment?.method === "BANK_TRANSFER" ? "Havale / EFT" : "Kredi Kartı"}
-                                                </span>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end gap-2">
+                                                {order.source === "TRENDYOL" && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="border-orange-200 text-[#f27a1a] hover:bg-orange-50 h-9 w-9"
+                                                        title="Trendyol Barkodu Yazdır"
+                                                        onClick={async () => {
+                                                            const { getTrendyolShippingLabel } = await import("@/app/admin/(protected)/integrations/trendyol/actions");
+                                                            const res = await getTrendyolShippingLabel(order.cargoTrackingNumber || "");
+                                                            if (res.success && (res.data as any).labelUrl) {
+                                                                window.open((res.data as any).labelUrl, '_blank');
+                                                            } else {
+                                                                toast.error("Barkod linki alınamadı. Trendyol panelinden kontrol edin.");
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Printer className="h-4 w-4" />
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    title="Yazdır"
+                                                    title="Siparişi Yazdır"
+                                                    className="h-9 w-9"
                                                     onClick={() => window.open(`/admin/orders/${order.id}/print`, '_blank')}
                                                 >
-                                                    <span className="text-lg">🖨️</span>
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    title="Kargo Etiketi Yazdır"
-                                                    onClick={() => window.open(`/admin/orders/${order.id}/shipping-label`, '_blank')}
-                                                >
-                                                    <Truck className="h-5 w-5" />
-                                                </Button>
-                                                <a
-                                                    href={`/admin/orders/${order.id}/pdf`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 w-9"
-                                                    title="PDF Olarak İndir"
-                                                >
                                                     <FileDown className="h-5 w-5" />
-                                                </a>
+                                                </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
+                                                    className="h-9 w-9"
                                                     onClick={(e) => {
-                                                        e.stopPropagation(); // Double check
+                                                        e.stopPropagation();
                                                         setSelectedOrder(order);
                                                         setIsOpen(true);
                                                     }}

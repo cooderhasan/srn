@@ -307,7 +307,10 @@ model Order {
   shippingCost         Decimal       @default(0) @db.Decimal(12, 2) // Kargo ücreti
   shippingDesi         Decimal?      @db.Decimal(8, 2)  // Toplam sipariş desisi
   cargoCompany         String?       // Kargo Firması
+  cargoTrackingNumber  String?       // Kargo Takip Numarası
   trackingUrl          String?       // Kargo Takip Linki
+  cargoLabelUrl        String?       // Trendyol vb. için Kargo Barkod/Etiket Linki
+  source               String        @default("WEB") // WEB, TRENDYOL, N11, HEPSIBURADA
   // Yurtiçi Kargo Entegrasyonu
   ykCargoKey          String?       // YK'ya gönderilen tekil kargo anahtarı
   ykJobId             Int?          // YK Talep Numarası (createShipment'tan döner)

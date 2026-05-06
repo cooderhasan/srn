@@ -262,4 +262,21 @@ export class TrendyolClient {
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
         return await response.json();
     }
+
+    /**
+     * Get Shipping Labels
+     * GET /integration/order/sellers/{sellerId}/shipping-labels/{cargoTrackingNumbers}
+     */
+    async getShippingLabels(cargoTrackingNumber: string) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/shipping-labels/${cargoTrackingNumber}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
+        return await response.json(); // Returns { labelUrl: "..." } or similar
+    }
 }
