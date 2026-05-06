@@ -208,10 +208,21 @@ export class TrendyolClient {
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`${response.status} - ${err}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Trendyol API Error: ${errorData.message || response.statusText}`);
         }
+
         return await response.json();
+    }
+
+    async getCategories() {
+        await this.init();
+        return this.request('GET', '/product-categories');
+    }
+
+    async getCategoryAttributes(categoryId: number) {
+        await this.init();
+        return this.request('GET', `/product-categories/${categoryId}/attributes`);
     }
 
     /**

@@ -179,19 +179,32 @@ export async function syncProductsToTrendyol(productIds?: string[]) {
                     const criticalStock = p.criticalStock ?? defaultCritical;
                     const availableStock = Math.max(0, v.stock - criticalStock);
 
+                    const attributes = [];
+                    
+                    if (v.color) {
+                        attributes.push({
+                            attributeId: 338, 
+                            attributeValueId: 0,
+                            customAttributeValue: v.color
+                        });
+                    }
+                    if (v.size) {
+                        attributes.push({
+                            attributeId: 343, 
+                            attributeValueId: 0,
+                            customAttributeValue: v.size
+                        });
+                    }
+
                     items.push({
                         ...baseItem,
                         barcode: v.barcode,
-                        stockCode: v.sku || v.barcode, // Stok Kodu (Merchant SKU)
+                        stockCode: v.sku || v.barcode,
                         quantity: availableStock,
                         listPrice: variantListPrice,
                         salePrice: variantSalePrice,
-                        dimensionalWeight: 1, // Desi logic needed per variant if possible, else 1
-                        // Attributes: Need to add Color/Size attributes here based on Category requirements
-                        attributes: [
-                            ...(v.color ? [{ attributeId: 338, attributeValueId: 0, customAttributeValue: v.color }] : []), // 338 is often Color, but depends on Category!
-                            ...(v.size ? [{ attributeId: 343, attributeValueId: 0, customAttributeValue: v.size }] : [])   // 343 is often Size
-                        ]
+                        dimensionalWeight: 1,
+                        attributes: attributes
                     });
                 }
             } else {
@@ -277,7 +290,10 @@ export async function syncProductsToTrendyol(productIds?: string[]) {
             }
 
         } catch (apiError: any) {
-            return { success: false, message: "API Hatası: " + apiError.message };
+            console.error("Trendyol Sync API Error:", apiError);
+            // Trendyol specific error structure often has more details in errors array
+            const detailedError = apiError.response?.data?.errors?.map((e: any) => e.message).join(", ") || apiError.message;
+            return { success: false, message: "Trendyol Reddi: " + detailedError };
         }
 
     } catch (error: any) {
@@ -1031,7 +1047,8 @@ export async function getTrendyolSellersProducts(page = 0, size = 50) {
         const data = await client.getSellersProducts(page, size);
         return { success: true, data };
     } catch (error: any) {
-        return { success: false, message: "Hata: " + error.message };
+        console.error("getTrendyolSellersProducts detailed error:", error);
+        return { success: false, message: "Trendyol API Hatası: " + (error.message || "Bilinmeyen bir hata oluştu") };
     }
 }
 
@@ -1150,5 +1167,23 @@ export async function getTrendyolShippingLabel(cargoTrackingNumber: string) {
         return { success: true, data };
     } catch (error: any) {
         return { success: false, message: "Etiket alınamadı: " + error.message };
+    }
+}
+
+export async function getTrendyolCategoryAttributes(categoryId: number) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon yok." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const data = await client.getCategoryAttributes(categoryId);
+        return { success: true, data: data.categoryAttributes || [] };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
     }
 }
