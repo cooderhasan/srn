@@ -306,11 +306,11 @@ export class TrendyolClient {
      * Get Common Label (Trendyol Agreed Carriers)
      * GET /integration/sellers/{sellerId}/common-label/query?id={cargoTrackingNumber}
      */
-    async getCommonLabel(cargoTrackingNumber: string) {
+    async getCommonLabel(id: string, format: "PDF" | "ZPL" = "PDF") {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
-        const url = `${this.gatewayUrl}/integration/sellers/${this.creds.supplierId}/common-label/query?id=${cargoTrackingNumber}`;
+        const url = `${this.gatewayUrl}/integration/sellers/${this.creds.supplierId}/common-label/query?id=${id}&format=${format}`;
         const response = await fetch(url, {
             headers: this.getHeaders()
         });
@@ -326,11 +326,11 @@ export class TrendyolClient {
      * Get International Label (DHL etc.)
      * GET /integration/sellers/{sellerId}/international-label/query?id={shipmentPackageId}
      */
-    async getInternationalLabel(shipmentPackageId: string) {
+    async getInternationalLabel(shipmentPackageId: string, format: "PDF" | "ZPL" = "PDF") {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
-        const url = `${this.gatewayUrl}/integration/sellers/${this.creds.supplierId}/international-label/query?id=${shipmentPackageId}`;
+        const url = `${this.gatewayUrl}/integration/sellers/${this.creds.supplierId}/international-label/query?id=${shipmentPackageId}&format=${format}`;
         const response = await fetch(url, {
             headers: this.getHeaders()
         });

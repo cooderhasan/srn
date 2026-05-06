@@ -1310,8 +1310,16 @@ export async function getTrendyolShippingLabel(orderId: string) {
             // 1. Yol: Common Label API (Takip No ile)
             if (order.cargoTrackingNumber) {
                 try {
-                    const res = await client.getCommonLabel(order.cargoTrackingNumber);
+                    // Önce PDF dene
+                    let res = await client.getCommonLabel(order.cargoTrackingNumber, "PDF");
                     labelUrl = res.data?.[0]?.label;
+                    
+                    // PDF yoksa ZPL dene
+                    if (!labelUrl) {
+                        res = await client.getCommonLabel(order.cargoTrackingNumber, "ZPL");
+                        labelUrl = res.data?.[0]?.label;
+                    }
+                    
                     if (labelUrl) console.log("[Trendyol] 1. Yol (Takip No) Başarılı.");
                 } catch (err: any) {
                     console.error(`[Trendyol] 1. Yol Hatası:`, err.message);
@@ -1322,8 +1330,14 @@ export async function getTrendyolShippingLabel(orderId: string) {
             if (!labelUrl && order.shipmentPackageId) {
                 try {
                     console.log(`[Trendyol] 1.1 Yol deneniyor (Paket ID: ${order.shipmentPackageId})...`);
-                    const res = await client.getCommonLabel(order.shipmentPackageId);
+                    let res = await client.getCommonLabel(order.shipmentPackageId, "PDF");
                     labelUrl = res.data?.[0]?.label;
+                    
+                    if (!labelUrl) {
+                        res = await client.getCommonLabel(order.shipmentPackageId, "ZPL");
+                        labelUrl = res.data?.[0]?.label;
+                    }
+                    
                     if (labelUrl) console.log("[Trendyol] 1.1 Yol Başarılı.");
                 } catch (err: any) {
                     console.error(`[Trendyol] 1.1 Yol Hatası:`, err.message);
@@ -1334,8 +1348,14 @@ export async function getTrendyolShippingLabel(orderId: string) {
             if (!labelUrl && order.shipmentPackageId) {
                 try {
                     console.log(`[Trendyol] 2. Yol deneniyor (International)...`);
-                    const res = await client.getInternationalLabel(order.shipmentPackageId);
+                    let res = await client.getInternationalLabel(order.shipmentPackageId, "PDF");
                     labelUrl = res.data?.[0]?.label || res.label;
+                    
+                    if (!labelUrl) {
+                        res = await client.getInternationalLabel(order.shipmentPackageId, "ZPL");
+                        labelUrl = res.data?.[0]?.label || res.label;
+                    }
+                    
                     if (labelUrl) console.log("[Trendyol] 2. Yol Başarılı.");
                 } catch (err: any) {
                     console.error(`[Trendyol] 2. Yol Hatası:`, err.message);
