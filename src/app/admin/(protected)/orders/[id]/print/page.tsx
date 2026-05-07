@@ -291,6 +291,5 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ id:
                 <p>Bu belge bilgilendirme amaçlıdır. Fatura niteliği taşımaz. Teşekkürler, yine bekleriz.</p>
             </div>
         </div>
-        </div>
     );
 }
