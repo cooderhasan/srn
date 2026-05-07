@@ -330,8 +330,6 @@ export async function deleteProduct(productId: string) {
     revalidatePath("/admin/products");
 }
 
-    revalidatePath("/admin/products");
-}
 
 export async function toggleProductStatus(productId: string, isActive: boolean) {
     const session = await auth();
