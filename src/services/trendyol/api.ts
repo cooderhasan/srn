@@ -406,4 +406,63 @@ export class TrendyolClient {
         }
         return await response.json();
     }
+
+    /**
+     * Get Customer Questions from Trendyol
+     * GET /integration/qna/sellers/{sellerId}/questions/filter
+     */
+    async getQuestions(params: {
+        barcode?: string;
+        page?: number;
+        size?: number;
+        status?: "WAITING_FOR_ANSWER" | "ANSWERED" | "REJECTED" | "UNANSWERED";
+        startDate?: number;
+        endDate?: number;
+    } = {}) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const queryParams = new URLSearchParams();
+        if (params.barcode) queryParams.append("barcode", params.barcode);
+        if (params.page !== undefined) queryParams.append("page", params.page.toString());
+        if (params.size !== undefined) queryParams.append("size", params.size.toString());
+        if (params.status) queryParams.append("status", params.status);
+        if (params.startDate) queryParams.append("startDate", params.startDate.toString());
+        if (params.endDate) queryParams.append("endDate", params.endDate.toString());
+
+        const url = `${this.gatewayUrl}/integration/qna/sellers/${this.creds.supplierId}/questions/filter?${queryParams.toString()}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Trendyol Questions API Error: ${errorData.message || response.statusText}`);
+        }
+
+        return await response.json();
+    }
+
+    /**
+     * Answer a Customer Question
+     * POST /integration/qna/sellers/{sellerId}/questions/{id}/answers
+     */
+    async answerQuestion(questionId: string | number, text: string) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const url = `${this.gatewayUrl}/integration/qna/sellers/${this.creds.supplierId}/questions/${questionId}/answers`;
+        const response = await fetch(url, {
+            method: "POST",
+            headers: this.getHeaders(),
+            body: JSON.stringify({ text })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Trendyol Answer API Error: ${errorData.message || response.statusText}`);
+        }
+
+        return await response.json();
+    }
 }

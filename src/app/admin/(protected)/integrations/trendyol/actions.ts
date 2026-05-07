@@ -1476,3 +1476,31 @@ export async function updateTrendyolOrderToPicking(orderNumber: string) {
         return { success: false, message: "Statü Güncelleme Hatası: " + error.message };
     }
 }
+
+export async function getTrendyolQuestions(params: {
+    status?: "WAITING_FOR_ANSWER" | "ANSWERED" | "REJECTED" | "UNANSWERED";
+    page?: number;
+    size?: number;
+} = {}) {
+    try {
+        const client = new TrendyolClient();
+        const data = await client.getQuestions(params);
+        return { success: true, data };
+    } catch (error: any) {
+        console.error("Trendyol getQuestions error:", error);
+        return { success: false, message: "Sorular alınamadı: " + error.message };
+    }
+}
+
+export async function answerTrendyolQuestion(questionId: string | number, text: string) {
+    try {
+        const client = new TrendyolClient();
+        const result = await client.answerQuestion(questionId, text);
+        
+        revalidatePath("/admin/integrations/trendyol/questions");
+        return { success: true, message: "Cevabınız başarıyla gönderildi.", data: result };
+    } catch (error: any) {
+        console.error("Trendyol answerQuestion error:", error);
+        return { success: false, message: "Cevap gönderilemedi: " + error.message };
+    }
+}

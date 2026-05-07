@@ -5,7 +5,7 @@ import { TrendyolSyncButton } from "./trendyol-sync-button";
 import { TrendyolOrderSyncButton } from "./trendyol-order-sync-button";
 import { TrendyolDataHelper } from "./trendyol-data-helper";
 import { TrendyolImportWizard } from "./trendyol-import-wizard";
-import { Box } from "lucide-react";
+import { Box, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default async function TrendyolIntegrationPage() {
@@ -47,6 +47,12 @@ export default async function TrendyolIntegrationPage() {
                                 <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-500/20">
                                     <Box className="w-4 h-4" />
                                     Trendyol Ürünlerini Yönet
+                                </Button>
+                            </a>
+                            <a href="/admin/integrations/trendyol/questions">
+                                <Button variant="outline" className="w-full gap-2 border-orange-200 text-orange-700 hover:bg-orange-50">
+                                    <MessageSquare className="w-4 h-4" />
+                                    Müşteri Sorularını Yönet
                                 </Button>
                             </a>
                             <a href="/admin/integrations/trendyol/batches">
