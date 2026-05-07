@@ -301,7 +301,7 @@ export function ProductDetail({
                         {/* Left: Image Gallery */}
                         <div className="p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800">
                             {/* Main Image */}
-                            <div className="relative aspect-[4/3] bg-gray-50 dark:bg-gray-800/50 rounded-xl overflow-hidden group mb-4">
+                            <div className="relative aspect-[4/3] bg-white dark:bg-gray-800/50 rounded-xl overflow-hidden group mb-4 border border-gray-100 dark:border-gray-800">
                                 {product.images[0] ? (
                                     <Image
                                         src={product.images[activeImageIndex] || product.images[0]}
@@ -556,7 +556,7 @@ export function ProductDetail({
 
                                         <div className="grid grid-cols-12 gap-3 sm:flex sm:flex-wrap sm:items-center">
                                             {/* Quantity selector */}
-                                            <div className="col-span-4 sm:w-auto flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
+                                            <div className="col-span-4 sm:w-auto flex items-center bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
@@ -756,7 +756,7 @@ export function ProductDetail({
                                         {isAuthenticated ? (
                                             <ReviewForm productId={product.id} />
                                         ) : (
-                                            <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                            <div className="text-center p-4 bg-white dark:bg-gray-800 rounded-lg">
                                                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                                                     Değerlendirme yapabilmek için giriş yapmalısınız.
                                                 </p>

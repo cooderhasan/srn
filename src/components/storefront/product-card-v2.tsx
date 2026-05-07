@@ -168,7 +168,7 @@ export function ProductCardV2({
                 </div>
 
                 {/* Content Section */}
-                <div className="p-4 flex-1 flex flex-col bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="p-4 flex-1 flex flex-col bg-white dark:bg-gray-800/50">
                     {/* Brand */}
                     {product.brand && (
                         <p className="text-[#009AD0] font-bold text-xs uppercase tracking-wider mb-1">

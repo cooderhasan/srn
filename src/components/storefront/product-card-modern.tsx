@@ -166,7 +166,7 @@ export function ProductCardModern({
                 </div>
 
                 {/* Content Section */}
-                <div className="p-3 md:p-5 flex-1 flex flex-col bg-gray-50/30 dark:bg-gray-800/50">
+                <div className="p-3 md:p-5 flex-1 flex flex-col bg-white dark:bg-gray-800/50">
                     {/* Brand */}
                     {product.brand && (
                         <p className="text-blue-600 dark:text-blue-400 font-bold text-[10px] uppercase tracking-widest mb-1 md:mb-1.5 opacity-80">

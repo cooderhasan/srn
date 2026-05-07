@@ -96,7 +96,7 @@ export function ProductCard({
         <Link href={`/products/${product.slug}`} className="group block h-full">
             <div className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 h-full flex flex-col relative">
                 {/* Image */}
-                <div className="relative aspect-square bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                <div className="relative aspect-square bg-white dark:bg-gray-700 overflow-hidden">
                     {product.images[0] ? (
                         <Image
                             src={product.images[0]}
