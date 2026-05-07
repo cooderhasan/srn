@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { PrintButton } from "@/components/admin/print-button";
 import { AutoPrint } from "@/components/admin/auto-print";
+import { Barcode } from "@/components/admin/barcode";
 
 // Helper to serialise decimals safely
 const toNumber = (value: any) => {
@@ -90,7 +91,9 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ id:
                 <div>
                     <h3 className="text-gray-500 font-semibold mb-2 uppercase tracking-wider text-sm">Müşteri Bilgileri</h3>
                     <div className="text-gray-800">
-                        <p className="font-bold text-lg">{shippingAddress?.name || order.user?.companyName || order.user?.email || (order as any).guestEmail || "Misafir"}</p>
+                        <p className="font-bold text-lg">
+                            {shippingAddress?.fullName || shippingAddress?.name || order.user?.name || order.user?.companyName || order.user?.email || (order as any).guestEmail || "Misafir"}
+                        </p>
                         <p>{order.user?.email || (order as any).guestEmail}</p>
                         <p>{order.user?.phone || "-"}</p>
                         {/* Fallback to user address if no specific shipping address is in the JSON yet (depending on implementation) */}
@@ -193,10 +196,23 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ id:
             )}
 
             {/* Footer Notes */}
-            <div className="mt-16 pt-8 border-t border-gray-300 text-center text-sm text-gray-500">
+            <div className="mt-12 pt-6 border-t border-gray-300 text-center text-sm text-gray-500">
                 <p>Bu belge bilgilendirme amaçlıdır. Fatura niteliği taşımaz.</p>
                 <p className="mt-1">Teşekkürler, yine bekleriz.</p>
             </div>
+
+            {/* Barcode for folding/shipping (Mainly for Trendyol) */}
+            {order.source === "TRENDYOL" && (
+                <div className="mt-10 pt-10 border-t-2 border-dashed border-gray-300 flex flex-col items-center">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-3">Kargo Barkodu (Katlama Çizgisi Üstü)</div>
+                    <Barcode 
+                        value={order.cargoTrackingNumber || order.orderNumber} 
+                        width={2.5} 
+                        height={100} 
+                    />
+                    <div className="mt-2 text-xs font-bold text-gray-700">#{order.orderNumber} - {order.cargoCompany}</div>
+                </div>
+            )}
         </div>
     );
 }
