@@ -44,30 +44,39 @@ export class HepsiburadaClient {
 
     /**
      * Test connection with detailed error reporting
+     * Uses Order API as it's more reliable for testing auth
      */
     async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
             if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
-            // Try to fetch categories (Public-ish but confirms auth works if hitting protected paths)
-            const response = await fetch(`${this.listingBaseUrl}/common/categories`, {
-                headers: { "Authorization": this.getAuthHeader() }
+            // Use order API for test as it requires full auth and merchantId context
+            const testUrl = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?page=0&size=1`;
+            
+            const response = await fetch(testUrl, {
+                headers: { 
+                    "Authorization": this.getAuthHeader(),
+                    "Accept": "application/json"
+                }
             });
             
             if (response.ok) {
                 return { success: true, message: "Tamam" };
             }
 
+            const errorBody = await response.text();
+            console.error(`❌ HB Test Error Body:`, errorBody);
+
             if (response.status === 401) {
-                return { success: false, message: "Yetkisiz Erişim (401). Kullanıcı Adı veya Şifre hatalı." };
+                return { success: false, message: "Yetkisiz Erişim (401). Servis Anahtarı veya Merchant ID hatalı." };
             }
 
-            if (response.status === 403) {
-                return { success: false, message: "Erişim Reddedildi (403). Merchant ID yetkisi kısıtlı olabilir." };
+            if (response.status === 400) {
+                return { success: false, message: `Geçersiz İstek (400). Bilgileri kontrol edin. Detay: ${errorBody.slice(0, 50)}` };
             }
 
-            return { success: false, message: `HB Hatası (${response.status})` };
+            return { success: false, message: `HB Hatası (${response.status}): ${errorBody.slice(0, 50)}` };
 
         } catch (error: any) {
             return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
