@@ -238,42 +238,29 @@ export class N11Client {
                         title: product.title,
                         subtitle: product.title.substring(0, 50),
                         description: product.description,
-                        category: {
-                            id: product.categoryId
-                        },
+                        categoryId: product.categoryId,
                         price: product.price,
+                        salePrice: product.price,
+                        listPrice: product.price,
                         currencyType: 1, // TL
                         preparingDay: 3,
                         shipmentTemplate: product.shipmentTemplate || "STANDART",
-                        images: {
-                            image: (product.images || []).slice(0, 8).map((url: string, index: number) => ({
-                                url: url,
-                                order: index + 1
-                            }))
-                        },
-                        attributes: {
-                            attribute: (product.attributes || []).map((attr: any) => ({
-                                name: attr.name,
-                                value: attr.value
-                            }))
-                        },
-                        stockItems: {
-                            stockItem: [{
-                                quantity: product.quantity || 0,
-                                sellerStockCode: product.stockCode || product.sellerCode,
-                                attributes: {
-                                    attribute: [] 
-                                },
-                                optionPrice: product.price
-                            }]
-                        },
-                        vatRate: 20,
-                        approvalStatus: 1 // Active
+                        images: (product.images || []).slice(0, 8).map((url: string, index: number) => ({
+                            url: url,
+                            order: index + 1
+                        })),
+                        attributes: (product.attributes || []).map((attr: any) => ({
+                            name: attr.name,
+                            value: attr.value
+                        })),
+                        quantity: product.quantity || 0,
+                        stockCode: product.stockCode || product.sellerCode,
+                        vatRate: 20
                     }]
                 }
             };
             
-            console.log("N11 SaveProduct Payload (Strict):", JSON.stringify(payload, null, 2));
+            console.log("N11 SaveProduct Payload (Hybrid):", JSON.stringify(payload, null, 2));
             const data = await this.callRest("/ms/product/tasks/product-create", "POST", payload);
             return { success: true, taskId: data.id };
         } catch (error: any) {
