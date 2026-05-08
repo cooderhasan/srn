@@ -138,6 +138,19 @@ function SortableRow({ category, onEdit, onDelete, onToggleStatus, reorderMode }
                 )}
             </TableCell>
             <TableCell>
+                <div className="flex gap-2">
+                    <div title={category.trendyolCategoryId ? "Trendyol Bağlı" : "Trendyol Bağlı Değil"}>
+                        <div className={`w-2 h-2 rounded-full ${category.trendyolCategoryId ? "bg-orange-500" : "bg-gray-200"}`} />
+                    </div>
+                    <div title={category.n11CategoryId ? "N11 Bağlı" : "N11 Bağlı Değil"}>
+                        <div className={`w-2 h-2 rounded-full ${category.n11CategoryId ? "bg-purple-500" : "bg-gray-200"}`} />
+                    </div>
+                    <div title={category.hbCategoryId ? "Hepsiburada Bağlı" : "Hepsiburada Bağlı Değil"}>
+                        <div className={`w-2 h-2 rounded-full ${category.hbCategoryId ? "bg-orange-600" : "bg-gray-200"}`} />
+                    </div>
+                </div>
+            </TableCell>
+            <TableCell>
                 <Switch
                     checked={category.isActive}
                     onCheckedChange={(checked) =>
@@ -326,6 +339,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
     const [hbCategoryId, setHbCategoryId] = useState<string | undefined>(undefined);
     const [googleProductCategory, setGoogleProductCategory] = useState<string | undefined>(undefined);
     const [searchTerm, setSearchTerm] = useState("");
+    const [filterMissingMapping, setFilterMissingMapping] = useState<"all" | "trendyol" | "n11" | "hb" | "any">("all");
     const [currentPage, setCurrentPage] = useState(1);
     const [reorderMode, setReorderMode] = useState<"none" | "sidebar" | "header">("none");
     const [localCategories, setLocalCategories] = useState<Category[]>(categories);
@@ -335,15 +349,24 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
         setLocalCategories(categories);
     }, [categories]);
 
-    const ITEMS_PER_PAGE = reorderMode === "none" ? 10 : 1000; // Show all when reordering
+    const ITEMS_PER_PAGE = reorderMode === "none" ? 50 : 1000; // Increased to 50
 
-    // Filter categories based on search
+    // Filter categories based on search and mapping status
     const filteredCategories = localCategories.filter(category => {
         if (reorderMode === "header" && !category.isInHeader && !searchTerm) return false;
 
-        return category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (category.parent?.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
             category.slug.toLowerCase().includes(searchTerm.toLowerCase());
+
+        if (!matchesSearch) return false;
+
+        if (filterMissingMapping === "trendyol") return !category.trendyolCategoryId;
+        if (filterMissingMapping === "n11") return !category.n11CategoryId;
+        if (filterMissingMapping === "hb") return !category.hbCategoryId;
+        if (filterMissingMapping === "any") return !category.trendyolCategoryId || !category.n11CategoryId || !category.hbCategoryId;
+
+        return true;
     });
 
     // Sort based on mode
@@ -607,16 +630,29 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                             size="sm"
                             onClick={() => setReorderMode("sidebar")}
                         >
-                            Yan Menü Sırası
+                            Yan Menü
                         </Button>
                         <Button
                             variant={reorderMode === "header" ? "secondary" : "ghost"}
                             size="sm"
                             onClick={() => setReorderMode("header")}
                         >
-                            Üst Menü Sırası
+                            Üst Menü
                         </Button>
                     </div>
+
+                    <Select value={filterMissingMapping} onValueChange={(val: any) => { setFilterMissingMapping(val); setCurrentPage(1); }}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Eşleştirme Filtresi" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Tüm Kategoriler</SelectItem>
+                            <SelectItem value="any">Eksik Eşleştirmeler</SelectItem>
+                            <SelectItem value="trendyol">Trendyol Eksik</SelectItem>
+                            <SelectItem value="n11">N11 Eksik</SelectItem>
+                            <SelectItem value="hb">Hepsiburada Eksik</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -825,6 +861,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                                 <TableHead>Kategori Adı</TableHead>
                                 <TableHead>Slug</TableHead>
                                 <TableHead>Ürün Sayısı</TableHead>
+                                <TableHead>Entegrasyon</TableHead>
                                 <TableHead>Durum</TableHead>
                                 <TableHead className="text-right">İşlemler</TableHead>
                             </TableRow>
