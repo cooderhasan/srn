@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { saveN11Config } from "./actions";
 import { toast } from "sonner";
 import { useEffect } from "react";
+import { N11TestButton } from "./n11-test-button";
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -77,7 +78,10 @@ export function N11SettingsForm({ initialData }: Props) {
                         <Label htmlFor="isActive">N11 Entegrasyonunu Aktifleştir</Label>
                     </div>
 
-                    <SubmitButton />
+                    <div className="grid grid-cols-2 gap-4 pt-4">
+                        <SubmitButton />
+                        <N11TestButton />
+                    </div>
                 </form>
             </CardContent>
         </Card>
