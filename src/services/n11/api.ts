@@ -73,12 +73,17 @@ export class N11Client {
     async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
-            // Use /cdn/categories for testing connection as per doc
+            // Use /cdn/categories for testing connection
             const data = await this.callRest("/cdn/categories");
-            if (data && Array.isArray(data)) {
+            
+            // Flexible check: is it an array or an object containing categories?
+            if (Array.isArray(data) && data.length > 0) {
+                return { success: true, message: "Bağlantı Başarılı" };
+            } else if (data && Array.isArray(data.categories) && data.categories.length > 0) {
                 return { success: true, message: "Bağlantı Başarılı" };
             }
-            return { success: false, message: "Kategori listesi alınamadı." };
+            
+            return { success: false, message: "Bağlantı kuruldu ancak boş veri döndü." };
         } catch (error: any) {
             return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
         }
