@@ -562,12 +562,29 @@ model N11Product {
   isSynced       Boolean  @default(false)
   lastSyncError  String?
   lastSyncedAt   DateTime?
+  
+  tasks          N11Task[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@unique([productId])
   @@map("n11_products")
+}
+
+model N11Task {
+  id             String   @id @default(cuid())
+  n11ProductId   String
+  n11Product     N11Product @relation(fields: [n11ProductId], references: [id], onDelete: Cascade)
+  
+  taskId         String   @unique
+  status         String   // PENDING, COMPLETED, FAILED
+  errorMessage   String?  @db.Text
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("n11_tasks")
 }
 
 model HepsiburadaConfig {

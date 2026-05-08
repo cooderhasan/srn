@@ -32,6 +32,9 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { N11TaskHistory } from "./n11-task-history";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { History, LayoutList } from "lucide-react";
 
 interface N11ProductListProps {
     initialProducts: any[];
@@ -139,18 +142,30 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-4 bg-white dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                        placeholder="N11 ürünlerini ara..." 
-                        className="pl-10 border-none bg-gray-50 dark:bg-gray-800/50 focus-visible:ring-purple-500"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
+        <Tabs defaultValue="products" className="space-y-6">
+            <TabsList className="bg-purple-50/50 dark:bg-purple-900/20 p-1 rounded-xl">
+                <TabsTrigger value="products" className="rounded-lg gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+                    <LayoutList className="w-4 h-4" />
+                    Ürün Listesi
+                </TabsTrigger>
+                <TabsTrigger value="history" className="rounded-lg gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+                    <History className="w-4 h-4" />
+                    İşlem Geçmişi
+                </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="products" className="space-y-4">
+                <div className="flex items-center gap-4 bg-white dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input 
+                            placeholder="N11 ürünlerini ara..." 
+                            className="pl-10 border-none bg-gray-50 dark:bg-gray-800/50 focus-visible:ring-purple-500"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
                 </div>
-            </div>
 
             <div className="bg-white dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
                 <Table>
@@ -272,6 +287,11 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
-    );
+        </TabsContent>
+
+        <TabsContent value="history">
+            <N11TaskHistory />
+        </TabsContent>
+    </Tabs>
+);
 }

@@ -375,6 +375,22 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
         const result = await client.saveProduct(payload);
 
         if (result.success && result.taskId) {
+            // Get or create N11 product record
+            const n11Product = await (prisma as any).n11Product.upsert({
+                where: { productId: product.id },
+                update: {},
+                create: { productId: product.id, isSynced: false }
+            });
+
+            // Create Task record
+            await (prisma as any).n11Task.create({
+                data: {
+                    n11ProductId: n11Product.id,
+                    taskId: result.taskId,
+                    status: "PENDING"
+                }
+            });
+
             // Wait for 5 seconds for N11 to process the task
             await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -385,15 +401,27 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                 const task = taskRes.data;
                 const status = task.status; // COMPLETED, FAILED, IN_PROGRESS
                 
+                // Update Task status in DB
+                await (prisma as any).n11Task.update({
+                    where: { taskId: result.taskId },
+                    data: { 
+                        status: status,
+                        errorMessage: status === "FAILED" ? (task.items?.[0]?.errorMsg || "İşleme hatası") : null
+                    }
+                });
+
                 if (status === "COMPLETED") {
-                    await (prisma as any).n11Product.upsert({
-                        where: { productId: product.id },
-                        update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null },
-                        create: { productId: product.id, isSynced: true, lastSyncedAt: new Date() }
+                    await (prisma as any).n11Product.update({
+                        where: { id: n11Product.id },
+                        data: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null }
                     });
                     return { success: true, message: "Ürün N11'e başarıyla yüklendi ve yayınlandı." };
                 } else if (status === "FAILED") {
                     const errorMsg = task.items?.[0]?.errorMsg || "N11 tarafında işleme hatası oluştu.";
+                    await (prisma as any).n11Product.update({
+                        where: { id: n11Product.id },
+                        data: { lastSyncError: errorMsg }
+                    });
                     return { success: false, message: "N11 İşleme Hatası: " + errorMsg };
                 } else {
                     return { success: true, message: `Ürün N11 kuyruğuna alındı ancak henüz sonuçlanmadı. Takip No: ${result.taskId}. Birazdan tekrar kontrol edebilirsiniz.` };
@@ -408,4 +436,27 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
+}
+
+export async function getN11Tasks() {
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
+        throw new Error("Unauthorized");
+    }
+
+    const tasks = await (prisma as any).n11Task.findMany({
+        include: {
+            n11Product: {
+                include: {
+                    product: {
+                        select: { name: true }
+                    }
+                }
+            }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50
+    });
+
+    return tasks;
 }
