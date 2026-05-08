@@ -254,7 +254,7 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
             </div>
 
             <Dialog open={showAttrModal} onOpenChange={setShowAttrModal}>
-                <DialogContent className="sm:max-w-[700px] rounded-3xl border-purple-100 dark:border-purple-900/30 overflow-hidden flex flex-col max-h-[90vh]">
+                <DialogContent className="sm:max-w-[700px] rounded-3xl border-purple-100 dark:border-purple-900/30 flex flex-col max-h-[90vh]">
                     <DialogHeader className="px-6 pt-6">
                         <DialogTitle>N11 Özelliklerini Eşleştir</DialogTitle>
                         <DialogDescription>Zorunlu alanları doldurarak ürünü N11'e kaydedin.</DialogDescription>
@@ -270,17 +270,19 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
                                     const hasValues = attr.values && attr.values.length > 0;
 
                                     return (
-                                        <div key={attr.id} className="space-y-1.5">
-                                            <Label className={`text-[11px] font-semibold ${isMissing ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
-                                                {attr.name} {attr.mandatory && <span className="text-red-500">*</span>}
-                                            </Label>
-                                            
-                                            {hasValues ? (
-                                                <Select 
-                                                    onValueChange={(val) => setAttrMappings((prev: any) => ({ ...prev, [attr.id]: val }))}
-                                                    value={attrMappings[attr.id] || ""}
-                                                >
-                                                    <SelectTrigger className={`h-9 text-sm focus:ring-purple-500 ${isMissing ? 'border-red-300 bg-red-50/50' : 'border-gray-200 dark:border-gray-800'}`}>
+                                                <div className="flex items-center justify-between">
+                                                    <Label className={`text-[11px] font-semibold ${isMissing ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                                                        {attr.name} {attr.mandatory && <span className="text-red-500">*</span>}
+                                                    </Label>
+                                                    <span className="text-[9px] text-gray-400">{attr.values.length} seçenek</span>
+                                                </div>
+                                                
+                                                {hasValues ? (
+                                                    <Select 
+                                                        onValueChange={(val) => setAttrMappings((prev: any) => ({ ...prev, [attr.id]: val }))}
+                                                        value={attrMappings[attr.id] || ""}
+                                                    >
+                                                    <SelectTrigger className={`w-full h-9 text-sm focus:ring-purple-500 ${isMissing ? 'border-red-300 bg-red-50/50' : 'border-gray-200 dark:border-gray-800'}`}>
                                                         <SelectValue placeholder={`${attr.name} seçin...`} />
                                                     </SelectTrigger>
                                                     <SelectContent position="popper" className="z-[100] max-h-[300px]">
