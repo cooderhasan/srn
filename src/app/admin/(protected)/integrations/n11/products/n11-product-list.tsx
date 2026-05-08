@@ -207,10 +207,15 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
                                             {isSynced ? (
-                                                <Button size="sm" variant="outline" className="h-8 border-purple-200 text-purple-600" onClick={() => handleQuickSync(product)} disabled={loadingProductId === product.id}>
-                                                    <RefreshCcw className={`w-3 h-3 mr-1 ${loadingProductId === product.id ? 'animate-spin' : ''}`} />
-                                                    Sync
-                                                </Button>
+                                                <>
+                                                    <Button size="sm" variant="outline" title="Özellikleri Düzenle" className="h-8 w-8 p-0 border-purple-200 text-purple-600" onClick={() => handleOpenWizard(product)} disabled={loadingProductId === product.id}>
+                                                        <Box className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                    <Button size="sm" variant="outline" className="h-8 border-purple-200 text-purple-600" onClick={() => handleQuickSync(product)} disabled={loadingProductId === product.id}>
+                                                        <RefreshCcw className={`w-3 h-3 mr-1 ${loadingProductId === product.id ? 'animate-spin' : ''}`} />
+                                                        Sync
+                                                    </Button>
+                                                </>
                                             ) : (
                                                 <Button size="sm" className="h-8 bg-purple-600 hover:bg-purple-700 text-white" onClick={() => handleOpenWizard(product)} disabled={loadingProductId === product.id || !mappedCat}>
                                                     <Send className="w-3 h-3 mr-1" />
