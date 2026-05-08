@@ -239,6 +239,8 @@ export class N11Client {
                         listPrice: product.price,
                         currencyType: 1, // TL
                         preparingDay: 3,
+                        productCondition: 1, // 1 = Yeni Ürün
+                        domestic: true, // Yerli Üretim
                         shipmentTemplate: product.shipmentTemplate || "Karaaslan",
                         images: (product.images || []).slice(0, 8).map((url: string, index: number) => ({
                             url: url,
