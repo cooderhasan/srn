@@ -466,19 +466,22 @@ export async function getN11Tasks() {
     if (pendingTasks.length > 0) {
         const { N11Client } = await import("@/services/n11/api");
         const client = new N11Client();
+        await client.init(); // CRITICAL: Initialize with credentials
 
         for (const task of pendingTasks) {
             try {
                 const res = await client.getTaskDetails(task.taskId);
-                if (res.success) {
+                if (res.success && res.data) {
                     const n11Status = res.data.status;
                     if (n11Status !== task.status) {
                         // Update in DB
+                        const errorMsg = n11Status === "FAILED" ? (res.data.items?.[0]?.errorMsg || "İşleme hatası") : null;
+                        
                         await (prisma as any).n11Task.update({
                             where: { id: task.id },
                             data: { 
                                 status: n11Status,
-                                errorMessage: n11Status === "FAILED" ? (res.data.items?.[0]?.errorMsg || "İşleme hatası") : null
+                                errorMessage: errorMsg
                             }
                         });
 
