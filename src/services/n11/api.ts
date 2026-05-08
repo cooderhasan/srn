@@ -131,7 +131,18 @@ export class N11Client {
         try {
             // Official Doc: GET https://api.n11.com/cdn/categories
             const data = await this.callRest("/cdn/categories");
-            return { success: true, categories: data || [] };
+            
+            // Robust check: doc says raw array, but let's handle object wrapping too
+            let categories = [];
+            if (Array.isArray(data)) {
+                categories = data;
+            } else if (data && Array.isArray(data.categories)) {
+                categories = data.categories;
+            } else if (data && Array.isArray(data.content)) {
+                categories = data.content;
+            }
+
+            return { success: true, categories };
         } catch (error: any) {
             return { success: false, message: error.message };
         }
@@ -150,9 +161,10 @@ export class N11Client {
 
             const flatList: any[] = [];
             const traverse = (cats: any[], path = "") => {
+                if (!Array.isArray(cats)) return; // Safety check
                 for (const cat of cats) {
                     const currentPath = path ? `${path} > ${cat.name}` : cat.name;
-                    if (!cat.subCategories || cat.subCategories.length === 0) {
+                    if (!cat.subCategories || !Array.isArray(cat.subCategories) || cat.subCategories.length === 0) {
                         flatList.push({ id: cat.id, name: currentPath });
                     } else {
                         traverse(cat.subCategories, currentPath);
