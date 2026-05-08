@@ -7,7 +7,7 @@ interface N11Creds {
 }
 
 export class N11Client {
-    private baseUrl = "https://api.n11.com/rest";
+    private baseUrl = "https://api.n11.com"; // Base URL changed to main domain
     private creds: N11Creds | null = null;
 
     constructor(creds?: N11Creds) {
@@ -36,7 +36,10 @@ export class N11Client {
     private async callRest(endpoint: string, method = "GET", body?: any) {
         if (!this.creds) await this.init();
 
-        const url = `${this.baseUrl}${endpoint}`;
+        // Remove double slashes if any
+        const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+        const url = `${this.baseUrl}${cleanEndpoint}`;
+        
         const options: RequestInit = {
             method,
             headers: this.getHeaders(),
@@ -65,101 +68,45 @@ export class N11Client {
     }
 
     /**
-     * Test connection with detailed error reporting
+     * Test connection using GetCategories as per doc
      */
     async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
-            if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
-
-            // Fetch top level categories as a connection test
-            const data = await this.callRest("/categories");
-            
-            if (data.status === "success" || data.categories) {
-                return { success: true, message: "Tamam" };
+            // Use /cdn/categories for testing connection as per doc
+            const data = await this.callRest("/cdn/categories");
+            if (data && Array.isArray(data)) {
+                return { success: true, message: "Bağlantı Başarılı" };
             }
-
-            return { success: false, message: data.message || "Bilinmeyen N11 Hatası" };
-
+            return { success: false, message: "Kategori listesi alınamadı." };
         } catch (error: any) {
             return { success: false, message: "Bağlantı Kurulamadı: " + error.message };
         }
     }
 
-    // --- Product Service ---
-
-    async saveProduct(product: any) {
-        try {
-            const payload = {
-                productSellerCode: product.sellerCode,
-                title: product.title,
-                subtitle: product.subtitle || "",
-                description: product.description,
-                category: {
-                    id: product.categoryId
-                },
-                price: product.price,
-                currencyType: "TL",
-                images: product.images.map((url: string, index: number) => ({
-                    url: url,
-                    order: index + 1
-                })),
-                approvalStatus: 1,
-                preparingDay: 3,
-                stockItems: [{
-                    quantity: product.quantity,
-                    sellerStockCode: product.stockCode,
-                    optionPrice: product.price
-                }]
-            };
-
-            const data = await this.callRest("/products", "POST", payload);
-            return { success: true, message: "Başarılı", data };
-        } catch (error: any) {
-            return { success: false, message: error.message };
-        }
-    }
-
-    // --- Stock/Price Update ---
-
-    async updateStock(item: { sellerStockCode: string, quantity: number }) {
-        try {
-            const data = await this.callRest(`/products/stock/${item.sellerStockCode}`, "PUT", {
-                quantity: item.quantity
-            });
-            return { success: true, data };
-        } catch (error: any) {
-            return { success: false, message: error.message };
-        }
-    }
-
-    async updatePrice(item: { sellerStockCode: string, price: number }) {
-        try {
-            const data = await this.callRest(`/products/price/${item.sellerStockCode}`, "PUT", {
-                price: item.price,
-                currencyType: "TL"
-            });
-            return { success: true, data };
-        } catch (error: any) {
-            return { success: false, message: error.message };
-        }
-    }
-
     // --- Order Service ---
 
-    async getOrders(status = "New") {
+    async getOrders(status: "Created" | "Picking" | "Shipped" | "Delivered" | "Cancelled" = "Created") {
         try {
-            // N11 REST Order statuses: New, Approved, Rejected, Shipped, Delivered, Completed, Claimed, Lateness
-            const data = await this.callRest(`/orders?status=${status}`);
+            // Updated to official endpoint: /rest/delivery/v1/shipmentPackages
+            const data = await this.callRest(`/rest/delivery/v1/shipmentPackages?status=${status}&size=100&orderByDirection=DESC`);
             return { success: true, ...data };
         } catch (error: any) {
             return { success: false, message: error.message };
         }
     }
 
-    async acceptOrder(orderId: string) {
+    /**
+     * Approves an order by its line IDs
+     * Official Doc: PUT https://api.n11.com/rest/order/v1/update
+     */
+    async acceptOrder(lineIds: number[]) {
         try {
-            const data = await this.callRest(`/orders/${orderId}/accept`, "POST");
+            const payload = {
+                lines: lineIds.map(id => ({ lineId: id })),
+                status: "Picking"
+            };
+            const data = await this.callRest("/rest/order/v1/update", "PUT", payload);
             return { success: true, data };
         } catch (error: any) {
             return { success: false, message: error.message };
@@ -170,49 +117,39 @@ export class N11Client {
 
     async getTopLevelCategories() {
         try {
-            const data = await this.callRest("/categories");
-            return { success: true, categories: data.categories || [] };
+            // Official Doc: GET https://api.n11.com/cdn/categories
+            const data = await this.callRest("/cdn/categories");
+            return { success: true, categories: data || [] };
         } catch (error: any) {
             return { success: false, message: error.message };
         }
     }
 
     async getSubCategories(categoryId: number) {
-        try {
-            const data = await this.callRest(`/categories/${categoryId}/subcategories`);
-            return { success: true, categories: data.subCategories || [] };
-        } catch (error: any) {
-            return { success: false, message: error.message };
-        }
+        // Since GetCategories returns the whole tree, we might not need this,
+        // but keeping a placeholder for consistency if needed.
+        return { success: false, message: "N11 REST API tüm ağacı tek seferde döndürür." };
     }
 
     async getAllCategories() {
         try {
-            const res = await this.getTopLevelCategories();
-            if (!res.success) return res;
+            const categories = await this.getTopLevelCategories();
+            if (!categories.success) return categories;
 
-            const allCategories: any[] = [];
-            
-            const fetchRecursive = async (cats: any[], parentPath = "") => {
+            const flatList: any[] = [];
+            const traverse = (cats: any[], path = "") => {
                 for (const cat of cats) {
-                    const fullPath = parentPath ? `${parentPath} > ${cat.name}` : cat.name;
-                    allCategories.push({ id: cat.id, name: fullPath });
-                    
-                    // N11 usually marks leaf categories or we can check subCategories
-                    // To keep it simple and avoid 1000s of requests, we might only fetch top 2 levels
-                    // OR if the API supports a full tree, we use it.
-                    // Assuming we need sub-requests for N11 REST:
-                    if (cat.hasSubCategory) {
-                         const sub = await this.getSubCategories(cat.id);
-                         if (sub.success) {
-                             await fetchRecursive(sub.categories, fullPath);
-                         }
+                    const currentPath = path ? `${path} > ${cat.name}` : cat.name;
+                    if (!cat.subCategories || cat.subCategories.length === 0) {
+                        flatList.push({ id: cat.id, name: currentPath });
+                    } else {
+                        traverse(cat.subCategories, currentPath);
                     }
                 }
             };
 
-            await fetchRecursive(res.categories);
-            return { success: true, categories: allCategories };
+            traverse(categories.categories);
+            return { success: true, categories: flatList };
         } catch (error: any) {
             return { success: false, message: error.message };
         }
@@ -220,15 +157,34 @@ export class N11Client {
 
     async getCategoryAttributes(categoryId: number) {
         try {
-            const data = await this.callRest(`/categories/${categoryId}/attributes`);
+            // Official Doc: GET https://api.n11.com/cdn/category/{categoryId}/attribute
+            const data = await this.callRest(`/cdn/category/${categoryId}/attribute`);
             
             const attributes = (data.categoryAttributes || []).map((attr: any) => ({
-                id: attr.id,
-                name: attr.name,
-                mandatory: attr.mandatory === true,
+                id: attr.attributeId,
+                name: attr.attributeName,
+                mandatory: attr.isMandatory === true,
             }));
             
             return { success: true, attributes };
+        } catch (error: any) {
+            return { success: false, message: error.message };
+        }
+    }
+
+    // --- Product Service (Tasks) ---
+
+    async updateStockAndPrice(skus: any[]) {
+        try {
+            // Official Doc: POST https://api.n11.com/ms/product/tasks/price-stock-update
+            const payload = {
+                payload: {
+                    integrator: "SRN_Entegrasyon",
+                    skus: skus
+                }
+            };
+            const data = await this.callRest("/ms/product/tasks/price-stock-update", "POST", payload);
+            return { success: true, taskId: data.id };
         } catch (error: any) {
             return { success: false, message: error.message };
         }

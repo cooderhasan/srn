@@ -193,94 +193,90 @@ export async function syncOrdersFromN11() {
             apiSecret: config.apiSecret
         });
 
-        // Get Orders (Status: New)
-        const response = await client.getOrders("New");
-        const orders = response.orders || [];
+        // Official Doc: Fetching "Created" status (New orders)
+        const response = await client.getOrders("Created");
+        if (!response.success) throw new Error(response.message);
 
-        if (orders.length === 0) return { success: true, message: "Yeni N11 siparişi yok." };
-
+        // Official Doc: Orders are in 'content' array as packages
+        const packages = response.content || [];
         let importedCount = 0;
 
-        for (const n11Order of orders) {
+        for (const pkg of packages) {
+            // Check if this order package already exists in our DB
             const existing = await prisma.order.findUnique({
-                where: { orderNumber: n11Order.orderNumber }
+                where: { orderNumber: pkg.orderNumber }
             });
 
             if (existing) continue;
 
-            const orderItems = [];
+            const orderItems: any[] = [];
+            const lineIds: number[] = [];
             let total = 0;
-            const items = n11Order.orderItemList || [];
 
-            for (const item of items) {
-                // Find product by sellerStockCode (which is our SKU/Barcode)
-                let productId = "";
-                let variantId = null;
-
-                const variant = await prisma.productVariant.findFirst({
-                    where: { OR: [{ sku: item.sellerStockCode }, { barcode: item.sellerStockCode }] },
-                    include: { product: true }
+            // Official Doc: Each package has 'lines'
+            for (const line of (pkg.lines || [])) {
+                lineIds.push(line.orderLineId);
+                
+                // Find product by barcode or stockCode
+                const product = await prisma.product.findFirst({
+                    where: {
+                        OR: [
+                            { barcode: line.barcode || undefined },
+                            { sku: line.stockCode || undefined }
+                        ]
+                    }
                 });
 
-                if (variant) {
-                    productId = variant.productId;
-                    variantId = variant.id;
-                } else {
-                    const product = await prisma.product.findFirst({
-                        where: { OR: [{ sku: item.sellerStockCode }, { barcode: item.sellerStockCode }] }
-                    });
-                    if (product) productId = product.id;
-                }
-
-                if (productId) {
-                    const price = Number(item.price || 0);
-                    const qty = Number(item.quantity || 1);
-
+                if (product) {
                     orderItems.push({
-                        productId,
-                        variantId,
-                        productName: item.productName || "N11 Ürünü",
-                        quantity: qty,
-                        unitPrice: price,
-                        discountRate: 0,
-                        vatRate: 20,
-                        lineTotal: price * qty
+                        productId: product.id,
+                        quantity: line.quantity,
+                        unitPrice: line.price,
+                        productName: line.productName,
+                        lineTotal: line.price * line.quantity,
+                        vatRate: line.vatRate || 20
                     });
-                    total += price * qty;
+                    total += line.price * line.quantity;
+
+                    // Update local stock
+                    await prisma.product.update({
+                        where: { id: product.id },
+                        data: { stock: { decrement: line.quantity } }
+                    });
                 }
             }
 
             if (orderItems.length > 0) {
                 await prisma.order.create({
                     data: {
-                        orderNumber: n11Order.orderNumber,
-                        status: "CONFIRMED", // Start as confirmed since we auto-accept
-                        total: Number(n11Order.totalAmount || total),
+                        orderNumber: pkg.orderNumber,
+                        status: "CONFIRMED",
+                        total: pkg.totalAmount || total,
                         subtotal: total,
-                        discountAmount: 0,
+                        discountAmount: pkg.totalDiscountAmount || 0,
                         appliedDiscountRate: 0,
-                        vatAmount: total * 0.2,
-                        guestEmail: n11Order.buyer?.email || "n11@customer.com",
+                        vatAmount: total * 0.2, // Default VAT
+                        guestEmail: pkg.customerEmail || "n11@customer.com",
                         shippingAddress: {
-                            fullName: n11Order.shippingAddress?.fullName || "N11 Müşterisi",
-                            address: n11Order.shippingAddress?.address || "",
-                            city: n11Order.shippingAddress?.city || "",
-                            district: n11Order.shippingAddress?.district || ""
+                            fullName: pkg.shippingAddress?.fullName || pkg.customerfullName || "N11 Müşterisi",
+                            address: pkg.shippingAddress?.address || "",
+                            city: pkg.shippingAddress?.city || "",
+                            district: pkg.shippingAddress?.district || ""
                         },
                         items: { create: orderItems }
                     }
                 });
 
-                // AUTOMATIC STOCK CONFIRMATION (Accept Order in N11)
+                // AUTOMATIC STOCK CONFIRMATION (Official: PUT /rest/order/v1/update with status 'Picking')
                 try {
-                    const acceptRes = await client.acceptOrder(n11Order.id);
+                    const acceptRes = await client.acceptOrder(lineIds);
                     if (acceptRes.success) {
-                        console.log(`✅ N11 Order ${n11Order.orderNumber} auto-accepted.`);
+                        console.log(`✅ N11 Package ${pkg.id} (Order ${pkg.orderNumber}) auto-accepted via Picking status.`);
                     } else {
-                        console.error(`❌ N11 Auto-Accept Error:`, acceptRes.message);
+                        console.error(`❌ N11 Auto-Accept Error for Order ${pkg.orderNumber}:`, acceptRes.message);
                     }
                 } catch (acceptErr) {
-                    console.error(`❌ N11 Auto-Accept Exception:`, acceptErr);
+                    console.error(`❌ N11 Auto-Accept Exception for Order ${pkg.orderNumber}:`, acceptErr);
                 }
 
                 importedCount++;
