@@ -264,8 +264,9 @@ export class N11Client {
 
     async getTaskDetails(taskId: string) {
         try {
-            // Official Doc: GET https://api.n11.com/ms/product/tasks/{taskId}
-            const data = await this.callRest(`/ms/product/tasks/${taskId}`);
+            // Official Doc: GET https://api.n11.com/ms/product/v1/tasks/{taskId}
+            // "No Mapping" error suggests the version or path was missing
+            const data = await this.callRest(`/ms/product/v1/tasks/${taskId}`);
             console.log(`N11 Task Status Check [${taskId}]:`, JSON.stringify(data));
             return { success: true, data };
         } catch (error: any) {
