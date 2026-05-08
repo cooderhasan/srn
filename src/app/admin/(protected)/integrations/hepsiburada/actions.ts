@@ -198,10 +198,11 @@ export async function syncOrdersFromHepsiburada() {
         });
 
         // 1. Fetch HB Orders
-        // HB API returns array of orders
-        const orders = await client.getOrders("New"); // Status param handling needed in client if supported
+        // HB API returns { data: [...], totalCount: X }
+        const response = await client.getOrders({ status: "New" }); 
+        const orders = response.data || [];
 
-        if (!orders || orders.length === 0) return { success: true, message: "Yeni Hepsiburada siparişi yok." };
+        if (orders.length === 0) return { success: true, message: "Yeni Hepsiburada siparişi yok." };
 
         // 2. Import logic
         let importedCount = 0;

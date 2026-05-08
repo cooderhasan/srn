@@ -87,9 +87,52 @@ export function HepsiburadaSettingsForm({ initialData }: Props) {
                         <Label htmlFor="isActive">Entegrasyonu Aktifleştir</Label>
                     </div>
 
-                    <SubmitButton />
+                    <div className="grid grid-cols-2 gap-4">
+                        <SubmitButton />
+                        <TestConnectionButton />
+                    </div>
                 </form>
             </CardContent>
         </Card>
+    );
+}
+
+import { testHepsiburadaConnection } from "./actions";
+import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useState } from "react";
+
+function TestConnectionButton() {
+    const [loading, setLoading] = useState(false);
+
+    const handleTest = async () => {
+        setLoading(true);
+        try {
+            const res = await testHepsiburadaConnection();
+            if (res.success) {
+                toast.success(res.message, { icon: <CheckCircle2 className="w-5 h-5 text-green-500" /> });
+            } else {
+                toast.error(res.message, { icon: <AlertCircle className="w-5 h-5 text-red-500" /> });
+            }
+        } catch (error) {
+            toast.error("Bağlantı testi sırasında bir hata oluştu.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Button 
+            type="button" 
+            variant="outline" 
+            onClick={handleTest} 
+            disabled={loading}
+            className="w-full border-blue-200 text-blue-700 hover:bg-blue-50"
+        >
+            {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+                "Bağlantıyı Test Et"
+            )}
+        </Button>
     );
 }

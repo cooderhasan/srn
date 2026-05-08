@@ -20,6 +20,15 @@ export async function setupRepeatableJobs() {
     });
 
     console.log("⏰ Trendyol Order Sync Cron (15m) registered.");
+
+    // Her 20 dakikada bir Hepsiburada siparişlerini çek
+    await queue.add("hepsiburada-order-sync", {}, {
+        repeat: {
+            pattern: '*/20 * * * *' // Every 20 minutes
+        },
+        jobId: 'hepsiburada-order-sync-cron'
+    });
+    console.log("⏰ Hepsiburada Order Sync Cron (20m) registered.");
 }
 
 export function initializeWorker() {
@@ -42,6 +51,14 @@ export function initializeWorker() {
                     return;
                 }
 
+                if (job.name === "hepsiburada-order-sync") {
+                    console.log("🔄 Otomatik Hepsiburada Sipariş Senkronizasyonu başlatıldı...");
+                    const { syncOrdersFromHepsiburada } = await import("@/app/admin/(protected)/integrations/hepsiburada/actions");
+                    const result = await syncOrdersFromHepsiburada();
+                    console.log(`✅ Cron Sonucu: ${result.message}`);
+                    return;
+                }
+
                 // Manual Product Sync Jobs
                 if (job.data.marketplace === "trendyol") {
                     const { syncProductsToTrendyol } = await import("@/app/admin/(protected)/integrations/trendyol/actions");
@@ -49,14 +66,14 @@ export function initializeWorker() {
                     if (!result.success) throw new Error(result.message);
                     console.log(`✅ Tamamlandı: Trendyol Sync - ${result.message}`);
                 } else if (job.data.marketplace === "n11") {
-                    const n11Config = await prisma.siteSettings.findUnique({ where: { key: "n11Config" } });
+                    const n11Config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
                     if (n11Config) {
                         const result = await syncProductsToN11(job.data.productIds);
                         if (!result.success) throw new Error(result.message);
                         console.log(`✅ Tamamlandı: N11 Sync - ${result.message}`);
                     }
                 } else if (job.data.marketplace === "hepsiburada") {
-                    const hbConfig = await prisma.siteSettings.findUnique({ where: { key: "hepsiburadaConfig" } });
+                    const hbConfig = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
                     if (hbConfig) {
                         const { syncProductsToHepsiburada } = await import("@/app/admin/(protected)/integrations/hepsiburada/actions");
                         const result = await syncProductsToHepsiburada(job.data.productIds);

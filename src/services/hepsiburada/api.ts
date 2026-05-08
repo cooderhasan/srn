@@ -109,20 +109,31 @@ export class HepsiburadaClient {
     /**
      * Get Orders
      * GET /orders/merchantid/{merchantId}
+     * status: New, Unacked, Packed, Shipped, Delivered, Cancelled, UnDelivered
      */
-    async getOrders(status = "New") { // Status might be different in HB API
+    async getOrders(options: { status?: string; beginDate?: string; endDate?: string; page?: number; size?: number } = {}) {
         await this.init();
         if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
 
-        // HB Orders Endpoint structure varies. Using standard OMS endpoint pattern.
-        const url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?limit=50`;
+        const { status = "New", page = 0, size = 50 } = options;
+        
+        let url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?status=${status}&page=${page}&size=${size}`;
+        
+        if (options.beginDate) url += `&beginDate=${options.beginDate}`;
+        if (options.endDate) url += `&endDate=${options.endDate}`;
+
+        console.log(`📡 HB Fetching Orders: ${url}`);
 
         const response = await fetch(url, {
-            headers: { "Authorization": this.getAuthHeader() }
+            headers: { 
+                "Authorization": this.getAuthHeader(),
+                "Accept": "application/json"
+            }
         });
 
         if (!response.ok) {
             const errorText = await response.text();
+            console.error(`❌ HB Order API Error: ${response.status}`, errorText);
             throw new Error(`HB Order API Error: ${response.status} - ${errorText}`);
         }
 
