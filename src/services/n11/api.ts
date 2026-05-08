@@ -235,25 +235,31 @@ export class N11Client {
                     integrator: "SRN_Entegrasyon",
                     skus: [{
                         title: product.title,
+                        subtitle: product.title.substring(0, 50),
                         description: product.description,
                         categoryId: product.categoryId,
-                        currencyType: "TL",
+                        currencyType: 1, // 1 = TL as per documentation
                         productMainId: product.sellerCode,
                         preparingDay: 3,
-                        shipmentTemplate: "STANDART",
-                        quantity: product.quantity,
-                        stockCode: product.stockCode,
-                        images: product.images.map((url: string, index: number) => ({
+                        shipmentTemplate: product.shipmentTemplate || "STANDART",
+                        quantity: product.quantity || 0,
+                        stockCode: product.stockCode || product.sellerCode,
+                        images: (product.images || []).slice(0, 8).map((url: string, index: number) => ({
                             url: url,
-                            order: index
+                            order: index + 1 // Start from 1
                         })),
-                        attributes: product.attributes || [],
+                        attributes: (product.attributes || []).map((attr: any) => ({
+                            name: attr.name,
+                            value: attr.value
+                        })),
                         salePrice: product.price,
                         listPrice: product.price,
                         vatRate: 20
                     }]
                 }
             };
+            
+            console.log("N11 SaveProduct Payload:", JSON.stringify(payload, null, 2));
             const data = await this.callRest("/ms/product/tasks/product-create", "POST", payload);
             return { success: true, taskId: data.id };
         } catch (error: any) {
