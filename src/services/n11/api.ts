@@ -47,7 +47,15 @@ export class N11Client {
         }
 
         const response = await fetch(url, options);
-        const data = await response.json();
+        const contentType = response.headers.get("content-type");
+
+        let data: any;
+        if (contentType && contentType.includes("application/json")) {
+            data = await response.json();
+        } else {
+            const text = await response.text();
+            throw new Error(`N11 API Beklenmedik Yanıt (${response.status}): ${text.substring(0, 100)}`);
+        }
 
         if (!response.ok) {
             throw new Error(data.message || `N11 API Hatası: ${response.status}`);
