@@ -373,8 +373,15 @@ export class N11Client {
             const response = await this.callRest("/ms/product/task-details/page-query", "POST", payload);
             console.log(`N11 Full Response [${taskId}]:`, JSON.stringify(response));
             
-            // Handle Spring Data pagination (content instead of items)
-            const items = response.content || response.items || [];
+            // Aggressively search for the items array in N11's varied response structures
+            let items = [];
+            if (response.skus && Array.isArray(response.skus.content)) {
+                items = response.skus.content;
+            } else if (Array.isArray(response.content)) {
+                items = response.content;
+            } else if (Array.isArray(response.items)) {
+                items = response.items;
+            }
             
             const data = {
                 status: response.status || (items.length > 0 ? items[0].status : "PENDING"),
