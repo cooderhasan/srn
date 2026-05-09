@@ -252,11 +252,14 @@ export class N11Client {
                         order: index + 1
                     })),
                     // REST API attributes: id + valueId/customValue (NOT name/value)
-                    attributes: (skuData.attributes || []).map((attr: any) => ({
-                        id: attr.id,
-                        valueId: attr.valueId ?? null,
-                        customValue: attr.customValue ?? null
-                    }))
+                    // Filter out attributes without id - N11 requires id for each attribute
+                    attributes: (skuData.attributes || [])
+                        .filter((attr: any) => attr.id != null && attr.id !== '')
+                        .map((attr: any) => ({
+                            id: attr.id,
+                            valueId: attr.valueId ?? null,
+                            customValue: attr.customValue ?? null
+                        }))
                 };
 
                 // Optional fields - only add if provided

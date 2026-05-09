@@ -376,25 +376,13 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
 
         if (hasVariants) {
             // Variant product: each variant becomes a separate SKU with same productMainId
+            // N11 groups variants by productMainId - each variant is a separate SKU
             const skus = (product as any).variants.map((variant: any, index: number) => {
-                const variantAttributes = [];
+                // Variant title includes color/size for distinction
+                const variantTitle = `${product.name} ${variant.color || ''} ${variant.size || ''}`.trim();
                 
-                // Add variant-specific attributes (e.g., Color, Size)
-                if (variant.color) {
-                    variantAttributes.push({
-                        id: null, // Should be mapped from category attributes
-                        customValue: variant.color
-                    });
-                }
-                if (variant.size) {
-                    variantAttributes.push({
-                        id: null,
-                        customValue: variant.size
-                    });
-                }
-
                 return {
-                    title: `${product.name} ${variant.color || ''} ${variant.size || ''}`.trim(),
+                    title: variantTitle,
                     description: product.description || product.name,
                     categoryId: mappedCat.n11CategoryId,
                     currencyType: "TL",
@@ -408,7 +396,10 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                     vatRate: 20,
                     quantity: variant.stock || 0,
                     images: product.images,
-                    attributes: [...mappedAttributes, ...variantAttributes]
+                    // Only use mapped attributes from UI (with valid IDs)
+                    // Variant-specific info (color/size) goes into title, not attributes
+                    // because N11 requires category attribute IDs for variant attributes
+                    attributes: mappedAttributes
                 };
             });
 
@@ -428,8 +419,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                 quantity: product.stock || 0,
                 images: product.images,
                 attributes: mappedAttributes,
-                // For variant products, we might need to send all variants as separate skus
-                // The saveProduct API accepts array of skus
+                // For variant products, send all variants as separate skus
                 _skus: skus // Internal flag for api.ts to handle
             };
         } else {
