@@ -371,12 +371,14 @@ export class N11Client {
                 }
             };
             const response = await this.callRest("/ms/product/task-details/page-query", "POST", payload);
+            console.log(`N11 Full Response [${taskId}]:`, JSON.stringify(response));
             
-            // The response for page-query has items in a different structure
-            // We need to adapt it to look like the old structure for compatibility
+            // Handle Spring Data pagination (content instead of items)
+            const items = response.content || response.items || [];
+            
             const data = {
-                status: response.status || (response.items && response.items.length > 0 ? response.items[0].status : "PENDING"),
-                items: response.items || []
+                status: response.status || (items.length > 0 ? items[0].status : "PENDING"),
+                items: items
             };
 
             console.log(`N11 Task Status Check [${taskId}]:`, JSON.stringify(data));
