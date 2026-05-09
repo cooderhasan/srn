@@ -372,4 +372,54 @@ export class N11Client {
             return { success: false, message: error.message };
         }
     }
+
+    /**
+     * Fallback for when REST polling is down.
+     * Checks if a product exists on N11 using the SOAP API.
+     */
+    async getProductBySellerCode(sellerCode: string) {
+        if (!this.creds) await this.init();
+        
+        const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sch="http://www.n11.com/ws/schemas">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <sch:GetProductBySellerCodeRequest>
+         <auth>
+            <appKey>${this.creds!.apiKey}</appKey>
+            <appSecret>${this.creds!.apiSecret}</appSecret>
+         </auth>
+         <sellerCode>${sellerCode}</sellerCode>
+      </sch:GetProductBySellerCodeRequest>
+   </soapenv:Body>
+</soapenv:Envelope>`;
+
+        try {
+            const response = await fetch("https://api.n11.com/ws/productService/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "text/xml;charset=UTF-8",
+                    "SOAPAction": ""
+                },
+                body: soapEnvelope
+            });
+            
+            const text = await response.text();
+            
+            if (text.includes("<status>success</status>")) {
+                // Product found and active
+                return { success: true, exists: true, data: text };
+            }
+            
+            if (text.includes("ürün bulunamadı") || text.includes("notFound")) {
+                return { success: true, exists: false };
+            }
+
+            return { success: false, message: "SOAP API Hatası" };
+        } catch (error: any) {
+            return { success: false, message: error.message };
+        }
+    }
 }
+
+

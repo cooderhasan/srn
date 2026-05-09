@@ -545,7 +545,7 @@ export async function getN11Tasks() {
             n11Product: {
                 include: {
                     product: {
-                        select: { name: true }
+                        select: { name: true, sku: true, id: true }
                     }
                 }
             }
@@ -600,7 +600,27 @@ export async function getN11Tasks() {
                         }
                     }
                 } else if (!res.success) {
-                    // Log the connection error in DB so user knows WHY it's pending
+                    // Plan B: Check if product exists via SOAP using sellerCode
+                    // This is useful when REST polling is down but product was actually created
+                    const sku = task.n11Product?.sellerCode || task.n11Product?.product?.sku || task.n11Product?.product?.id;
+                    if (sku) {
+                        console.log(`Polling failed for ${task.taskId}, trying Plan B (SOAP) for SKU: ${sku}`);
+                        const soapRes = await client.getProductBySellerCode(sku);
+                        if (soapRes.success && soapRes.exists) {
+                            console.log(`Product ${sku} found via SOAP fallback! Marking task ${task.taskId} as COMPLETED.`);
+                            await (prisma as any).n11Task.update({
+                                where: { id: task.id },
+                                data: { status: "COMPLETED", errorMessage: null }
+                            });
+                            await (prisma as any).n11Product.update({
+                                where: { id: task.n11ProductId },
+                                data: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null }
+                            });
+                            continue;
+                        }
+                    }
+
+                    // Log the connection error in DB if Plan B didn't find the product
                     await (prisma as any).n11Task.update({
                         where: { id: task.id },
                         data: { errorMessage: `N11 Servis Hatası: ${res.message}` }
