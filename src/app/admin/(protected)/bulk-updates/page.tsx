@@ -4,6 +4,8 @@ import { BulkStockForm } from "@/components/admin/bulk-stock-form";
 import { BulkTrendyolPriceForm } from "@/components/admin/bulk-trendyol-price-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { BulkN11PriceForm } from "@/components/admin/bulk-n11-price-form";
+
 export default async function BulkUpdatesPage() {
     const [categories, brands] = await Promise.all([
         prisma.category.findMany({
@@ -35,9 +37,10 @@ export default async function BulkUpdatesPage() {
             </div>
 
             <Tabs defaultValue="price" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 max-w-[600px]">
+                <TabsList className="grid w-full grid-cols-4 max-w-[800px]">
                     <TabsTrigger value="price">Fiyat Güncelleme</TabsTrigger>
                     <TabsTrigger value="trendyol">Trendyol Fiyatları</TabsTrigger>
+                    <TabsTrigger value="n11">N11 Fiyatları</TabsTrigger>
                     <TabsTrigger value="stock">Stok Güncelleme</TabsTrigger>
                 </TabsList>
                 <TabsContent value="price" className="mt-6">
@@ -45,6 +48,9 @@ export default async function BulkUpdatesPage() {
                 </TabsContent>
                 <TabsContent value="trendyol" className="mt-6">
                     <BulkTrendyolPriceForm categories={categories} brands={brands} />
+                </TabsContent>
+                <TabsContent value="n11" className="mt-6">
+                    <BulkN11PriceForm categories={categories} brands={brands} />
                 </TabsContent>
                 <TabsContent value="stock" className="mt-6">
                     <BulkStockForm categories={categories} brands={brands} />

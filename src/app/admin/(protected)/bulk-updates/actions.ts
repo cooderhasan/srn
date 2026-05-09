@@ -381,3 +381,125 @@ export async function executeBulkTrendyolPriceUpdate(
         throw new Error("Trendyol toplu fiyat güncelleme sırasında hata oluştu.");
     }
 }
+// ==================== N11 PRICE UPDATE ====================
+
+export interface N11PricePreviewResult {
+    id: string;
+    name: string;
+    oldPrice: number;
+    newPrice: number;
+    sku: string | null;
+    barcode: string | null;
+}
+
+export async function previewBulkN11PriceUpdate(
+    criteria: BulkUpdateCriteria,
+    params: PriceUpdateParams
+): Promise<N11PricePreviewResult[]> {
+    const where: any = {
+        isN11Active: true,
+        OR: [
+            { barcode: { not: null } },
+            { sku: { not: null } }
+        ]
+    };
+
+    if (criteria.brandId && criteria.brandId !== "ALL") where.brandId = criteria.brandId;
+    if (criteria.categoryId && criteria.categoryId !== "ALL") {
+        where.categories = { some: { id: criteria.categoryId } };
+    }
+
+    const products = await prisma.product.findMany({
+        where,
+        select: {
+            id: true,
+            name: true,
+            n11Price: true,
+            listPrice: true,
+            sku: true,
+            barcode: true,
+        },
+    });
+
+    return products.map((p) => {
+        // N11 price defaults to listPrice if not set
+        const oldPrice = p.n11Price ? Number(p.n11Price) : Number(p.listPrice);
+        let newPrice = oldPrice;
+
+        if (params.type === "PERCENTAGE") {
+            const amount = oldPrice * (params.value / 100);
+            newPrice = params.operation === "INCREASE" ? oldPrice + amount : oldPrice - amount;
+        } else {
+            newPrice = params.operation === "INCREASE" ? oldPrice + params.value : oldPrice - params.value;
+        }
+
+        if (newPrice < 0) newPrice = 0;
+
+        return {
+            id: p.id,
+            name: p.name,
+            oldPrice,
+            newPrice: Number(newPrice.toFixed(2)),
+            sku: p.sku,
+            barcode: p.barcode
+        };
+    });
+}
+
+export async function executeBulkN11PriceUpdate(
+    criteria: BulkUpdateCriteria,
+    params: PriceUpdateParams
+) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        throw new Error("Unauthorized");
+    }
+
+    const preview = await previewBulkN11PriceUpdate(criteria, params);
+    const CHUNK_SIZE = 50;
+
+    try {
+        for (let i = 0; i < preview.length; i += CHUNK_SIZE) {
+            const chunk = preview.slice(i, i + CHUNK_SIZE);
+            await prisma.$transaction(
+                chunk.map((item) =>
+                    prisma.product.update({
+                        where: { id: item.id },
+                        data: { n11Price: item.newPrice },
+                    })
+                )
+            );
+        }
+
+        // Log the action
+        await prisma.adminLog.create({
+            data: {
+                action: "BULK_N11_PRICE_UPDATE",
+                details: `Updated ${preview.length} products' N11 prices. Criteria: ${JSON.stringify(criteria)}, Params: ${JSON.stringify(params)}`,
+                entityId: "BULK",
+                entityType: "PRODUCT",
+                adminId: session.user.id,
+            }
+        });
+
+        // Add Marketplace Sync Job
+        try {
+            const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+            const productIds = preview.map(p => p.id);
+            if (productIds.length > 0) {
+                await addMarketplaceSyncJob({ 
+                    marketplace: "n11", 
+                    type: "stocks", // Use stocks type for now as it handles both price/stock in N11
+                    productIds 
+                });
+            }
+        } catch (e) {
+            console.error("Bulk N11 price sync queue error:", e);
+        }
+
+        return { success: true, count: preview.length };
+    } catch (error) {
+        console.error("Bulk N11 price update error:", error);
+        throw new Error("N11 toplu fiyat güncelleme sırasında hata oluştu.");
+    }
+}
