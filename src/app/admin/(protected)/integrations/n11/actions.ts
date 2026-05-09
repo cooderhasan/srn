@@ -261,7 +261,11 @@ export async function syncOrdersFromN11() {
                             city: pkg.shippingAddress?.city || "",
                             district: pkg.shippingAddress?.district || ""
                         },
-                        items: { create: orderItems }
+                        items: { create: orderItems },
+                        source: "N11",
+                        cargoTrackingNumber: pkg.cargoTrackingNumber || null,
+                        shipmentPackageId: String(pkg.id || ""),
+                        cargoCompany: pkg.cargoProviderName || null
                     }
                 });
 

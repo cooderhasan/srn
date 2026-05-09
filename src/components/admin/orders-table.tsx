@@ -540,7 +540,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                         </TableCell>
                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end gap-2">
-                                                {order.source === "TRENDYOL" && (
+                                                {(order.source === "TRENDYOL" || order.source === "N11") && (
                                                     <div className="flex gap-1">
                                                         <Button
                                                             variant="outline"
