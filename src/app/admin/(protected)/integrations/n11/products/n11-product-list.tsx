@@ -22,7 +22,7 @@ import {
     Box
 } from "lucide-react";
 import { toast } from "sonner";
-import { sendProductToN11, getN11CategoryAttributes } from "../actions";
+import { sendProductToN11, getN11CategoryAttributes, enqueueN11Sync } from "../actions";
 import {
     Dialog,
     DialogContent,
@@ -53,6 +53,7 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
     const [search, setSearch] = useState("");
     const [products, setProducts] = useState(initialProducts);
     const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+    const [syncing, setSyncing] = useState(false);
     
     const [showAttrModal, setShowAttrModal] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -161,6 +162,25 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
         }
     };
 
+    const handleBulkSync = async () => {
+        setSyncing(true);
+        try {
+            const res = await enqueueN11Sync();
+            if (res.success) {
+                toast.success(res.message, {
+                    description: "N11 ürünleri arka planda güncelleniyor. Geçmiş sekmesinden takip edebilirsiniz.",
+                    duration: 5000
+                });
+            } else {
+                toast.error(res.message);
+            }
+        } catch (error) {
+            toast.error("Kuyruk işlemi başlatılamadı.");
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     return (
         <Tabs defaultValue="products" className="space-y-6">
             <TabsList className="bg-purple-50/50 dark:bg-purple-900/20 p-1 rounded-xl">
@@ -175,7 +195,7 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
             </TabsList>
 
             <TabsContent value="products" className="space-y-4">
-                <div className="flex items-center gap-4 bg-white dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center gap-4 bg-white dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input 
@@ -184,6 +204,22 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button 
+                            onClick={handleBulkSync} 
+                            disabled={syncing}
+                            variant="outline"
+                            className="border-purple-200 text-purple-600 hover:bg-purple-50 gap-2 h-10 px-4 rounded-xl shadow-sm transition-all active:scale-95"
+                        >
+                            {syncing ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+                            <span className="hidden sm:inline">Tümünü Kuyrukta Güncelle</span>
+                            <span className="sm:hidden">Toplu Güncelle</span>
+                        </Button>
+
+                        <Badge variant="outline" className="h-10 px-4 rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/20 dark:text-purple-400 border-purple-100 dark:border-purple-900 font-bold">
+                            {initialProducts.length} ÜRÜN
+                        </Badge>
                     </div>
                 </div>
 
