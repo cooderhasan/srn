@@ -362,9 +362,23 @@ export class N11Client {
 
     async getTaskDetails(taskId: string) {
         try {
-            // Official Doc: GET https://api.n11.com/ms/product/v1/tasks/{taskId}
-            // "No Mapping" error suggests the version or path was missing
-            const data = await this.callRest(`/ms/product/v1/tasks/${taskId}`);
+            // New Official Doc: POST https://api.n11.com/ms/product/task-details/page-query
+            const payload = {
+                taskId: Number(taskId),
+                pageable: {
+                    page: 0,
+                    size: 10
+                }
+            };
+            const response = await this.callRest("/ms/product/task-details/page-query", "POST", payload);
+            
+            // The response for page-query has items in a different structure
+            // We need to adapt it to look like the old structure for compatibility
+            const data = {
+                status: response.status || (response.items && response.items.length > 0 ? response.items[0].status : "PENDING"),
+                items: response.items || []
+            };
+
             console.log(`N11 Task Status Check [${taskId}]:`, JSON.stringify(data));
             return { success: true, data };
         } catch (error: any) {
