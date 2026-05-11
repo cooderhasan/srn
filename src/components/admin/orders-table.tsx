@@ -16,7 +16,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Eye, FileDown, Search, X, Printer, CheckCircle2, Truck, MessageCircle, ExternalLink, Pencil, Package, RefreshCw, XCircle, SendHorizonal, Barcode } from "lucide-react";
+import { Eye, FileDown, Search, X, Printer, CheckCircle2, Truck, MessageCircle, ExternalLink, Pencil, Package, RefreshCw, XCircle, SendHorizonal, Barcode, ReceiptText } from "lucide-react";
 import {
     formatDate,
     getOrderStatusLabel,
