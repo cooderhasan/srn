@@ -245,7 +245,8 @@ export async function syncOrdersFromN11() {
                         unitPrice: line.price,
                         productName: line.productName,
                         lineTotal: line.price * line.quantity,
-                        vatRate: line.vatRate || 20
+                        vatRate: line.vatRate || 20,
+                        discountRate: 0
                     });
                     total += line.price * line.quantity;
 
