@@ -216,14 +216,18 @@ export async function syncOrdersFromN11() {
                 lineIds.push(line.orderLineId);
                 
                 // Find product by barcode or stockCode
-                const product = await prisma.product.findFirst({
-                    where: {
-                        OR: [
-                            { barcode: line.barcode || undefined },
-                            { sku: line.stockCode || undefined }
-                        ]
-                    }
-                });
+                const searchConditions = [];
+                if (line.barcode) searchConditions.push({ barcode: String(line.barcode) });
+                if (line.stockCode) searchConditions.push({ sku: String(line.stockCode) });
+
+                let product = null;
+                if (searchConditions.length > 0) {
+                    product = await prisma.product.findFirst({
+                        where: {
+                            OR: searchConditions
+                        }
+                    });
+                }
 
                 if (product) {
                     orderItems.push({
