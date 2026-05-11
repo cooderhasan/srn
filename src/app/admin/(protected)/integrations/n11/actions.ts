@@ -517,38 +517,59 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
             
             if (taskRes.success && taskRes.data) {
                 const task = taskRes.data;
-                const status = task.status; // COMPLETED, FAILED, IN_PROGRESS
+                const rawStatus = String(task.status || task.state || "").toUpperCase();
                 
-                let errorMsg = null;
-                if (status === "FAILED") {
-                    // N11 often puts error in items[0].errorDescription or errorMsg
-                    const firstItem = task.items?.[0];
-                    errorMsg = firstItem?.errorDescription || firstItem?.errorMsg || firstItem?.errorMessage || "N11 İşleme Hatası";
+                let n11Status = "PENDING";
+                const successStates = ["COMPLETED", "SUCCESS", "FINISHED", "PROCESSED", "DONE"];
+                const failedStates = ["FAILED", "ERROR", "REJECTED", "FAIL", "CANCELLED"];
+                const processingStates = ["IN_PROGRESS", "PROCESSING", "WORKING", "RUNNING"];
+
+                if (successStates.includes(rawStatus)) {
+                    n11Status = "COMPLETED";
+                } else if (failedStates.includes(rawStatus)) {
+                    n11Status = "FAILED";
+                } else if (processingStates.includes(rawStatus)) {
+                    n11Status = "IN_PROGRESS";
+                }
+
+                // Check items for failure
+                const items = task.items || task.skus?.content || task.content || [];
+                let detailedError = null;
+
+                if (items.length > 0) {
+                    const anyItemFailed = items.some((item: any) => 
+                        failedStates.includes(String(item.status || "").toUpperCase())
+                    );
+                    if (anyItemFailed) {
+                        n11Status = "FAILED";
+                        const firstFail = items.find((item: any) => failedStates.includes(String(item.status || "").toUpperCase()));
+                        detailedError = firstFail?.reasons ? (Array.isArray(firstFail.reasons) ? firstFail.reasons.join(", ") : String(firstFail.reasons)) : (firstFail?.errorDescription || firstFail?.errorMessage || "Ürün hatası");
+                    }
                 }
 
                 // Update Task status in DB
                 await (prisma as any).n11Task.update({
                     where: { taskId: String(result.taskId) },
                     data: { 
-                        status: status,
-                        errorMessage: errorMsg
+                        status: n11Status,
+                        errorMessage: detailedError
                     }
                 });
 
-                if (status === "COMPLETED") {
+                if (n11Status === "COMPLETED") {
                     await (prisma as any).n11Product.update({
                         where: { id: n11Product.id },
                         data: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null }
                     });
-                    return { success: true, message: "Ürün N11'e başarıyla yüklendi ve yayınlandı." };
-                } else if (status === "FAILED") {
+                    return { success: true, message: "Ürün N11'e başarıyla yüklendi." };
+                } else if (n11Status === "FAILED") {
                     await (prisma as any).n11Product.update({
                         where: { id: n11Product.id },
-                        data: { lastSyncError: errorMsg }
+                        data: { lastSyncError: detailedError }
                     });
-                    return { success: false, message: "N11 İşleme Hatası: " + errorMsg };
+                    return { success: false, message: "N11 İşleme Hatası: " + detailedError };
                 } else {
-                    return { success: true, message: `Ürün N11 kuyruğuna alındı (Durum: ${status}). Takip No: ${result.taskId}. Birazdan tekrar kontrol ediniz.` };
+                    return { success: true, message: `Ürün N11 kuyruğuna alındı (Durum: ${n11Status}). Takip No: ${result.taskId}.` };
                 }
             }
             
@@ -601,41 +622,46 @@ export async function getN11Tasks() {
                     const rawStatus = String(res.data.status || res.data.state || res.data.result || "").toUpperCase();
                     
                     // Normalize status
-                    let n11Status = task.status;
+                    let n11Status = "PENDING";
                     const successStates = ["COMPLETED", "SUCCESS", "FINISHED", "PROCESSED", "DONE"];
                     const failedStates = ["FAILED", "ERROR", "REJECTED", "FAIL", "CANCELLED"];
                     const processingStates = ["IN_PROGRESS", "PROCESSING", "WORKING", "RUNNING"];
 
-                    if (successStates.includes(rawStatus)) n11Status = "COMPLETED";
-                    else if (failedStates.includes(rawStatus)) n11Status = "FAILED";
-                    else if (processingStates.includes(rawStatus)) n11Status = "IN_PROGRESS";
-                    else if (["PENDING", "WAITING", "CREATED", "QUEUED"].includes(rawStatus)) n11Status = "PENDING";
-
-                    // Check individual items if overall status is unclear
-                    if (n11Status === "PENDING" && res.data.items && res.data.items.length > 0) {
-                        const allItemsDone = res.data.items.every((item: any) => 
-                            successStates.includes(String(item.status || "").toUpperCase())
-                        );
-                        if (allItemsDone) n11Status = "COMPLETED";
-                        
-                        const anyItemFailed = res.data.items.some((item: any) => 
-                            failedStates.includes(String(item.status || "").toUpperCase())
-                        );
-                        if (anyItemFailed && !allItemsDone) n11Status = "FAILED";
+                    if (successStates.includes(rawStatus)) {
+                        n11Status = "COMPLETED";
+                    } else if (failedStates.includes(rawStatus)) {
+                        n11Status = "FAILED";
+                    } else if (processingStates.includes(rawStatus)) {
+                        n11Status = "IN_PROGRESS";
                     }
 
-                    if (n11Status !== task.status || n11Status === "FAILED") {
-                        // Update in DB
-                        const items = res.data.items || res.data.content || [];
-                        const firstItem = items[0];
-                        const reasons = firstItem?.reasons ? (Array.isArray(firstItem.reasons) ? firstItem.reasons.join(", ") : String(firstItem.reasons)) : null;
-                        const errorMsg = n11Status === "FAILED" ? (reasons || firstItem?.errorDescription || firstItem?.errorMsg || firstItem?.errorMessage || "İşleme hatası") : null;
-                        
+                    // Check individual items for detailed status/errors
+                    const items = res.data.items || res.data.skus?.content || res.data.content || [];
+                    let detailedError = null;
+
+                    if (items.length > 0) {
+                        const anyItemFailed = items.some((item: any) => 
+                            failedStates.includes(String(item.status || "").toUpperCase())
+                        );
+                        const allItemsSuccess = items.every((item: any) => 
+                            successStates.includes(String(item.status || "").toUpperCase())
+                        );
+
+                        if (anyItemFailed) {
+                            n11Status = "FAILED";
+                            const firstFail = items.find((item: any) => failedStates.includes(String(item.status || "").toUpperCase()));
+                            detailedError = firstFail?.reasons ? (Array.isArray(firstFail.reasons) ? firstFail.reasons.join(", ") : String(firstFail.reasons)) : (firstFail?.errorDescription || firstFail?.errorMessage || "Ürün hatası");
+                        } else if (allItemsSuccess) {
+                            n11Status = "COMPLETED";
+                        }
+                    }
+
+                    if (n11Status !== task.status || detailedError) {
                         await (prisma as any).n11Task.update({
                             where: { id: task.id },
                             data: { 
                                 status: n11Status,
-                                errorMessage: errorMsg || (n11Status === "PENDING" ? `N11 Durumu: ${rawStatus}` : null)
+                                errorMessage: detailedError || (n11Status === "PENDING" ? `N11 Durumu: ${rawStatus}` : null)
                             }
                         });
 
