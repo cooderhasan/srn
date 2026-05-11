@@ -82,6 +82,10 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
         })),
         categories: product.categories.map(c => ({ id: c.id })),
         isBundle: anyProduct.isBundle || false,
+        isTrendyolActive: anyProduct.isTrendyolActive || false,
+        isN11Active: anyProduct.isN11Active || false,
+        isHepsiburadaActive: anyProduct.isHepsiburadaActive || false,
+        isGoogleActive: anyProduct.isGoogleActive || false,
         bundleItems: (product as any).bundleItems?.map((bi: any) => ({
             childProductId: bi.childProductId,
             quantity: bi.quantity,
