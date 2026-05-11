@@ -372,6 +372,30 @@ export async function toggleTrendyolStatus(productId: string, isTrendyolActive: 
     return { success: true };
 }
 
+export async function toggleN11Status(productId: string, isN11Active: boolean) {
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
+        throw new Error("Unauthorized");
+    }
+
+    await prisma.product.update({
+        where: { id: productId },
+        data: { isN11Active },
+    });
+
+    // --- OTOMATİK PAZARYERİ SENKRONİZASYONU ---
+    // N11 durumu değiştiğinde (kapatılmış olabilir), hemen kuyruğa at
+    try {
+        const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+        await addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: [productId] });
+    } catch (e) {
+        console.error("Marketplace sync queue error:", e);
+    }
+
+    revalidatePath("/admin/products");
+    return { success: true };
+}
+
 export async function syncProductToMarketplaces(productId: string) {
     const session = await auth();
     if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {

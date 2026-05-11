@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Edit, MoreHorizontal, Trash, Star, Sparkles, TrendingUp, Search, Upload, Download, ExternalLink, Package, RefreshCw } from "lucide-react";
 import { formatPrice } from "@/lib/helpers";
-import { deleteProduct, toggleProductStatus, toggleTrendyolStatus } from "@/app/admin/(protected)/products/actions";
+import { deleteProduct, toggleProductStatus, toggleTrendyolStatus, toggleN11Status } from "@/app/admin/(protected)/products/actions";
 import { toast } from "sonner";
 
 interface Product {
@@ -47,6 +47,7 @@ interface Product {
     isBestSeller: boolean;
     isActive: boolean;
     isTrendyolActive: boolean;
+    isN11Active: boolean;
     isBundle?: boolean;
     category: {
         id: string;
@@ -178,6 +179,18 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
         }
     };
 
+    const handleToggleN11Status = async (productId: string, isN11Active: boolean) => {
+        try {
+            await toggleN11Status(productId, !isN11Active);
+            toast.success(!isN11Active ? "Ürün N11'de satışa açıldı." : "Ürün N11'de satışa kapatıldı.");
+            setProducts(prev => prev.map(p =>
+                p.id === productId ? { ...p, isN11Active: !isN11Active } : p
+            ));
+        } catch {
+            toast.error("İşlem sırasında bir hata oluştu.");
+        }
+    };
+
     return (
         <div className="space-y-4">
             {/* Action Buttons */}
@@ -296,6 +309,7 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                                 <TableHead>Liste Fiyatı</TableHead>
                                 <TableHead>Stok</TableHead>
                                 <TableHead>Trendyol</TableHead>
+                                <TableHead>N11</TableHead>
                                 <TableHead>Durum</TableHead>
                                 <TableHead className="text-right">İşlemler</TableHead>
                             </TableRow>
@@ -392,6 +406,29 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                                                     className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                                                     onClick={() => handleToggleTrendyolStatus(product.id, product.isTrendyolActive)}
                                                     title={product.isTrendyolActive ? "Trendyolda Satışa Kapat" : "Trendyolda Satışa Aç"}
+                                                >
+                                                    <RefreshCw className={`h-4 w-4 ${loading === product.id ? 'animate-spin' : ''}`} />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Badge
+                                                    variant={product.isN11Active ? "default" : "secondary"}
+                                                    className={
+                                                        product.isN11Active
+                                                            ? "bg-blue-100 text-blue-800"
+                                                            : "bg-gray-100 text-gray-800"
+                                                    }
+                                                >
+                                                    {product.isN11Active ? "Açık" : "Kapalı"}
+                                                </Badge>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                    onClick={() => handleToggleN11Status(product.id, product.isN11Active)}
+                                                    title={product.isN11Active ? "N11'de Satışa Kapat" : "N11'de Satışa Aç"}
                                                 >
                                                     <RefreshCw className={`h-4 w-4 ${loading === product.id ? 'animate-spin' : ''}`} />
                                                 </Button>
