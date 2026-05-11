@@ -326,6 +326,11 @@ model Order {
   transactions         CurrentAccountTransaction[] // Cari hareket bağlantısı
   returnRequests       ReturnRequest[]
   bankTransferNotifications BankTransferNotification[]
+  // Fatura Bilgileri
+  invoiceId            String?       // E-Faturam sistemindeki tekil ID
+  invoiceNo            String?       // Kesilen fatura numarası (örn: ABC2024000000001)
+  invoiceStatus        String?       // PENDING, SENT, ERROR
+  invoiceUrl           String?       // Fatura PDF linki (varsa)
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
@@ -764,4 +769,17 @@ model GeminiConfig {
   updatedAt       DateTime @updatedAt
 
   @@map("gemini_configs")
+}
+
+model TrendyolEFaturamConfig {
+  id             String   @id @default(cuid())
+  username       String   // E-Faturam Kullanıcı Adı
+  password       String   // E-Faturam Şifre
+  companyId      String?  // Cari ID / Şirket ID
+  isActive       Boolean  @default(false)
+  isTestMode     Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("trendyol_efaturam_configs")
 }

@@ -116,7 +116,7 @@ export interface OrderWithItems {
     cargoTrackingNumber: string | null;
     trackingUrl: string | null;
     cargoLabelUrl: string | null;
-    source: string;
+    source: string | null;
     ykCargoKey: string | null;
     ykJobId: number | null;
     ykDocId: string | null;
@@ -126,7 +126,7 @@ export interface OrderWithItems {
     ykError: string | null;
     notes: string | null;
     guestEmail: string | null;
-    createdAt: Date;
+    createdAt: Date | string;
     user: {
         id: string;
         email: string;
