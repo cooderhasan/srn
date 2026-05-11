@@ -30,14 +30,14 @@ export async function setupRepeatableJobs() {
     });
     console.log("⏰ Hepsiburada Order Sync Cron (20m) registered.");
 
-    // Her 30 dakikada bir N11 siparişlerini çek
+    // Her 15 dakikada bir N11 siparişlerini çek
     await queue.add("n11-order-sync", {}, {
         repeat: {
-            pattern: '*/30 * * * *' // Every 30 minutes
+            pattern: '*/15 * * * *' // Every 15 minutes
         },
         jobId: 'n11-order-sync-cron'
     });
-    console.log("⏰ N11 Order Sync Cron (30m) registered.");
+    console.log("⏰ N11 Order Sync Cron (15m) registered.");
 }
 
 export function initializeWorker() {
