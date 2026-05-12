@@ -25,6 +25,7 @@ import {
 import { X, Plus, Pencil, Trash2, Search, Loader2 } from "lucide-react";
 import { getTrendyolCategories } from "@/app/admin/(protected)/integrations/trendyol/actions";
 import { getFlatN11Categories } from "@/app/admin/(protected)/integrations/n11/actions";
+import { getHepsiburadaCategories } from "@/app/admin/(protected)/integrations/hepsiburada/actions";
 import {
     Select,
     SelectContent,
@@ -435,6 +436,119 @@ function N11CategorySearch({
     );
 }
 
+// --- Hepsiburada Category Search Component ---
+interface HepsiburadaCategory {
+    categoryId: string;
+    name: string;
+}
+
+function HepsiburadaCategorySearch({
+    value,
+    onChange,
+}: {
+    value?: string;
+    onChange: (id: string | undefined) => void;
+}) {
+    const [search, setSearch] = useState("");
+    const [results, setResults] = useState<HepsiburadaCategory[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [selectedName, setSelectedName] = useState<string>("");
+    const [error, setError] = useState<string>("");
+
+    const handleSearch = async (q: string) => {
+        setSearch(q);
+        if (q.length < 2) { setResults([]); return; }
+        setLoading(true);
+        setError("");
+        try {
+            const res = await getHepsiburadaCategories();
+            if (res.success && res.data) {
+                const filtered = (res.data as HepsiburadaCategory[]).filter(c =>
+                    c.name.toLowerCase().includes(q.toLowerCase())
+                ).slice(0, 100);
+                setResults(filtered);
+                setOpen(true);
+            } else {
+                setError(res.message || "Kategoriler alınamadı.");
+            }
+        } catch {
+            setError("Bağlantı hatası.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelect = (cat: HepsiburadaCategory) => {
+        onChange(cat.categoryId);
+        setSelectedName(cat.name);
+        setSearch("");
+        setResults([]);
+        setOpen(false);
+    };
+
+    const handleClear = () => {
+        onChange(undefined);
+        setSelectedName("");
+        setSearch("");
+        setResults([]);
+    };
+
+    return (
+        <div className="space-y-2">
+            {value && selectedName ? (
+                <div className="flex items-center gap-2 p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-sm">
+                    <span className="font-medium text-orange-800 dark:text-orange-300 flex-1 truncate">✓ {selectedName}</span>
+                    <span className="text-xs text-orange-600 font-mono">#{value}</span>
+                    <button type="button" onClick={handleClear} className="text-orange-500 hover:text-red-600">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : value ? (
+                <div className="flex items-center gap-2 p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-sm">
+                    <span className="font-medium text-orange-800 dark:text-orange-300 flex-1">Mevcut ID: <span className="font-mono">#{value}</span></span>
+                    <button type="button" onClick={handleClear} className="text-orange-500 hover:text-red-600">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : null}
+
+            <div className="relative">
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input
+                        className="pl-8 border-orange-200 focus-visible:ring-orange-500"
+                        placeholder="HB kategorisi ara (min. 2 karakter)..."
+                        value={search}
+                        onChange={(e) => handleSearch(e.target.value)}
+                    />
+                    {loading && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-orange-500" />}
+                </div>
+
+                {error && (
+                    <p className="text-xs text-red-500 mt-1">{error}</p>
+                )}
+
+                {open && results.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-orange-200 rounded-lg shadow-xl">
+                        {results.map((cat) => (
+                            <button
+                                key={cat.categoryId}
+                                type="button"
+                                onClick={() => handleSelect(cat)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-start justify-between gap-3 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                            >
+                                <span className="whitespace-normal leading-relaxed text-xs">{cat.name}</span>
+                                <span className="text-xs text-gray-400 font-mono shrink-0 pt-0.5">#{cat.categoryId}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export function CategoriesTable({ categories }: CategoriesTableProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [editCategory, setEditCategory] = useState<Category | null>(null);
@@ -827,15 +941,13 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                                     />
                                     <p className="text-[10px] text-purple-600">N11 kategorisini adıyla arayıp seçebilirsiniz.</p>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="hbCategoryId" className="text-orange-600">Hepsiburada Kategori ID</Label>
-                                    <Input
-                                        id="hbCategoryId"
-                                        value={hbCategoryId || ""}
-                                        onChange={(e) => setHbCategoryId(e.target.value)}
-                                        placeholder="Örn: telefon-kiliflari"
-                                        className="border-orange-200"
+                                <div className="space-y-2 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                                    <Label htmlFor="hbCategoryId" className="text-orange-700 dark:text-orange-400 font-semibold text-xs uppercase tracking-wide">🟠 Hepsiburada Kategori Eşleştirme</Label>
+                                    <HepsiburadaCategorySearch
+                                        value={hbCategoryId}
+                                        onChange={setHbCategoryId}
                                     />
+                                    <p className="text-[10px] text-orange-600">HB kategorisini adıyla arayıp seçebilirsiniz.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="googleProductCategory" className="text-blue-600">Google Ürün Kategorisi (Taxonomy)</Label>

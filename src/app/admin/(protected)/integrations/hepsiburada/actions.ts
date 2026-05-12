@@ -309,6 +309,25 @@ export async function syncOrdersFromHepsiburada() {
         return { success: false, message: "Order Sync Hatası: " + error.message };
     }
 }
+
+export async function getHepsiburadaCategories() {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId,
+            isTestMode: config.isTestMode ?? true
+        });
+
+        const data = await client.getCategories();
+        return { success: true, data: data.data || [] };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
 export async function getHepsiburadaCategoryAttributes(categoryId: string) {
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
