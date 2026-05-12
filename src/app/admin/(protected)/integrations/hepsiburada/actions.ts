@@ -385,11 +385,15 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                 UrunAdi: product.name,
                 UrunAciklamasi: product.description || product.name,
                 Marka: product.brand?.name || "Diğer",
-                GarantiSuresi: 24,
+                GarantiSuresi: attributes.find(a => a.name === "Garanti Süresi") ? Number(attributes.find(a => a.name === "Garanti Süresi").value) : 24,
                 kg: String(Number(product.weight) || 1),
                 tax_vat_rate: String(product.vatRate || 20),
                 price: String(hbPrice).replace(".", ","),
                 stock: String(Math.max(0, product.stock - (product.criticalStock || 0))),
+                // Menşei ve Üretici (Modal'dan gelirse)
+                ...(attributes.find(a => a.name === "Menşei") ? { "Mensei": attributes.find(a => a.name === "Menşei").value } : { "Mensei": product.origin || "Türkiye" }),
+                ...(attributes.find(a => a.name === "Üretici Firma") ? { "UreticiFirma": attributes.find(a => a.name === "Üretici Firma").value } : {}),
+                ...(attributes.find(a => a.name === "İthalatçı Firma") ? { "IthalatciFirma": attributes.find(a => a.name === "İthalatçı Firma").value } : {}),
                 // Görseller
                 ...(product.images[0] ? { Image1: product.images[0] } : {}),
                 ...(product.images[1] ? { Image2: product.images[1] } : {}),

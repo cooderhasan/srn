@@ -209,16 +209,64 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
                         <div className="py-8 flex justify-center"><RefreshCcw className="animate-spin text-blue-500" /></div>
                     ) : (
                         <div className="space-y-4 py-4 max-h-[50vh] overflow-y-auto">
-                            {categoryAttrs.map((attr: any) => (
-                                <div key={attr.id} className="space-y-1">
-                                    <Label className="text-xs">{attr.name} {attr.required && "*"}</Label>
-                                    <Input 
-                                        className="h-8 text-sm"
-                                        placeholder={`${attr.name} değerini girin...`}
-                                        onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, [attr.name]: e.target.value }))}
-                                    />
+                            {/* Temel HB Alanları */}
+                            <div className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-xl space-y-3 border border-blue-100 dark:border-blue-900/30">
+                                <h4 className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Temel Bilgiler</h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] font-semibold">Garanti Süresi (Ay) *</Label>
+                                        <Input 
+                                            type="number"
+                                            className="h-8 text-sm border-amber-200 focus-visible:ring-amber-500"
+                                            defaultValue="24"
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, "Garanti Süresi": e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] font-semibold">Menşei *</Label>
+                                        <Input 
+                                            className="h-8 text-sm border-amber-200 focus-visible:ring-amber-500"
+                                            defaultValue={selectedProduct?.origin || "Türkiye"}
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, "Menşei": e.target.value }))}
+                                        />
+                                    </div>
                                 </div>
-                            ))}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] font-semibold">Üretici Firma *</Label>
+                                        <Input 
+                                            className="h-8 text-sm border-amber-200 focus-visible:ring-amber-500"
+                                            placeholder="Üretici adı..."
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, "Üretici Firma": e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-[10px] font-semibold">İthalatçı Firma</Label>
+                                        <Input 
+                                            className="h-8 text-sm border-amber-200 focus-visible:ring-amber-500"
+                                            placeholder="Varsa ithalatçı..."
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, "İthalatçı Firma": e.target.value }))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Kategoriye Özel Alanlar */}
+                            {categoryAttrs.length > 0 && (
+                                <div className="space-y-3">
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider px-1">Kategori Özellikleri</h4>
+                                    {categoryAttrs.map((attr: any) => (
+                                        <div key={attr.id} className="space-y-1">
+                                            <Label className="text-xs">{attr.name} {attr.required && "*"}</Label>
+                                            <Input 
+                                                className="h-8 text-sm"
+                                                placeholder={`${attr.name} değerini girin...`}
+                                                onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, [attr.name]: e.target.value }))}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
