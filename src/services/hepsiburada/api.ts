@@ -87,7 +87,7 @@ export class HepsiburadaClient {
             if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
             // Use order API for test as it requires full auth and merchantId context
-            const testUrl = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?page=0&size=1`;
+            const testUrl = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?limit=1&offset=0`;
             
             console.log(`📡 HB Bağlantı Testi: ${testUrl}`);
             console.log(`   Ortam: ${this.isTestMode ? "TEST (SIT)" : "CANLI (Production)"}`);
@@ -155,7 +155,7 @@ export class HepsiburadaClient {
 
         const { status = "New", page = 0, size = 50 } = options;
         
-        let url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?status=${status}&page=${page}&size=${size}`;
+        let url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?status=${status}&limit=${size}&offset=${page * size}`;
         
         if (options.beginDate) url += `&beginDate=${options.beginDate}`;
         if (options.endDate) url += `&endDate=${options.endDate}`;
