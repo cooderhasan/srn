@@ -1,50 +1,145 @@
 import axios from "axios";
 
 export interface EFaturamAuth {
-    username: string;
-    password: string;
+    username: string; // E-Faturam email
+    password: string; // E-Faturam şifre
     companyId?: string;
     isTestMode?: boolean;
+}
+
+export interface InvoiceLine {
+    name: string;
+    quantity: number;
+    unitCode?: string; // "C62" (Adet), "KGM" (kg), "MTR" (metre) vb.
+    unitPrice: number;
+    taxRate: number; // KDV oranı (20, 10, 1, 0)
+    taxAmount: number;
+    amount: number; // quantity * unitPrice
+    discountAmount?: number;
+}
+
+export interface EArchiveInvoiceData {
+    // Fatura Genel Bilgileri
+    scenario: "EARSIVFATURA";
+    invoiceTypeCode: "SATIS" | "IADE";
+    currency: string; // "TRY"
+    localReferenceId?: string; // Kendi sisteminizdeki referans ID (örn: sipariş numarası)
+
+    // Alıcı Bilgileri
+    receiverName: string;
+    receiverSurname?: string;
+    receiverTitle?: string; // Ticari Unvan (şirket ise)
+    receiverTaxId: string; // VKN veya TCKN (11 hane TCKN, 10 hane VKN)
+    receiverTaxOffice?: string; // Vergi Dairesi
+    receiverAddress?: string;
+    receiverCity?: string;
+    receiverDistrict?: string;
+    receiverCountry?: string; // "Türkiye"
+    receiverEmail?: string; // E-arşiv fatura alıcı mail
+
+    // Tutar Bilgileri
+    taxExcludedPrice: number; // KDV Hariç Toplam
+    taxAmount: number; // Toplam KDV
+    taxInclusiveAmount: number; // KDV Dahil Toplam (KDV hariç + KDV)
+    payableAmount: number; // Ödenecek Toplam (genelde taxInclusiveAmount ile aynı)
+    discountAmount?: number; // İndirim Tutarı
+
+    // Fatura Kalemleri
+    invoiceLines: InvoiceLine[];
+
+    // Ek Bilgiler
+    notes?: string[];
+    issuedAt?: string; // Fatura tarihi (ISO format)
 }
 
 export class TrendyolEFaturamClient {
     private baseUrl: string;
     private auth: EFaturamAuth;
-    private token: string | null = null;
+    private accessToken: string | null = null;
+    private tokenExpiry: number = 0;
 
     constructor(auth: EFaturamAuth) {
         this.auth = auth;
-        // Test ve Canlı ortam URL'leri farklı olabilir, dokümana göre güncellenecek
-        this.baseUrl = auth.isTestMode 
-            ? "https://test-api.trendyolefaturam.com" // Örnek test URL
-            : "https://api.trendyolefaturam.com";   // Örnek canlı URL
+        this.baseUrl = auth.isTestMode
+            ? "https://stage-apigateway.trendyolefaturam.com"
+            : "https://apigateway.trendyolefaturam.com";
     }
 
-    private async login() {
+    /**
+     * Giriş yaparak access_token alır
+     */
+    private async login(): Promise<boolean> {
         try {
-            console.log("📡 Trendyol e-Faturam Login Attempt...");
-            const response = await axios.post(`${this.baseUrl}/token`, {
-                username: this.auth.username,
-                password: this.auth.password
-            });
+            console.log(`📡 Trendyol e-Faturam Login Attempt (${this.auth.isTestMode ? 'TEST' : 'CANLI'})...`);
+            console.log(`   Base URL: ${this.baseUrl}`);
 
-            if (response.data && response.data.token) {
-                this.token = response.data.token;
+            const response = await axios.post(
+                `${this.baseUrl}/api/auth/signin`,
+                {
+                    email: this.auth.username,
+                    password: this.auth.password,
+                },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                }
+            );
+
+            // Token response header veya body'den gelebilir
+            const token =
+                response.headers["access_token"] ||
+                response.headers["access-token"] ||
+                response.headers["authorization"]?.replace("Bearer ", "") ||
+                response.data?.access_token ||
+                response.data?.accessToken ||
+                response.data?.token;
+
+            if (token) {
+                this.accessToken = token;
+                // Token'ı 55 dakika geçerli say (genelde 1 saat geçerlidir)
+                this.tokenExpiry = Date.now() + 55 * 60 * 1000;
                 console.log("✅ Trendyol e-Faturam Login Success");
                 return true;
             }
+
+            // Eğer token direkt response data ise
+            if (typeof response.data === "string" && response.data.length > 20) {
+                this.accessToken = response.data;
+                this.tokenExpiry = Date.now() + 55 * 60 * 1000;
+                console.log("✅ Trendyol e-Faturam Login Success (raw token)");
+                return true;
+            }
+
+            console.error("❌ Token alınamadı. Response:", JSON.stringify(response.data).substring(0, 500));
+            console.error("   Response Headers:", JSON.stringify(response.headers).substring(0, 500));
             return false;
         } catch (error: any) {
-            console.error("❌ Trendyol e-Faturam Login Error:", error.response?.data || error.message);
-            return false;
+            console.error("❌ Trendyol e-Faturam Login Error:", error.response?.status, error.response?.data || error.message);
+            throw new Error(
+                `E-Faturam login hatası: ${error.response?.status || "NETWORK"} - ${
+                    JSON.stringify(error.response?.data) || error.message
+                }`
+            );
         }
     }
 
-    private async request(method: string, endpoint: string, data?: any) {
-        if (!this.token) {
+    /**
+     * Token geçerliliğini kontrol eder, gerekirse yeniler
+     */
+    private async ensureToken(): Promise<void> {
+        if (!this.accessToken || Date.now() >= this.tokenExpiry) {
             const success = await this.login();
-            if (!success) throw new Error("API Login failed");
+            if (!success) throw new Error("E-Faturam API Login başarısız");
         }
+    }
+
+    /**
+     * Genel API isteği gönderir
+     */
+    private async request<T = any>(method: string, endpoint: string, data?: any): Promise<T> {
+        await this.ensureToken();
 
         try {
             const response = await axios({
@@ -52,38 +147,121 @@ export class TrendyolEFaturamClient {
                 url: `${this.baseUrl}${endpoint}`,
                 data,
                 headers: {
-                    'Authorization': `Bearer ${this.token}`,
-                    'Content-Type': 'application/json'
-                }
+                    Authorization: `Bearer ${this.accessToken}`,
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                timeout: 30000,
             });
             return response.data;
         } catch (error: any) {
-            console.error(`❌ Trendyol e-Faturam API Error [${endpoint}]:`, error.response?.data || error.message);
-            throw error;
+            // 401 ise token'ı sıfırla ve tekrar dene
+            if (error.response?.status === 401) {
+                console.log("🔄 Token expired, re-authenticating...");
+                this.accessToken = null;
+                this.tokenExpiry = 0;
+                await this.ensureToken();
+
+                const retryResponse = await axios({
+                    method,
+                    url: `${this.baseUrl}${endpoint}`,
+                    data,
+                    headers: {
+                        Authorization: `Bearer ${this.accessToken}`,
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                    },
+                    timeout: 30000,
+                });
+                return retryResponse.data;
+            }
+
+            const errorDetail = error.response?.data
+                ? JSON.stringify(error.response.data).substring(0, 500)
+                : error.message;
+            console.error(`❌ E-Faturam API Error [${method} ${endpoint}]:`, error.response?.status, errorDetail);
+            throw new Error(`E-Faturam API Hatası (${error.response?.status || "NETWORK"}): ${errorDetail}`);
         }
     }
 
-    // Mükellef Sorgulama (e-Fatura mı e-Arşiv mi?)
-    async checkTaxPayer(taxId: string) {
+    /**
+     * Login testi - bağlantı bilgilerini doğrular
+     */
+    async testConnection(): Promise<{ success: boolean; message: string }> {
         try {
-            const result = await this.request('GET', `/api/v1/taxpayer/check/${taxId}`);
-            // Eğer mükellef ise e-fatura, değilse e-arşiv
+            await this.login();
             return {
-                isEFatura: result.isTaxPayer || false,
-                alias: result.alias || null
+                success: true,
+                message: `Bağlantı başarılı! (${this.auth.isTestMode ? 'Test' : 'Canlı'} ortam)`,
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                message: error.message || "Bağlantı hatası",
+            };
+        }
+    }
+
+    /**
+     * Mükellef Sorgulama - VKN/TCKN ile müşterinin e-Fatura mükellefi olup olmadığını kontrol eder
+     * E-Fatura mükellefi ise e-Fatura, değilse e-Arşiv kesilir.
+     */
+    async checkTaxPayer(taxId: string): Promise<{ isEFatura: boolean; alias: string | null }> {
+        try {
+            const result = await this.request<any>("GET", `/api/taxpayer/check/${taxId}`);
+            return {
+                isEFatura: result?.isTaxPayer || result?.isRegistered || false,
+                alias: result?.alias || result?.receiverAlias || null,
             };
         } catch (error) {
+            // Mükellef sorgulaması başarısızsa e-Arşiv varsayılan olarak kesilir
+            console.log(`ℹ️ Mükellef sorgulaması başarısız (VKN: ${taxId}), e-Arşiv olarak devam edilecek`);
             return { isEFatura: false, alias: null };
         }
     }
 
-    // Fatura Oluşturma
-    async createInvoice(invoiceData: any) {
-        return await this.request('POST', '/api/v1/invoice/create', invoiceData);
+    /**
+     * E-Arşiv Fatura Oluşturma
+     */
+    async createEArchiveInvoice(invoiceData: EArchiveInvoiceData): Promise<any> {
+        console.log(`📄 E-Arşiv Fatura Oluşturuluyor... Ref: ${invoiceData.localReferenceId}`);
+        console.log(`   Alıcı: ${invoiceData.receiverName} ${invoiceData.receiverSurname || ''}`);
+        console.log(`   Toplam: ${invoiceData.payableAmount} ${invoiceData.currency}`);
+        console.log(`   Kalem Sayısı: ${invoiceData.invoiceLines.length}`);
+
+        const result = await this.request("POST", "/api/invoice/e-arsiv/create", invoiceData);
+        console.log("✅ E-Arşiv Fatura oluşturuldu:", JSON.stringify(result).substring(0, 300));
+        return result;
     }
 
-    // Fatura PDF Linki Alma
-    async getInvoicePdf(invoiceId: string) {
-        return await this.request('GET', `/api/v1/invoice/pdf/${invoiceId}`);
+    /**
+     * E-Fatura Oluşturma (karşı taraf da e-fatura mükellefi ise)
+     */
+    async createEInvoice(invoiceData: any): Promise<any> {
+        console.log(`📄 E-Fatura Oluşturuluyor... Ref: ${invoiceData.localReferenceId}`);
+        const result = await this.request("POST", "/api/invoice/e-fatura/create", invoiceData);
+        console.log("✅ E-Fatura oluşturuldu:", JSON.stringify(result).substring(0, 300));
+        return result;
+    }
+
+    /**
+     * Fatura PDF Linki Alma
+     */
+    async getInvoicePdf(invoiceId: string): Promise<any> {
+        return await this.request("GET", `/api/invoice/pdf/${invoiceId}`);
+    }
+
+    /**
+     * Fatura Durumu Sorgulama
+     */
+    async getInvoiceStatus(invoiceId: string): Promise<any> {
+        return await this.request("GET", `/api/invoice/status/${invoiceId}`);
+    }
+
+    /**
+     * Faturları Listeleme
+     */
+    async listInvoices(page: number = 0, size: number = 20): Promise<any> {
+        return await this.request("GET", `/api/invoice/list?page=${page}&size=${size}`);
     }
 }
