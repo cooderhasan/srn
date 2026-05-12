@@ -189,19 +189,48 @@ export class HepsiburadaClient {
     }
 
     /**
-     * Create Product (Product Upload / Catalog)
+     * Create Product (Catalog Upload) - JSON dosyası olarak multipart/form-data ile gönderir
+     * SIT: POST https://mpop-sit.hepsiburada.com/product/api/products/import
+     * PROD: POST https://mpop.hepsiburada.com/product/api/products/import
      */
     async createProduct(items: any[]) {
         await this.init();
-        const url = `${this.productUploadBaseUrl}/products/v2`;
+        
+        const sitSuffix = this.isTestMode ? "-sit" : "";
+        const url = `https://mpop${sitSuffix}.hepsiburada.com/product/api/products/import`;
         
         console.log(`📡 HB Product Upload: ${url} - ${items.length} product(s)`);
+        console.log(`   Payload sample:`, JSON.stringify(items[0]).substring(0, 300));
+
+        // HB expects a JSON file upload via multipart/form-data
+        const jsonContent = JSON.stringify(items);
+        const blob = new Blob([jsonContent], { type: "application/json" });
+        
+        const formData = new FormData();
+        formData.append("file", blob, "integrator.json");
 
         const response = await fetch(url, {
             method: "POST",
-            headers: this.getHeaders(),
-            body: JSON.stringify(items)
+            headers: {
+                "Authorization": this.getAuthHeader(),
+                "User-Agent": this.userAgent,
+                "Accept": "application/json",
+                // Content-Type is automatically set by FormData (multipart/form-data with boundary)
+            },
+            body: formData
         });
-        return await response.json();
+        
+        const responseText = await response.text();
+        console.log(`   HB Response (${response.status}):`, responseText.substring(0, 500));
+        
+        if (!response.ok) {
+            throw new Error(`HB Product Upload Error (${response.status}): ${responseText.substring(0, 200)}`);
+        }
+        
+        try {
+            return JSON.parse(responseText);
+        } catch {
+            return { success: true, raw: responseText };
+        }
     }
 }

@@ -344,41 +344,74 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
 
         const client = new HepsiburadaClient({
             username: config.username,
-            password: config.password
+            password: config.password,
+            merchantId: config.merchantId || config.username,
+            isTestMode: config.isTestMode ?? true,
         });
 
         const mappedCat = product.categories.find((c: any) => c.hepsiburadaCategoryId !== null);
         if (!mappedCat) return { success: false, message: "Ürünün kategorisi Hepsiburada ile eşleşmemiş." };
 
-        // Transformation logic for HB Catalog Upload
+        const merchantId = config.merchantId || config.username;
+        const hbPrice = Number((product as any).hepsiburadaPrice) || Number(product.listPrice);
+
+        // HB payload format - resmi dokümantasyona uygun
         const payload = [{
-            merchantSku: product.sku || product.barcode || product.id,
+            categoryId: Number((mappedCat as any).hepsiburadaCategoryId),
+            merchant: merchantId,
             attributes: {
-                ...attributes.reduce((acc, curr) => ({ ...acc, [curr.name]: curr.value }), {}),
-                "product_name": product.name,
-                "brand": product.brand?.name || "Diğer",
-                "category_id": mappedCat.hepsiburadaCategoryId,
-                "description": product.description || product.name,
-                "image1": product.images[0] || "",
-                "price": product.listPrice,
-                "vat": product.vatRate
+                merchantSku: product.sku || product.barcode || product.id,
+                VaryantGroupID: product.sku || product.id,
+                Barcode: product.barcode || product.sku || "",
+                UrunAdi: product.name,
+                UrunAciklamasi: product.description || product.name,
+                Marka: product.brand?.name || "Diğer",
+                GarantiSuresi: 24,
+                kg: String(Number(product.weight) || 1),
+                tax_vat_rate: String(product.vatRate || 20),
+                price: String(hbPrice).replace(".", ","),
+                stock: String(Math.max(0, product.stock - (product.criticalStock || 0))),
+                // Görseller
+                ...(product.images[0] ? { Image1: product.images[0] } : {}),
+                ...(product.images[1] ? { Image2: product.images[1] } : {}),
+                ...(product.images[2] ? { Image3: product.images[2] } : {}),
+                ...(product.images[3] ? { Image4: product.images[3] } : {}),
+                ...(product.images[4] ? { Image5: product.images[4] } : {}),
+                // Kullanıcının girdiği ek özellikler (modal'dan)
+                ...attributes.reduce((acc: any, curr: any) => ({ ...acc, [curr.name]: curr.value }), {}),
             }
         }];
 
+        console.log("📡 HB Product Payload:", JSON.stringify(payload).substring(0, 500));
+
         const result = await client.createProduct(payload);
 
-        if (result.success) {
-            await (prisma as any).hepsiburadaProduct.upsert({
-                where: { productId: product.id },
-                update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null },
-                create: { productId: product.id, isSynced: true, lastSyncedAt: new Date() }
-            });
-            return { success: true, message: "Hepsiburada ürün talebi başarıyla oluşturuldu." };
-        } else {
-            return { success: false, message: "HB Hatası: " + (result.message || "Bilinmeyen hata") };
-        }
+        // Sonuç başarılı ise DB güncelle
+        const trackingId = result?.trackingId || result?.id || null;
+
+        await (prisma as any).hepsiburadaProduct.upsert({
+            where: { productId: product.id },
+            update: { 
+                isSynced: true, 
+                lastSyncedAt: new Date(), 
+                lastSyncError: null,
+                merchantSku: product.sku || product.barcode || product.id,
+            },
+            create: { 
+                productId: product.id, 
+                isSynced: true, 
+                lastSyncedAt: new Date(),
+                merchantSku: product.sku || product.barcode || product.id,
+            }
+        });
+
+        return { 
+            success: true, 
+            message: `Ürün Hepsiburada'ya gönderildi! ${trackingId ? `Tracking ID: ${trackingId}` : ""}` 
+        };
 
     } catch (error: any) {
+        console.error("❌ HB Product Send Error:", error.message);
         return { success: false, message: "Hata: " + error.message };
     }
 }
