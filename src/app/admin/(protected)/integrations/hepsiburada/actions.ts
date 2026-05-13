@@ -341,7 +341,18 @@ export async function getHepsiburadaCategoryAttributes(categoryId: string) {
         });
 
         const data = await client.getCategoryAttributes(categoryId);
-        return { success: true, data: data.data || [] }; // HB metadata returns { data: [...] }
+        const attrs: any[] = [];
+        if (data.data) {
+            // Sadece kategoriye özel dinamik özellikleri ve varyant özelliklerini ekliyoruz
+            // baseAttributes (fiyat, stok, görsel vs) arka planda otomatik gönderiliyor
+            if (Array.isArray(data.data.attributes)) {
+                attrs.push(...data.data.attributes);
+            }
+            if (Array.isArray(data.data.variantAttributes)) {
+                attrs.push(...data.data.variantAttributes);
+            }
+        }
+        return { success: true, data: attrs };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
@@ -387,23 +398,23 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                 UrunAdi: product.name,
                 UrunAciklamasi: product.description || product.name,
                 Marka: product.brand?.name || "Diğer",
-                GarantiSuresi: attributes.find(a => a.name === "Garanti Süresi") ? Number(attributes.find(a => a.name === "Garanti Süresi").value) : 24,
+                // Garanti Süresi baseAttribute olduğu için ID ile gidiyor (GarantiSuresi)
+                GarantiSuresi: attributes.find(a => a.name === "Garanti Süresi (Ay)") ? Number(attributes.find(a => a.name === "Garanti Süresi (Ay)").value) : 24,
                 kg: String(Number(product.weight) || 1),
                 tax_vat_rate: String(product.vatRate || 20),
                 price: String(hbPrice).replace(".", ","),
                 stock: String(Math.max(0, product.stock - (product.criticalStock || 0))),
-                // Menşei ve Üretici (Modal'dan gelirse)
-                ...(attributes.find(a => a.name === "Menşei") ? { "Mensei": attributes.find(a => a.name === "Menşei").value } : { "Mensei": product.origin || "Türkiye" }),
-                ...(attributes.find(a => a.name === "Üretici Firma") ? { "UreticiFirma": attributes.find(a => a.name === "Üretici Firma").value } : {}),
-                ...(attributes.find(a => a.name === "İthalatçı Firma") ? { "IthalatciFirma": attributes.find(a => a.name === "İthalatçı Firma").value } : {}),
                 // Görseller
                 ...(product.images[0] ? { Image1: product.images[0] } : {}),
                 ...(product.images[1] ? { Image2: product.images[1] } : {}),
                 ...(product.images[2] ? { Image3: product.images[2] } : {}),
                 ...(product.images[3] ? { Image4: product.images[3] } : {}),
                 ...(product.images[4] ? { Image5: product.images[4] } : {}),
-                // Kullanıcının girdiği ek özellikler (modal'dan)
-                ...attributes.reduce((acc: any, curr: any) => ({ ...acc, [curr.name]: curr.value }), {}),
+                // Kullanıcının girdiği ek özellikler (Kategori dinamik alanları)
+                // "Garanti Süresi (Ay)" ve "Garanti Süresi" alanlarını ayırıyoruz çünkü yukarıda ID ile gönderdik
+                ...attributes
+                    .filter((attr: any) => !attr.name.includes("Garanti Süresi"))
+                    .reduce((acc: any, curr: any) => ({ ...acc, [curr.name]: curr.value }), {}),
             }
         }];
 
