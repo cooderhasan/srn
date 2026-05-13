@@ -56,7 +56,7 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
     );
 
     const handleOpenWizard = async (product: any) => {
-        const mappedCat = product.categories.find((c: any) => c.hepsiburadaCategoryId !== null);
+        const mappedCat = product.categories.find((c: any) => c.hbCategoryId !== null && c.hbCategoryId !== undefined);
         if (!mappedCat) {
             toast.error("Önce kategoriyi Hepsiburada ile eşleştirmelisiniz.");
             return;
@@ -68,16 +68,17 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
         setAttrMappings({});
 
         try {
-            const res = await getHepsiburadaCategoryAttributes(mappedCat.hepsiburadaCategoryId);
+            const res = await getHepsiburadaCategoryAttributes(mappedCat.hbCategoryId);
             if (res.success) {
                 setCategoryAttrs(res.data || []);
             } else {
-                toast.error(res.message);
-                setShowAttrModal(false);
+                // Metadata çekilemezse uyarı ver ama formu kapat değil
+                toast.warning("Kategori özellikleri alınamadı. Temel alanları doldurarak devam edebilirsiniz.");
+                setCategoryAttrs([]);
             }
         } catch (error) {
-            toast.error("Özellikler yüklenemedi.");
-            setShowAttrModal(false);
+            toast.warning("Kategori özellikleri yüklenemedi. Temel alanlarla devam edebilirsiniz.");
+            setCategoryAttrs([]);
         } finally {
             setAttrLoading(false);
         }
@@ -142,7 +143,7 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
                     <TableBody>
                         {filteredProducts.map((product) => {
                             const isSynced = !!product.hepsiburadaProduct?.isSynced;
-                            const mappedCat = product.categories.find((c: any) => c.hepsiburadaCategoryId !== null);
+                            const mappedCat = product.categories.find((c: any) => c.hbCategoryId !== null && c.hbCategoryId !== undefined);
 
                             return (
                                 <TableRow key={product.id} className="hover:bg-blue-50/10 transition-colors">
