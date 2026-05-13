@@ -212,7 +212,11 @@ export class HepsiburadaClient {
         const response = await fetch(url, {
             headers: this.getHeaders(),
         });
-        if (!response.ok) throw new Error("HB Metadata Error");
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error("HB Metadata Error Detail:", response.status, errText);
+            throw new Error(`HB Metadata Error (${response.status}): ${errText.substring(0, 100)}`);
+        }
         return await response.json();
     }
 
