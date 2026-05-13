@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
     Table, 
     TableBody, 
@@ -23,7 +23,7 @@ import {
     Link2
 } from "lucide-react";
 import { toast } from "sonner";
-import { sendProductToHepsiburada, getHepsiburadaCategoryAttributes } from "../actions";
+import { sendProductToHepsiburada, getHepsiburadaCategoryAttributes, getHepsiburadaAttributeValues } from "../actions";
 import {
     Dialog,
     DialogContent,
@@ -33,6 +33,52 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+function DynamicAttributeField({ attr, categoryId, onChange }: { attr: any, categoryId: string, onChange: (val: string) => void }) {
+    const [values, setValues] = useState<{id: string, value: string}[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (attr.type === 'enum') {
+            setLoading(true);
+            getHepsiburadaAttributeValues(categoryId, attr.id).then(res => {
+                if (res.success) setValues(res.data);
+                setLoading(false);
+            });
+        }
+    }, [attr.id, categoryId, attr.type]);
+
+    if (attr.type === 'enum') {
+        return (
+            <div className="space-y-1">
+                <Label className="text-xs">{attr.name} {attr.mandatory && "*"}</Label>
+                <Select onValueChange={onChange} disabled={loading}>
+                    <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder={loading ? "Yükleniyor..." : `${attr.name} seçin...`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {values.map((v) => (
+                            <SelectItem key={v.id} value={v.value}>{v.value}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-1">
+            <Label className="text-xs">{attr.name} {attr.mandatory && "*"}</Label>
+            <Input 
+                className="h-8 text-sm"
+                placeholder={`${attr.name} değerini girin...`}
+                onChange={(e) => onChange(e.target.value)}
+            />
+        </div>
+    );
+}
 
 interface HepsiburadaProductListProps {
     initialProducts: any[];
@@ -231,14 +277,12 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
                                 <div className="space-y-3">
                                     <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider px-1">Kategori Özellikleri</h4>
                                     {categoryAttrs.map((attr: any) => (
-                                        <div key={attr.id} className="space-y-1">
-                                            <Label className="text-xs">{attr.name} {attr.required && "*"}</Label>
-                                            <Input 
-                                                className="h-8 text-sm"
-                                                placeholder={`${attr.name} değerini girin...`}
-                                                onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, [attr.name]: e.target.value }))}
-                                            />
-                                        </div>
+                                        <DynamicAttributeField 
+                                            key={attr.id} 
+                                            attr={attr} 
+                                            categoryId={selectedProduct?.categories.find((c: any) => c.hbCategoryId)?.hbCategoryId || ""}
+                                            onChange={(val) => setAttrMappings((prev: any) => ({ ...prev, [attr.name]: val }))}
+                                        />
                                     ))}
                                 </div>
                             )}

@@ -220,6 +220,19 @@ export class HepsiburadaClient {
         return await response.json();
     }
 
+    async getAttributeValues(categoryId: string, attributeId: string) {
+        await this.init();
+        const sitSuffix = this.isTestMode ? "-sit" : "";
+        const url = `https://mpop${sitSuffix}.hepsiburada.com/product/api/categories/${categoryId}/attribute/${attributeId}/values`;
+        const response = await fetch(url, {
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            return [];
+        }
+        return await response.json();
+    }
+
     /**
      * Create Product (Catalog Upload) - JSON dosyası olarak multipart/form-data ile gönderir
      * SIT: POST https://mpop-sit.hepsiburada.com/product/api/products/import
