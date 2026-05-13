@@ -430,8 +430,8 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                 UrunAdi: product.name,
                 UrunAciklamasi: product.description || product.name,
                 Marka: product.brand?.name || "Diğer",
-                // Garanti Süresi baseAttribute olduğu için ID ile gidiyor (GarantiSuresi)
-                GarantiSuresi: attributes.find(a => a.name === "Garanti Süresi (Ay)") ? Number(attributes.find(a => a.name === "Garanti Süresi (Ay)").value) : 24,
+                // Garanti Süresi (GarantiSuresi ID'si ile geliyor)
+                GarantiSuresi: attributes.find(a => a.id === "GarantiSuresi") ? Number(attributes.find(a => a.id === "GarantiSuresi").value) : 24,
                 kg: String(Number(product.weight) || 1),
                 tax_vat_rate: String(product.vatRate || 20),
                 price: String(hbPrice).replace(".", ","),
@@ -444,11 +444,10 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                 ...(product.images[4] ? { Image5: product.images[4] } : {}),
                 // HB SKU (Katalog Kodu) varsa ekle (Buybox eşleşmesi için)
                 ...((product as any).hepsiburadaProduct?.hbSku ? { hbSku: (product as any).hepsiburadaProduct.hbSku } : {}),
-                // Kullanıcının girdiği ek özellikler (Kategori dinamik alanları)
-                // "Garanti Süresi (Ay)" ve "Garanti Süresi" alanlarını ayırıyoruz çünkü yukarıda ID ile gönderdik
+                // Kullanıcının girdiği dinamik kategori özellikleri (ID bazlı gönderim)
                 ...attributes
-                    .filter((attr: any) => !attr.name.includes("Garanti Süresi"))
-                    .reduce((acc: any, curr: any) => ({ ...acc, [curr.name]: curr.value }), {}),
+                    .filter((attr: any) => attr.id !== "GarantiSuresi")
+                    .reduce((acc: any, curr: any) => ({ ...acc, [curr.id]: curr.value }), {}),
             }
         }];
 

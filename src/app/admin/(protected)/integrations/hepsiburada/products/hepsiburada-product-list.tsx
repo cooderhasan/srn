@@ -36,7 +36,7 @@ import { Label } from "@/components/ui/label";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-function DynamicAttributeField({ attr, categoryId, onChange }: { attr: any, categoryId: string, onChange: (val: string) => void }) {
+function DynamicAttributeField({ attr, categoryId, onChange }: { attr: any, categoryId: string, onChange: (val: string, name: string) => void }) {
     const [values, setValues] = useState<{id: string, value: string}[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -54,7 +54,7 @@ function DynamicAttributeField({ attr, categoryId, onChange }: { attr: any, cate
         return (
             <div className="space-y-1">
                 <Label className="text-xs">{attr.name} {attr.mandatory && "*"}</Label>
-                <Select onValueChange={onChange} disabled={loading}>
+                <Select onValueChange={(val) => onChange(val, attr.name)} disabled={loading}>
                     <SelectTrigger className="h-8 text-sm">
                         <SelectValue placeholder={loading ? "Yükleniyor..." : `${attr.name} seçin...`} />
                     </SelectTrigger>
@@ -74,7 +74,7 @@ function DynamicAttributeField({ attr, categoryId, onChange }: { attr: any, cate
             <Input 
                 className="h-8 text-sm"
                 placeholder={`${attr.name} değerini girin...`}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(e) => onChange(e.target.value, attr.name)}
             />
         </div>
     );
@@ -135,9 +135,10 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
     const handleSend = async () => {
         if (!selectedProduct) return;
         
-        const finalAttrs = Object.entries(attrMappings).map(([name, val]) => ({
-            name,
-            value: val
+        const finalAttrs = Object.entries(attrMappings).map(([id, data]: any) => ({
+            id,
+            name: data.name,
+            value: data.value
         }));
 
         setLoadingProductId(selectedProduct.id);
@@ -273,7 +274,7 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
                                             type="number"
                                             className="h-8 text-sm border-amber-200 focus-visible:ring-amber-500"
                                             defaultValue="24"
-                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, "Garanti Süresi (Ay)": e.target.value }))}
+                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, "GarantiSuresi": { name: "Garanti Süresi (Ay)", value: e.target.value } }))}
                                         />
                                     </div>
                                     <div className="space-y-1">
@@ -298,7 +299,7 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
                                             key={attr.id} 
                                             attr={attr} 
                                             categoryId={selectedProduct?.categories.find((c: any) => c.hbCategoryId)?.hbCategoryId || ""}
-                                            onChange={(val) => setAttrMappings((prev: any) => ({ ...prev, [attr.name]: val }))}
+                                            onChange={(val, name) => setAttrMappings((prev: any) => ({ ...prev, [attr.id]: { name, value: val } }))}
                                         />
                                     ))}
                                 </div>
