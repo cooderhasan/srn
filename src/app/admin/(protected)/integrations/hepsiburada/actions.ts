@@ -370,7 +370,7 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
             isTestMode: config.isTestMode ?? true,
         });
 
-        const mappedCat = product.categories.find((c: any) => c.hepsiburadaCategoryId !== null);
+        const mappedCat = product.categories.find((c: any) => c.hbCategoryId !== null && c.hbCategoryId !== undefined);
         if (!mappedCat) return { success: false, message: "Ürünün kategorisi Hepsiburada ile eşleşmemiş." };
 
         const merchantId = config.merchantId || config.username;
@@ -378,7 +378,7 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
 
         // HB payload format - resmi dokümantasyona uygun
         const payload = [{
-            categoryId: Number((mappedCat as any).hepsiburadaCategoryId),
+            categoryId: Number((mappedCat as any).hbCategoryId),
             merchant: merchantId,
             attributes: {
                 merchantSku: product.sku || product.barcode || product.id,
