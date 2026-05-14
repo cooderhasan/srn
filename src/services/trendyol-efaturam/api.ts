@@ -4,6 +4,8 @@ export interface EFaturamAuth {
     username: string; // E-Faturam email
     password: string; // E-Faturam şifre
     companyId?: string;
+    earchivePrefix?: string;
+    efaturaPrefix?: string;
     isTestMode?: boolean;
 }
 
@@ -307,8 +309,8 @@ export class TrendyolEFaturamClient {
         const taxableTotal = rawInvoiceData.taxExcludedPrice;
         const totalTax = rawInvoiceData.taxAmount;
 
-        // Portal'da varsayılan prefix DAP olarak tanımlı (E-Arşiv için).
-        const invoicePrefix = "DAP";
+        // Ayarlardan gelen prefix'i kullan, yoksa DAP kullan.
+        const invoicePrefix = this.auth.earchivePrefix || "DAP";
         console.log(`🏷️ Kullanılacak prefix: ${invoicePrefix} | userId=${this.userId} | companyId=${(this as any).companyId}`);
 
         const formattedData: any = {

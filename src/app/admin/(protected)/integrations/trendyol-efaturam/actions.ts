@@ -22,6 +22,8 @@ export async function saveEFaturamConfig(prevState: any, formData: FormData) {
         const username = formData.get("username") as string;
         const password = formData.get("password") as string;
         const companyId = formData.get("companyId") as string;
+        const earchivePrefix = formData.get("earchivePrefix") as string || "DAP";
+        const efaturaPrefix = formData.get("efaturaPrefix") as string || "DIP";
         const isActive = formData.get("isActive") === "on";
         const isTestMode = formData.get("isTestMode") === "on";
 
@@ -34,11 +36,11 @@ export async function saveEFaturamConfig(prevState: any, formData: FormData) {
         if (existing) {
             await (prisma as any).trendyolEFaturamConfig.update({
                 where: { id: existing.id },
-                data: { username, password, companyId, isActive, isTestMode },
+                data: { username, password, companyId, earchivePrefix, efaturaPrefix, isActive, isTestMode },
             });
         } else {
             await (prisma as any).trendyolEFaturamConfig.create({
-                data: { username, password, companyId, isActive, isTestMode },
+                data: { username, password, companyId, earchivePrefix, efaturaPrefix, isActive, isTestMode },
             });
         }
 
@@ -58,6 +60,8 @@ export async function testEFaturamConnection() {
             username: config.username,
             password: config.password,
             companyId: config.companyId,
+            earchivePrefix: config.earchivePrefix,
+            efaturaPrefix: config.efaturaPrefix,
             isTestMode: config.isTestMode,
         });
 
@@ -77,6 +81,8 @@ export async function testEFaturamPrefixes() {
             username: config.username,
             password: config.password,
             companyId: config.companyId,
+            earchivePrefix: config.earchivePrefix,
+            efaturaPrefix: config.efaturaPrefix,
             isTestMode: config.isTestMode,
         });
 
@@ -233,6 +239,8 @@ export async function sendOrderInvoice(orderId: string) {
             username: config.username,
             password: config.password,
             companyId: config.companyId,
+            earchivePrefix: config.earchivePrefix,
+            efaturaPrefix: config.efaturaPrefix,
             isTestMode: config.isTestMode,
         });
 

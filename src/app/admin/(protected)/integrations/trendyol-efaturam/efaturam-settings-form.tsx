@@ -91,6 +91,27 @@ export function EFaturamSettingsForm({ initialData }: Props) {
                         />
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="earchivePrefix">e-Arşiv Ön Ek</Label>
+                            <Input
+                                id="earchivePrefix"
+                                name="earchivePrefix"
+                                defaultValue={initialData?.earchivePrefix || "DAP"}
+                                placeholder="Örn: DAP veya TYA"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="efaturaPrefix">e-Fatura Ön Ek</Label>
+                            <Input
+                                id="efaturaPrefix"
+                                name="efaturaPrefix"
+                                defaultValue={initialData?.efaturaPrefix || "DIP"}
+                                placeholder="Örn: DIP veya TYE"
+                            />
+                        </div>
+                    </div>
+
                     <div className="flex flex-col gap-4 p-4 bg-muted/30 rounded-lg border border-dashed">
                         <div className="flex items-center justify-between">
                             <div className="space-y-0.5">

@@ -777,6 +777,8 @@ model TrendyolEFaturamConfig {
   username       String   // E-Faturam Kullanıcı Adı
   password       String   // E-Faturam Şifre
   companyId      String?  // Cari ID / Şirket ID
+  earchivePrefix String?   @default("DAP") // e-Arşiv Ön Ek
+  efaturaPrefix  String?   @default("DIP") // e-Fatura Ön Ek
   isActive       Boolean  @default(false)
   isTestMode     Boolean  @default(true)
   createdAt      DateTime @default(now())
