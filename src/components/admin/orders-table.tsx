@@ -596,8 +596,8 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                         </TableCell>
                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end gap-2">
-                                                {(order.source === "TRENDYOL" || order.source === "N11") && (
-                                                    <div className="flex gap-1">
+                                                <div className="flex gap-1">
+                                                    {(order.source === "TRENDYOL" || order.source === "N11" || order.source === "HEPSIBURADA") && (
                                                         <Button
                                                             variant="outline"
                                                             size="icon"
@@ -607,20 +607,20 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                         >
                                                             <Barcode className="h-4 w-4" />
                                                         </Button>
-                                                        {!(order as any).invoiceNo && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="icon"
-                                                                className="border-orange-200 text-orange-600 hover:bg-orange-50 h-9 w-9"
-                                                                title="E-Fatura Gönder"
-                                                                disabled={loadingId === order.id}
-                                                                onClick={() => handleSendInvoice(order.id)}
-                                                            >
-                                                                <ReceiptText className="h-5 w-5" />
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                )}
+                                                    )}
+                                                    {!(order as any).invoiceNo && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="border-orange-200 text-orange-600 hover:bg-orange-50 h-9 w-9"
+                                                            title="E-Fatura Gönder"
+                                                            disabled={loadingId === order.id}
+                                                            onClick={() => handleSendInvoice(order.id)}
+                                                        >
+                                                            <ReceiptText className="h-5 w-5" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
