@@ -10,19 +10,20 @@ export interface EFaturamAuth {
 export interface InvoiceLine {
     itemName: string;
     quantity: number;
-    unitCode?: string; // "C62" (Adet)
+    unitCode: string; // "C62" (Adet)
     unitPriceAmount: number; // Kuruş
     taxPercent: number; // KDV oranı (20, 10, 1, 0)
     taxAmount: number; // Kuruş
     taxableAmount: number; // Kuruş (Matrah)
     totalAmount: number; // Kuruş (KDV dahil toplam)
-    totalDiscountAmount?: number; // Kuruş
+    totalDiscountAmount: number; // Kuruş
 }
 
 export interface EArchiveInvoiceData {
-    source: string; // "API"
-    companyId?: number;
-    userId?: number;
+    autoInvoiceId: boolean; // true
+    companyId: number;
+    userId: number;
+    source: string; // "WEB"
     
     recipientInfo: {
         taxId: string;
@@ -34,15 +35,13 @@ export interface EArchiveInvoiceData {
         address: string;
         countryCode: string; // "TR"
         email?: string;
+        phone?: string;
     };
 
     invoiceInfo: {
-        scenario: "EARSIVFATURA" | "EFATURA";
+        invoiceType: "EARSIVFATURA" | "EFATURA";
         invoiceTypeCode: "SATIS" | "IADE";
-        currencyCode: string; // "TRY"
-        invoiceDate: string; // "2024-05-14"
-        invoiceTime: string; // "14:00:00"
-        localReferenceId?: string;
+        currencyCode?: string; // "TRY"
     };
 
     invoiceLines: InvoiceLine[];
@@ -51,6 +50,7 @@ export interface EArchiveInvoiceData {
         totalTaxAmount: number; // Kuruş
         subTotalTaxes: Array<{
             taxAmount: number;
+            taxableAmount: number;
             taxPercent: number;
             taxCode: string; // "0015" (KDV)
         }>;
@@ -61,7 +61,7 @@ export interface EArchiveInvoiceData {
         taxExclusiveAmount: number; // Kuruş
         taxInclusiveAmount: number; // Kuruş
         payableAmount: number; // Kuruş
-        totalDiscountAmount?: number;
+        allowanceTotalAmount: number; // İndirim tutarı (0 veya tutar)
     };
 
     notes?: string[];
@@ -86,8 +86,6 @@ export class TrendyolEFaturamClient {
      */
     private async login(): Promise<boolean> {
         try {
-            console.log(`📡 Trendyol e-Faturam Login Attempt (${this.auth.isTestMode ? 'TEST' : 'CANLI'})...`);
-            
             const payload: any = {
                 password: this.auth.password,
             };
@@ -111,7 +109,6 @@ export class TrendyolEFaturamClient {
                 }
             );
 
-            // Giriş başarılıysa userId response body'den gelir (örn: 43406)
             if (response.data && typeof response.data === 'number') {
                 this.userId = response.data;
             }
@@ -127,22 +124,17 @@ export class TrendyolEFaturamClient {
             if (token) {
                 this.accessToken = token;
                 this.tokenExpiry = Date.now() + 55 * 60 * 1000;
-                console.log(`✅ Trendyol e-Faturam Login Success (UserId: ${this.userId})`);
                 return true;
             }
 
             throw new Error("Giriş yapıldı ancak token alınamadı.");
         } catch (error: any) {
-            console.error("❌ Trendyol Login Error:", error.response?.status, error.response?.data);
             throw new Error(`E-Faturam login hatası: ${error.response?.status || "NETWORK"}`);
         }
     }
 
-    /**
-     * TL tutarını Kuruş'a çevirir
-     */
     private toKurus(amount: number): number {
-        return Math.round(amount * 100);
+        return Math.round(Number(amount) * 100);
     }
 
     private async ensureToken(): Promise<void> {
@@ -172,7 +164,6 @@ export class TrendyolEFaturamClient {
             const errorDetail = error.response?.data
                 ? JSON.stringify(error.response.data)
                 : error.message;
-            console.error(`❌ E-Faturam API Error [${method} ${endpoint}]:`, error.response?.status, errorDetail);
             throw new Error(`E-Faturam API Hatası (${error.response?.status || "NETWORK"}): ${errorDetail}`);
         }
     }
@@ -205,55 +196,57 @@ export class TrendyolEFaturamClient {
      * E-Arşiv Fatura Oluşturma
      */
     async createEArchiveInvoice(rawInvoiceData: any): Promise<any> {
-        // Ham veriyi Kuruş bazlı dokümantasyon formatına çevirelim
+        const taxableTotal = rawInvoiceData.taxExcludedPrice;
+        const totalTax = rawInvoiceData.taxAmount;
+
         const formattedData: EArchiveInvoiceData = {
-            source: "API",
-            userId: this.userId || undefined,
-            companyId: this.auth.companyId ? parseInt(this.auth.companyId) : (this.userId || undefined),
+            autoInvoiceId: true,
+            userId: Number(this.userId),
+            companyId: this.auth.companyId ? Number(this.auth.companyId) : Number(this.userId),
+            source: "WEB",
             recipientInfo: {
-                taxId: rawInvoiceData.receiverTaxId,
+                taxId: rawInvoiceData.receiverTaxId.toString(),
                 name: rawInvoiceData.receiverName,
-                surname: rawInvoiceData.receiverSurname,
+                surname: rawInvoiceData.receiverSurname || "",
                 title: rawInvoiceData.receiverTitle,
                 city: rawInvoiceData.receiverCity || "İSTANBUL",
                 district: rawInvoiceData.receiverDistrict || "MERKEZ",
                 address: rawInvoiceData.receiverAddress || "ADRES BELİRTİLMEMİŞ",
                 countryCode: "TR",
                 email: rawInvoiceData.receiverEmail,
+                phone: rawInvoiceData.receiverPhone,
             },
             invoiceInfo: {
-                scenario: "EARSIVFATURA",
+                invoiceType: "EARSIVFATURA",
                 invoiceTypeCode: rawInvoiceData.invoiceTypeCode || "SATIS",
-                currencyCode: rawInvoiceData.currency || "TRY",
-                invoiceDate: new Date().toISOString().split('T')[0],
-                invoiceTime: new Date().toTimeString().split(' ')[0],
-                localReferenceId: rawInvoiceData.localReferenceId,
+                currencyCode: "TRY",
             },
             invoiceLines: rawInvoiceData.invoiceLines.map((line: any) => ({
                 itemName: line.name,
-                quantity: line.quantity,
+                quantity: Number(line.quantity),
                 unitCode: "C62",
                 unitPriceAmount: this.toKurus(line.unitPrice),
-                taxPercent: line.taxRate,
+                taxPercent: Number(line.taxRate),
                 taxAmount: this.toKurus(line.taxAmount),
                 taxableAmount: this.toKurus(line.amount - line.taxAmount),
                 totalAmount: this.toKurus(line.amount),
                 totalDiscountAmount: line.discountAmount ? this.toKurus(line.discountAmount) : 0,
             })),
             totalTax: {
-                totalTaxAmount: this.toKurus(rawInvoiceData.taxAmount),
+                totalTaxAmount: this.toKurus(totalTax),
                 subTotalTaxes: [{
-                    taxAmount: this.toKurus(rawInvoiceData.taxAmount),
-                    taxPercent: rawInvoiceData.invoiceLines[0]?.taxRate || 20,
+                    taxAmount: this.toKurus(totalTax),
+                    taxableAmount: this.toKurus(taxableTotal),
+                    taxPercent: Number(rawInvoiceData.invoiceLines[0]?.taxRate || 20),
                     taxCode: "0015",
                 }],
             },
             invoiceTotal: {
-                lineExtensionAmount: this.toKurus(rawInvoiceData.taxExcludedPrice),
-                taxExclusiveAmount: this.toKurus(rawInvoiceData.taxExcludedPrice),
+                lineExtensionAmount: this.toKurus(taxableTotal),
+                taxExclusiveAmount: this.toKurus(taxableTotal),
                 taxInclusiveAmount: this.toKurus(rawInvoiceData.taxInclusiveAmount),
                 payableAmount: this.toKurus(rawInvoiceData.payableAmount),
-                totalDiscountAmount: rawInvoiceData.discountAmount ? this.toKurus(rawInvoiceData.discountAmount) : 0,
+                allowanceTotalAmount: rawInvoiceData.discountAmount ? this.toKurus(rawInvoiceData.discountAmount) : 0,
             },
             notes: rawInvoiceData.notes,
         };
@@ -262,7 +255,6 @@ export class TrendyolEFaturamClient {
     }
 
     async createEInvoice(rawInvoiceData: any): Promise<any> {
-        // E-Fatura için de benzer bir dönüşüm yapılabilir
         return await this.request("POST", "/api/invoice/documents/outgoing-einvoice", rawInvoiceData);
     }
 
