@@ -386,6 +386,7 @@ export class TrendyolEFaturamClient {
             paymentInfo: {
                 paymentType: "KREDIKARTI/BANKAKARTI",
                 paymentMeans: "CREDIT_CARD",
+                paymentDate: new Date().toISOString().split("T")[0],
                 purchaseUrl: "https://www.trendyol.com",
             },
             source: "PARTNER",
