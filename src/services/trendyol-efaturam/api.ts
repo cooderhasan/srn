@@ -134,6 +134,8 @@ export class TrendyolEFaturamClient {
                 this.accessToken = token;
                 this.tokenExpiry = Date.now() + 55 * 60 * 1000;
                 
+                console.log('🔍 FULL SIGNIN RESPONSE:', JSON.stringify(response.data, null, 2));
+                
                 // Token'ı çözüp ID'leri alalım
                 const decoded = this.decodeToken(token);
                 if (decoded) {
