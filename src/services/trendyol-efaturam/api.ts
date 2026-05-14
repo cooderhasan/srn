@@ -350,7 +350,16 @@ export class TrendyolEFaturamClient {
                 totalAmount: this.toKurus(line.amount),
                 totalDiscountAmount: line.discountAmount ? this.toKurus(line.discountAmount) : 0,
                 taxName: "KDV",
-                taxCode: "0015"
+                taxCode: "0015",
+                totalTax: {
+                    totalTaxAmount: this.toKurus(line.taxAmount),
+                    subTotalTaxes: [{
+                        taxAmount: this.toKurus(line.taxAmount),
+                        taxableAmount: this.toKurus(line.amount - line.taxAmount),
+                        percent: Number(line.taxRate),
+                        taxType: "KDV",
+                    }]
+                }
             })),
             totalTax: {
                 totalTaxAmount: this.toKurus(totalTax),
