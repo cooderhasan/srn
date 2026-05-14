@@ -331,7 +331,7 @@ export class TrendyolEFaturamClient {
                 address: rawInvoiceData.receiverAddress || "ADRES BELİRTİLMEMİŞ",
                 countryCode: "TR",
                 email: rawInvoiceData.receiverEmail || "",
-                taxOffice: "",
+                taxOffice: rawInvoiceData.receiverTaxOffice || "MERKEZ",
             },
             invoiceInfo: {
                 invoiceType: "EARSIVFATURA",
@@ -377,6 +377,7 @@ export class TrendyolEFaturamClient {
             paymentInfo: {
                 paymentType: "KREDIKARTI/BANKAKARTI",
                 paymentMeans: "CREDIT_CARD",
+                purchaseUrl: "https://www.trendyol.com",
             },
             source: "PARTNER",
             autoInvoiceId: true
