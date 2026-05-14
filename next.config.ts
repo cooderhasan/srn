@@ -4,7 +4,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  reactCompiler: true,
+  reactCompiler: false,
   typescript: {
     ignoreBuildErrors: true,
   },
