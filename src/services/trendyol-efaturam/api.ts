@@ -232,11 +232,11 @@ export class TrendyolEFaturamClient {
 
         const formattedData: any = {
             autoInvoiceId: true,
-            invoiceSeries: "TYA",
-            vknPrefix: "TYA", // Yeni keşfedilen doğru alan ismi
+            invoiceSeries: "DAP", // Portal varsayılan serisi
+            vknPrefix: "DAP", 
             userId: 43406,
             companyId: 43144000001,
-            source: "PARTNER", // WEB yerine PARTNER kullanmalıyız
+            source: "WEB", // Tekrar WEB deneyelim
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
                 name: rawInvoiceData.receiverName,
