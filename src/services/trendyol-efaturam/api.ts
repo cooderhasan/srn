@@ -322,7 +322,8 @@ export class TrendyolEFaturamClient {
             vknPrefix: invoicePrefix,     // Bazı versiyonlar bunu kullanır
             userId: this.userId,
             companyId: (this as any).companyId,
-            source: "WEB",
+            source: "API",
+            appCode: "SelfIntegration",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
                 name: rawInvoiceData.receiverName,
