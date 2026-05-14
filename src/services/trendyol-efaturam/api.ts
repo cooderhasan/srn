@@ -140,15 +140,32 @@ export class TrendyolEFaturamClient {
                 const decoded = this.decodeToken(token);
                 if (decoded) {
                     console.log('🔑 DECODED TOKEN:', JSON.stringify(decoded, null, 2));
-                    this.userId = decoded.userId || decoded.id || decoded.sub || (typeof response.data === 'number' ? response.data : null);
-                    // companyId: config'deki değer öncelikli, sonra token, sonra userId
+                    // userId: number olarak sakla
+                    const rawUserId = decoded.userId || decoded.id || decoded.sub || (typeof response.data === 'number' ? response.data : null);
+                    this.userId = rawUserId ? Number(rawUserId) : null;
+
+                    // companyId extraction: try multiple sources
+                    let extractedCompanyId = null;
+                    if (decoded.companyId) extractedCompanyId = decoded.companyId;
+                    else if (decoded.cid) extractedCompanyId = decoded.cid;
+                    else if (decoded.account_id) extractedCompanyId = decoded.account_id;
+                    else if (decoded.privs && Object.keys(decoded.privs).length > 0) {
+                        // Trendyol E-Faturam often puts companyId as keys in 'privs'
+                        const keys = Object.keys(decoded.privs);
+                        // Filter for keys that look like numeric IDs (usually long numbers)
+                        const numericKey = keys.find(k => /^\d+$/.test(k));
+                        if (numericKey) extractedCompanyId = numericKey;
+                    }
+
                     (this as any).companyId = 
                         (this.auth.companyId ? Number(this.auth.companyId) : null) ||
-                        decoded.companyId || decoded.cid || decoded.account_id ||
+                        (extractedCompanyId ? Number(extractedCompanyId) : null) ||
                         this.userId;
+
                     console.log(`✅ Token Decoded: userId=${this.userId}, companyId=${(this as any).companyId}`);
                 } else {
-                    this.userId = typeof response.data === 'number' ? response.data : null;
+                    const rawUserId = typeof response.data === 'number' ? response.data : null;
+                    this.userId = rawUserId ? Number(rawUserId) : null;
                     (this as any).companyId = (this.auth.companyId ? Number(this.auth.companyId) : null) || this.userId;
                 }
                 
