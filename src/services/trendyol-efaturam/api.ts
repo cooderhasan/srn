@@ -84,6 +84,19 @@ export class TrendyolEFaturamClient {
     /**
      * Giriş yaparak access_token ve userId alır
      */
+    private decodeToken(token: string): any {
+        try {
+            const base64Url = token.split('.')[1];
+            if (!base64Url) return null;
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = Buffer.from(base64, 'base64').toString();
+            return JSON.parse(jsonPayload);
+        } catch (e) {
+            console.error("❌ Token Decode Error:", e);
+            return null;
+        }
+    }
+
     private async login(): Promise<boolean> {
         try {
             const payload: any = {
@@ -109,10 +122,6 @@ export class TrendyolEFaturamClient {
                 }
             );
 
-            if (response.data && typeof response.data === 'number') {
-                this.userId = response.data;
-            }
-
             const headers = response.headers;
             const token =
                 headers["x-access-token"] ||
@@ -124,6 +133,19 @@ export class TrendyolEFaturamClient {
             if (token) {
                 this.accessToken = token;
                 this.tokenExpiry = Date.now() + 55 * 60 * 1000;
+                
+                // Token'ı çözüp ID'leri alalım
+                const decoded = this.decodeToken(token);
+                if (decoded) {
+                    this.userId = decoded.userId || decoded.id || (typeof response.data === 'number' ? response.data : null);
+                    // Eğer token içinde companyId varsa onu alalım
+                    (this as any).companyId = decoded.companyId || decoded.cid || this.userId;
+                    console.log(`✅ Token Decoded: userId=${this.userId}, companyId=${(this as any).companyId}`);
+                } else if (typeof response.data === 'number') {
+                    this.userId = response.data;
+                    (this as any).companyId = this.userId;
+                }
+                
                 return true;
             }
 
@@ -204,8 +226,8 @@ export class TrendyolEFaturamClient {
 
         const formattedData: EArchiveInvoiceData = {
             autoInvoiceId: true,
-            // userId: Number(this.userId),
-            // companyId: Number(this.userId),
+            userId: Number(this.userId),
+            companyId: Number((this as any).companyId || this.userId),
             source: "WEB",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
