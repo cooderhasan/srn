@@ -147,6 +147,9 @@ export class TrendyolEFaturamClient {
         await this.ensureToken();
 
         try {
+            console.log(`🚀 E-Faturam Request: ${method} ${endpoint}`);
+            if (data) console.log(`📦 Payload: ${JSON.stringify(data)}`);
+
             const response = await axios({
                 method,
                 url: `${this.baseUrl}${endpoint}`,
@@ -201,8 +204,8 @@ export class TrendyolEFaturamClient {
 
         const formattedData: EArchiveInvoiceData = {
             autoInvoiceId: true,
-            userId: Number(this.userId),
-            companyId: Number(this.userId), // Giriş yapan kullanıcı ID'si ile eşleşmeli
+            // userId: Number(this.userId),
+            // companyId: Number(this.userId),
             source: "WEB",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
