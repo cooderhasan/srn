@@ -5,16 +5,12 @@ import path from "path";
 const nextConfig: NextConfig = {
   output: "standalone",
   reactCompiler: false,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
   experimental: {
     cpus: 1,
     workerThreads: false,
-    memoryLimit: 1024,
   },
   images: {
     remotePatterns: [
