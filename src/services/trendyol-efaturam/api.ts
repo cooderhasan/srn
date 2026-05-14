@@ -78,12 +78,18 @@ export class TrendyolEFaturamClient {
                 password: this.auth.password,
             };
 
-            // Username email formatındaysa hem email hem username gönder (garanti olsun)
+            // Username email formatındaysa hem email hem username gönder
             if (this.auth.username.includes("@")) {
                 payload.email = this.auth.username;
                 payload.username = this.auth.username;
             } else {
                 payload.username = this.auth.username;
+            }
+
+            // CompanyId varsa taxId olarak da gönder (bazı Trendyol versiyonları bunu bekler)
+            if (this.auth.companyId) {
+                payload.taxId = this.auth.companyId;
+                payload.tenantId = this.auth.companyId;
             }
 
             const response = await axios.post(
@@ -98,6 +104,8 @@ export class TrendyolEFaturamClient {
                 }
             );
 
+            console.log(`📡 Trendyol Login Status: ${response.status}`);
+            
             // Token response header veya body'den gelebilir
             const token =
                 response.headers["access_token"] ||
