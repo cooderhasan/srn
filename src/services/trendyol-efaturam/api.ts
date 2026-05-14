@@ -202,7 +202,7 @@ export class TrendyolEFaturamClient {
         const formattedData: EArchiveInvoiceData = {
             autoInvoiceId: true,
             userId: Number(this.userId),
-            companyId: this.auth.companyId ? Number(this.auth.companyId) : Number(this.userId),
+            companyId: Number(this.userId), // Giriş yapan kullanıcı ID'si ile eşleşmeli
             source: "WEB",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
