@@ -222,6 +222,8 @@ export class TrendyolEFaturamClient {
      * E-Arşiv Fatura Oluşturma
      */
     async createEArchiveInvoice(rawInvoiceData: any): Promise<any> {
+        await this.ensureToken(); // Önce ID'lerin dolduğundan emin olalım
+
         const taxableTotal = rawInvoiceData.taxExcludedPrice;
         const totalTax = rawInvoiceData.taxAmount;
 
