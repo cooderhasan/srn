@@ -68,6 +68,31 @@ export async function testEFaturamConnection() {
     }
 }
 
+export async function testEFaturamPrefixes() {
+    try {
+        const config = await (prisma as any).trendyolEFaturamConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif ayar bulunamadı." };
+
+        const client = new TrendyolEFaturamClient({
+            username: config.username,
+            password: config.password,
+            companyId: config.companyId,
+            isTestMode: config.isTestMode,
+        });
+
+        const prefix = await client.getAvailablePrefixes();
+        const debug = await client.getDebugInfo();
+        
+        return { 
+            success: true, 
+            message: prefix ? `Kullanılabilir Prefix: ${prefix}` : "Prefix bulunamadı, varsayılan (DAP) denenecek.",
+            debug
+        };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
 /**
  * Sipariş verisinden e-Arşiv fatura payload'u oluşturur
  */

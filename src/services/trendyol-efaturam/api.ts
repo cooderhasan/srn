@@ -136,18 +136,20 @@ export class TrendyolEFaturamClient {
                 
                 console.log('🔍 FULL SIGNIN RESPONSE:', JSON.stringify(response.data, null, 2));
                 
-                // Token'ı çözüp ID'leri alalım
+                // Token'dan ID'leri çöz
                 const decoded = this.decodeToken(token);
                 if (decoded) {
                     console.log('🔑 DECODED TOKEN:', JSON.stringify(decoded, null, 2));
-                    this.userId = decoded.userId || decoded.id || decoded.sub || (typeof response.data === 'number' ? response.data : 43406);
-                    // Eğer token içinde companyId yoksa, bilinen TCKN'yi (26479888956) veya userId'yi deneyelim
-                    (this as any).companyId = decoded.companyId || decoded.cid || decoded.account_id || this.userId;
-                    
+                    this.userId = decoded.userId || decoded.id || decoded.sub || (typeof response.data === 'number' ? response.data : null);
+                    // companyId: config'deki değer öncelikli, sonra token, sonra userId
+                    (this as any).companyId = 
+                        (this.auth.companyId ? Number(this.auth.companyId) : null) ||
+                        decoded.companyId || decoded.cid || decoded.account_id ||
+                        this.userId;
                     console.log(`✅ Token Decoded: userId=${this.userId}, companyId=${(this as any).companyId}`);
                 } else {
-                    this.userId = typeof response.data === 'number' ? response.data : 43406;
-                    (this as any).companyId = this.userId;
+                    this.userId = typeof response.data === 'number' ? response.data : null;
+                    (this as any).companyId = (this.auth.companyId ? Number(this.auth.companyId) : null) || this.userId;
                 }
                 
                 return true;
@@ -222,6 +224,64 @@ export class TrendyolEFaturamClient {
     }
 
     /**
+     * Login sonrası token bilgilerini döndürür (debug)
+     */
+    async getDebugInfo(): Promise<any> {
+        await this.ensureToken();
+        return {
+            userId: this.userId,
+            companyId: (this as any).companyId,
+            hasToken: !!this.accessToken,
+        };
+    }
+
+    /**
+     * Hesapta tanımlı seri prefix'lerini listeler.
+     * Birden fazla endpoint denenir (API versiyonuna göre değişebilir).
+     */
+    async getAvailablePrefixes(): Promise<string | null> {
+        // Trendyol E-Faturam'ın bilinen prefix endpoint alternatifleri
+        const candidateEndpoints = [
+            "/api/invoice/corporate-prefix",
+            "/api/invoice/prefix",
+            "/api/company/prefix",
+            "/api/invoice/serial",
+            "/api/invoice/series",
+        ];
+
+        for (const endpoint of candidateEndpoints) {
+            try {
+                const result = await this.request("GET", endpoint);
+                console.log(`📋 Prefix endpoint [${endpoint}] yanıtı:`, JSON.stringify(result, null, 2));
+
+                // API farklı formatlarda dönebilir
+                let prefix: string | null = null;
+                if (Array.isArray(result) && result.length > 0) {
+                    const first = result[0];
+                    prefix = first?.prefix || first?.code || first?.value || first?.invoiceSeries || first?.serialNumber || null;
+                } else if (result?.prefix) {
+                    prefix = result.prefix;
+                } else if (result?.data && Array.isArray(result.data) && result.data.length > 0) {
+                    prefix = result.data[0]?.prefix || result.data[0]?.code || result.data[0]?.serialNumber || null;
+                } else if (typeof result === 'string' && result.length > 0 && result.length <= 10) {
+                    prefix = result;
+                }
+
+                if (prefix) {
+                    console.log(`✅ Prefix bulundu [${endpoint}]: ${prefix}`);
+                    return prefix;
+                }
+            } catch (error: any) {
+                console.warn(`⚠️ Prefix endpoint [${endpoint}] çalışmadı: ${error.message}`);
+                // Sonraki endpoint'i dene
+            }
+        }
+
+        console.warn("⚠️ Hiçbir prefix endpoint'i sonuç döndürmedi. Prefix gönderilmeden devam ediliyor.");
+        return null;
+    }
+
+    /**
      * E-Arşiv Fatura Oluşturma
      */
     async createEArchiveInvoice(rawInvoiceData: any): Promise<any> {
@@ -230,13 +290,17 @@ export class TrendyolEFaturamClient {
         const taxableTotal = rawInvoiceData.taxExcludedPrice;
         const totalTax = rawInvoiceData.taxAmount;
 
+        // Portal'da varsayılan prefix DAP olarak tanımlı (E-Arşiv için).
+        const invoicePrefix = "DAP";
+        console.log(`🏷️ Kullanılacak prefix: ${invoicePrefix} | userId=${this.userId} | companyId=${(this as any).companyId}`);
+
         const formattedData: any = {
             autoInvoiceId: true,
-            invoiceSeries: "DAP", // Portal varsayılan serisi
-            vknPrefix: "DAP", 
-            userId: 43406,
-            companyId: 43144000001,
-            source: "WEB", // Tekrar WEB deneyelim
+            invoiceSeries: invoicePrefix,
+            vknPrefix: invoicePrefix,
+            userId: this.userId,
+            companyId: (this as any).companyId,
+            source: "WEB",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
                 name: rawInvoiceData.receiverName,
