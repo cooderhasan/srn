@@ -107,6 +107,8 @@ export class TrendyolEFaturamClient {
             // Tüm headerları küçük harfe çevirip kontrol edelim
             const headers = response.headers;
             const token =
+                headers["x-access-token"] ||
+                headers["x-refresh-token"] ||
                 headers["access_token"] ||
                 headers["access-token"] ||
                 headers["token"] ||
