@@ -134,12 +134,12 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     const availableStock = Math.max(0, v.stock - criticalStock);
 
                     const hbItem = {
-                        merchantSku: v.sku || v.barcode,
-                        availableStock: Math.round(availableStock),
-                        price: Number(varPrice.toFixed(2)),
-                        dispatchTime: 1,
-                        cargoCompany1: "Yurtiçi Kargo",
-                        maximumPurchasableQuantity: 100
+                        MerchantSku: v.sku || v.barcode,
+                        AvailableStock: Math.round(availableStock),
+                        Price: Number(varPrice.toFixed(2)),
+                        DispatchTime: 1,
+                        CargoCompany1: "Yurtiçi Kargo",
+                        MaximumPurchasableQuantity: 100
                     };
                     console.log(`📦 HB Inventory Item (Variant):`, hbItem);
                     hbItems.push(hbItem);
@@ -149,12 +149,12 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     const availableStock = Math.max(0, p.stock - criticalStock);
                     
                     const hbItem = {
-                        merchantSku: p.sku || p.barcode,
-                        availableStock: Math.round(availableStock),
-                        price: Number(basePrice.toFixed(2)),
-                        dispatchTime: 1,
-                        cargoCompany1: "Yurtiçi Kargo",
-                        maximumPurchasableQuantity: 100
+                        MerchantSku: p.sku || p.barcode,
+                        AvailableStock: Math.round(availableStock),
+                        Price: Number(basePrice.toFixed(2)),
+                        DispatchTime: 1,
+                        CargoCompany1: "Yurtiçi Kargo",
+                        MaximumPurchasableQuantity: 100
                     };
                     console.log(`📦 HB Inventory Item:`, hbItem);
                     hbItems.push(hbItem);
