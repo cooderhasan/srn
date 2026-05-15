@@ -597,10 +597,36 @@ export async function createHepsiburadaTestOrder() {
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
         if (!config) return { success: false, message: "Aktif bir SIT (Test) bağlantısı bulunamadı." };
-
         // SIT Sipariş Oluşturma için özel STUB adresi
         const sitUrl = `https://oms-stub-external-sit.hepsiburada.com/orders/merchantId/${config.merchantId}`;
-        
+
+        // Aktif listing'den gerçek SKU bilgilerini çek
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId || config.username,
+            isTestMode: true,
+        });
+
+        let testSku = "HBV0000116MZS";
+        let testMerchantSku = "DENEME22";
+        let testPrice = 485;
+
+        // Aktif listing'den ilk ürünü bul
+        try {
+            const listingsResponse = await client.getListings(10, 0);
+            const listings = listingsResponse?.listings || [];
+            const activeProduct = listings.find((l: any) => l.availableStock > 0 && l.price > 0);
+            if (activeProduct) {
+                testSku = activeProduct.hepsiburadaSku;
+                testMerchantSku = activeProduct.merchantSku;
+                testPrice = activeProduct.price;
+                console.log(`🛒 Test siparişi için aktif ürün: ${testSku} (${testMerchantSku}) - ${testPrice} TL`);
+            }
+        } catch (e: any) {
+            console.log("⚠️ Listing çekilemedi, varsayılan SKU kullanılacak:", e.message);
+        }
+
         const payload = {
             Customer: {
                 CustomerId: "dfc8a27f-faae-4cb2-859c-8a7d50ee77be",
@@ -610,49 +636,53 @@ export async function createHepsiburadaTestOrder() {
                 AddressDetail: "Test Adresi No 1",
                 City: "İstanbul",
                 District: "Kadıköy",
-                Town: "Kadıköy", // Town often required
+                Town: "Caferağa",
                 Email: "test@serinmotor.com",
-                Name: "Müşteri Adı",
+                Name: "Test Müşteri",
                 PhoneNumber: "905551112233",
                 CountryCode: "TR"
             },
             LineItems: [{
-                Sku: "HBV000013AT", // Both Sku and MerchantSku for safety
-                MerchantSku: "HBV000013AT",
+                Sku: testSku,
+                MerchantSku: testMerchantSku,
                 Quantity: 1,
                 Price: {
-                    Amount: 150.0,
+                    Amount: testPrice,
                     Currency: "TRY"
                 },
                 TotalPrice: {
-                    Amount: 150.0,
+                    Amount: testPrice,
                     Currency: "TRY"
                 },
                 Tax: {
-                    Amount: 30.0,
+                    Amount: Number((testPrice * 0.20).toFixed(2)),
                     Currency: "TRY"
                 },
                 CargoCompanyId: 1
             }]
         };
 
+        console.log("🛒 SIT Order Payload:", JSON.stringify(payload, null, 2));
+
+        const merchantId = config.merchantId || config.username;
         const response = await fetch(sitUrl, {
             method: "POST",
             headers: {
-                "Authorization": `Basic ${Buffer.from(`${config.username}:${config.password}`).toString("base64")}`,
+                "Authorization": `Basic ${Buffer.from(`${merchantId}:${config.password}`).toString("base64")}`,
                 "Content-Type": "application/json",
                 "User-Agent": "serinmotor_dev"
             },
             body: JSON.stringify(payload)
         });
 
+        const responseText = await response.text();
+        console.log(`🛒 SIT Order Response (${response.status}):`, responseText);
+
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error("❌ SIT Order Detail Error:", response.status, errorText);
-            return { success: false, message: `HB SIT Hatası: ${response.status} - ${errorText}` };
+            return { success: false, message: `HB SIT Hatası: ${response.status} - ${responseText}` };
         }
 
-        return { success: true, message: "Hepsiburada SIT üzerinden hayali bir sipariş başarıyla oluşturuldu!" };
+        return { success: true, message: `Hepsiburada SIT test siparişi oluşturuldu! (${testMerchantSku})` };
 
     } catch (error: any) {
         console.error("❌ SIT Order Exception:", error);
