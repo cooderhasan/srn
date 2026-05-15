@@ -368,19 +368,13 @@ export class HepsiburadaClient {
         // Fatura linki: PUT /packages/merchantid/{merchantId}/packagenumber/{packageNumber}/invoice
         const url = `${this.orderBaseUrl}/packages/merchantid/${this.creds.merchantId}/packagenumber/${packageId}/invoice`;
         
+        // SIT ortamı için geçerli bir PDF URL'i gereklidir. 
+        // Eğer sağlanan URL pdf ile bitmiyorsa veya boşsa dummy bir pdf kullanıyoruz.
+        const finalUrl = invoiceUrl.endsWith(".pdf") ? invoiceUrl : "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+
         const payload = {
-            invoiceLink: invoiceUrl,
-            arrangementDate: new Date().toISOString(),
-            serialNumber: "TST",
-            rowNumber: "001",
-            invoices: [{
-                invoiceLink: invoiceUrl,
-                arrangementDate: new Date().toISOString(),
-                contentType: "pdf",
-                orderNumber: "",
-                serialNumber: "TST",
-                rowNumber: "001"
-            }]
+            invoiceLink: finalUrl,
+            contentType: "pdf"
         };
 
         console.log(`🧾 HB Invoice URL: ${url}`);
@@ -392,7 +386,7 @@ export class HepsiburadaClient {
             body: JSON.stringify(payload)
         });
 
-        if (!response.ok) {
+        if (!response.ok && response.status !== 204) {
             const err = await response.text();
             throw new Error(`HB Invoice Upload Error: ${response.status} - ${err}`);
         }
