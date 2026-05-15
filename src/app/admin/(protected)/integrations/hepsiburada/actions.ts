@@ -605,8 +605,8 @@ export async function createHepsiburadaTestOrder() {
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
         if (!config) return { success: false, message: "Aktif bir SIT (Test) bağlantısı bulunamadı." };
-        // SIT Sipariş Oluşturma - standart OMS endpoint
-        const sitUrl = `https://oms-external-sit.hepsiburada.com/orders/merchantid/${config.merchantId}`;
+        // SIT Test Sipariş Oluşturma - stub endpoint (sadece bu POST kabul eder)
+        const sitUrl = `https://oms-stub-external-sit.hepsiburada.com/orders/merchantid/${config.merchantId}`;
 
         // Aktif listing'den gerçek SKU bilgilerini çek
         const client = new HepsiburadaClient({
@@ -641,42 +641,13 @@ export async function createHepsiburadaTestOrder() {
         }
 
         const orderId = `HB${Date.now()}`;
-        const lineItemId = crypto.randomUUID();
         const merchantId = config.merchantId || config.username;
 
-        // HB SIT sipariş formatı - Resmi dokümantasyona uygun (PascalCase)
-        // https://developers.hepsiburada.com/hepsiburada/reference/post_orders-merchantid-merchantid
-        // ListingId = listing UUID'si (hepsiburadaSku DEĞİL!)
+        // HB SIT sipariş - minimal payload (stub endpoint)
         const payload = {
-            Customer: {
-                CustomerId: "dfc8a27f-faae-4cb2-859c-8a7d50ee77be",
-                Name: "Serinmotor Test"
-            },
-            DeliveryAddress: {
-                AddressDetail: "Test Mahallesi Test Caddesi No:1 Kadıköy",
-                AddressId: crypto.randomUUID(),
-                City: "İstanbul",
-                CountryCode: "TR",
-                District: "KADIKÖY",
-                Email: "test@serinmotor.com",
-                Name: "Test Müşteri",
-                PhoneNumber: "905551112233"
-            },
             LineItems: [{
                 ListingId: testListingId,
-                MerchantSku: testMerchantSku,
-                MerchantId: merchantId,
-                Quantity: 1,
-                Price: {
-                    Amount: testPrice,
-                    Currency: "TRY"
-                },
-                TotalPrice: {
-                    Amount: testPrice,
-                    Currency: "TRY"
-                },
-                CargoCompanyId: 1,
-                DeliveryOptionId: 1
+                Quantity: 1
             }]
         };
 
@@ -687,6 +658,7 @@ export async function createHepsiburadaTestOrder() {
             headers: {
                 "Authorization": `Basic ${Buffer.from(`${merchantId}:${config.password}`).toString("base64")}`,
                 "Content-Type": "application/json",
+                "Accept": "application/json",
                 "User-Agent": "serinmotor_dev"
             },
             body: JSON.stringify(payload)
