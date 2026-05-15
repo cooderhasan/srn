@@ -550,23 +550,29 @@ export async function createHepsiburadaTestOrder() {
                 AddressDetail: "Test Adresi No 1",
                 City: "İstanbul",
                 District: "Kadıköy",
+                Town: "Kadıköy", // Town often required
                 Email: "test@serinmotor.com",
                 Name: "Müşteri Adı",
                 PhoneNumber: "905551112233",
                 CountryCode: "TR"
             },
             LineItems: [{
-                MerchantSku: product.sku || product.barcode,
+                Sku: "HBV000013AT", // Both Sku and MerchantSku for safety
+                MerchantSku: "HBV000013AT",
                 Quantity: 1,
                 Price: {
-                    Amount: Number(product.listPrice) || 150.0,
+                    Amount: 150.0,
                     Currency: "TRY"
                 },
                 TotalPrice: {
-                    Amount: Number(product.listPrice) || 150.0,
+                    Amount: 150.0,
                     Currency: "TRY"
                 },
-                CargoCompanyId: 1 // Yurtiçi Kargo
+                Tax: {
+                    Amount: 30.0,
+                    Currency: "TRY"
+                },
+                CargoCompanyId: 1
             }]
         };
 
