@@ -547,7 +547,7 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
             await new Promise(resolve => setTimeout(resolve, 5000));
             try {
                 const sitSuffix = (config.isTestMode ?? true) ? "-sit" : "";
-                const statusUrl = `https://mpop${sitSuffix}.hepsiburada.com/product/api/products/trackingId/${trackingId}`;
+                const statusUrl = `https://mpop${sitSuffix}.hepsiburada.com/product/api/products/status/${trackingId}`;
                 const statusRes = await fetch(statusUrl, {
                     headers: {
                         "Authorization": `Basic ${Buffer.from(`${config.merchantId || config.username}:${config.password}`).toString("base64")}`,
