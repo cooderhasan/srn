@@ -710,3 +710,102 @@ export async function createHepsiburadaTestOrder() {
     }
 }
 
+/**
+ * SIT Siparişlerini Listele
+ */
+export async function getHepsiburadaSitOrders() {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
+        if (!config) return { success: false, message: "Aktif SIT bağlantısı bulunamadı.", orders: [] };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId || config.username,
+            isTestMode: true,
+        });
+
+        const result = await client.getOrders({ size: 50 });
+        const orders = result?.items || result?.content || [];
+        
+        console.log(`📋 HB SIT Orders: ${orders.length} sipariş bulundu`);
+        
+        return { 
+            success: true, 
+            orders: orders.map((o: any) => ({
+                orderNumber: o.orderNumber,
+                status: o.status,
+                orderDate: o.orderDate,
+                lines: (o.lines || o.orderLines || []).map((l: any) => ({
+                    id: l.id || l.lineItemId,
+                    merchantSku: l.merchantSku,
+                    hepsiburadaSku: l.hepsiburadaSku || l.sku,
+                    quantity: l.quantity,
+                    status: l.status,
+                    packageNumber: l.packageNumber || null,
+                }))
+            }))
+        };
+    } catch (error: any) {
+        console.error("❌ SIT Orders Error:", error);
+        return { success: false, message: error.message, orders: [] };
+    }
+}
+
+/**
+ * SIT Siparişi Paketle
+ * Adım 2: Siparişteki kalemleri paketler
+ */
+export async function packageHepsiburadaOrder(orderNumber: string, lineItemIds: string[]) {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
+        if (!config) return { success: false, message: "Aktif SIT bağlantısı bulunamadı." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId || config.username,
+            isTestMode: true,
+        });
+
+        console.log(`📦 Paketleme: Order ${orderNumber}, Lines: ${lineItemIds.join(", ")}`);
+        
+        const result = await client.packageItems(orderNumber, lineItemIds);
+        console.log("📦 Paketleme Sonucu:", JSON.stringify(result));
+        
+        return { success: true, message: `Sipariş ${orderNumber} paketlendi!`, data: result };
+    } catch (error: any) {
+        console.error("❌ Paketleme Hatası:", error);
+        return { success: false, message: "Paketleme Hatası: " + error.message };
+    }
+}
+
+/**
+ * SIT Fatura Linki Gönder
+ * Adım 3: Paketlenmiş siparişe fatura linki iletir
+ */
+export async function sendHepsiburadaInvoiceLink(packageNumber: string, invoiceUrl?: string) {
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
+        if (!config) return { success: false, message: "Aktif SIT bağlantısı bulunamadı." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId || config.username,
+            isTestMode: true,
+        });
+
+        const fakeInvoiceUrl = invoiceUrl || `https://serinmotor.com/invoices/test-${Date.now()}.pdf`;
+        
+        console.log(`🧾 Fatura Linki: Package ${packageNumber}, URL: ${fakeInvoiceUrl}`);
+        
+        const result = await client.uploadInvoiceLink(packageNumber, fakeInvoiceUrl);
+        console.log("🧾 Fatura Sonucu:", result);
+        
+        return { success: true, message: `Fatura linki gönderildi! (${packageNumber})` };
+    } catch (error: any) {
+        console.error("❌ Fatura Hatası:", error);
+        return { success: false, message: "Fatura Hatası: " + error.message };
+    }
+}
