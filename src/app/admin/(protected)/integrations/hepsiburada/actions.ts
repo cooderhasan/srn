@@ -104,11 +104,9 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
             whereClause.id = { in: productIds };
         }
 
-        // 1. Fetch products from DB
+        // 1. Fetch products (Include variants)
         const products = await prisma.product.findMany({
-            where: {
-                barcode: "6600014838091"
-            },
+            where: whereClause,
             include: { variants: true }
         });
 
