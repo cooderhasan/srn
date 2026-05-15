@@ -72,7 +72,7 @@ export class HepsiburadaClient {
             "Authorization": this.getAuthHeader(),
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Serinmotor_App",
+            "User-Agent": "serinmotor_dev",
             ...extraHeaders,
         };
     }
