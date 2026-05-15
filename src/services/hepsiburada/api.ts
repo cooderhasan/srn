@@ -373,8 +373,8 @@ export class HepsiburadaClient {
         const finalUrl = invoiceUrl.endsWith(".pdf") ? invoiceUrl : "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
 
         const payload = {
-            invoiceLink: finalUrl,
-            contentType: "pdf"
+            InvoiceLink: finalUrl,
+            ContentType: "pdf"
         };
 
         console.log(`🧾 HB Invoice URL: ${url}`);
