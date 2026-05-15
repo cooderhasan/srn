@@ -136,9 +136,13 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     const hbItem = {
                         merchantSku: v.sku || v.barcode,
                         availableStock: Math.round(availableStock),
-                        price: Number(varPrice.toFixed(2)), // Must be a number (Double)
+                        AvailableStock: Math.round(availableStock), // PascalCase version
+                        price: Number(varPrice.toFixed(2)),
+                        Price: Number(varPrice.toFixed(2)), // PascalCase version
                         dispatchTime: 1,
-                        cargoCompany1: "Yurtiçi Kargo", // Fixed name with Turkish characters
+                        DispatchTime: 1, // PascalCase version
+                        cargoCompany1: "Yurtiçi Kargo",
+                        CargoCompany1: "Yurtiçi Kargo", // PascalCase version
                         maximumPurchasableQuantity: 100
                     };
                     console.log(`📦 HB Inventory Item (Variant):`, hbItem);
@@ -151,9 +155,13 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     const hbItem = {
                         merchantSku: p.sku || p.barcode,
                         availableStock: Math.round(availableStock),
+                        AvailableStock: Math.round(availableStock),
                         price: Number(basePrice.toFixed(2)),
+                        Price: Number(basePrice.toFixed(2)),
                         dispatchTime: 1,
+                        DispatchTime: 1,
                         cargoCompany1: "Yurtiçi Kargo",
+                        CargoCompany1: "Yurtiçi Kargo",
                         maximumPurchasableQuantity: 100
                     };
                     console.log(`📦 HB Inventory Item:`, hbItem);
