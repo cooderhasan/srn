@@ -30,6 +30,7 @@ import {
 import { Edit, MoreHorizontal, Trash, Star, Sparkles, TrendingUp, Search, Upload, Download, ExternalLink, Package, RefreshCw } from "lucide-react";
 import { formatPrice } from "@/lib/helpers";
 import { deleteProduct, toggleProductStatus, toggleTrendyolStatus, toggleN11Status } from "@/app/admin/(protected)/products/actions";
+import { syncProductsToHepsiburada } from "@/app/admin/(protected)/integrations/hepsiburada/actions";
 import { toast } from "sonner";
 
 interface Product {
@@ -48,6 +49,7 @@ interface Product {
     isActive: boolean;
     isTrendyolActive: boolean;
     isN11Active: boolean;
+    isHepsiburadaActive?: boolean;
     isBundle?: boolean;
     categories: {
         id: string;
@@ -98,6 +100,7 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
 
     const [products, setProducts] = useState(initialProducts);
     const [loading, setLoading] = useState<string | null>(null);
+    const [hbSyncing, setHbSyncing] = useState<string | null>(null);
 
     // Sync local product state when props change
     useEffect(() => {
@@ -188,6 +191,22 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
             ));
         } catch {
             toast.error("İşlem sırasında bir hata oluştu.");
+        }
+    };
+
+    const handleHepsiburadaSync = async (productId: string) => {
+        setHbSyncing(productId);
+        try {
+            const result = await syncProductsToHepsiburada([productId]);
+            if (result.success) {
+                toast.success(result.message || "Hepsiburada'ya gönderildi!");
+            } else {
+                toast.error(result.message || "Hepsiburada sync hatası.");
+            }
+        } catch {
+            toast.error("Hepsiburada bağlantısında bir hata oluştu.");
+        } finally {
+            setHbSyncing(null);
         }
     };
 
@@ -310,6 +329,7 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                                 <TableHead>Stok</TableHead>
                                 <TableHead>Trendyol</TableHead>
                                 <TableHead>N11</TableHead>
+                                <TableHead>HB</TableHead>
                                 <TableHead>Durum</TableHead>
                                 <TableHead className="text-right">İşlemler</TableHead>
                             </TableRow>
@@ -439,6 +459,31 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                                                     title={product.isN11Active ? "N11'de Satışa Kapat" : "N11'de Satışa Aç"}
                                                 >
                                                     <RefreshCw className={`h-4 w-4 ${loading === product.id ? 'animate-spin' : ''}`} />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                        {/* Hepsiburada Sync */}
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Badge
+                                                    variant={(product as any).isHepsiburadaActive ? "default" : "secondary"}
+                                                    className={
+                                                        (product as any).isHepsiburadaActive
+                                                            ? "bg-red-100 text-red-800"
+                                                            : "bg-gray-100 text-gray-800"
+                                                    }
+                                                >
+                                                    {(product as any).isHepsiburadaActive ? "Açık" : "Kapalı"}
+                                                </Badge>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                    onClick={() => handleHepsiburadaSync(product.id)}
+                                                    disabled={hbSyncing === product.id}
+                                                    title="Hepsiburada'ya Sync Et"
+                                                >
+                                                    <RefreshCw className={`h-4 w-4 ${hbSyncing === product.id ? 'animate-spin' : ''}`} />
                                                 </Button>
                                             </div>
                                         </TableCell>
