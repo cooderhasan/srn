@@ -135,14 +135,11 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
 
                     const hbItem = {
                         merchantSku: v.sku || v.barcode,
-                        availableStock: availableStock,
-                        stock: availableStock, // Redundant for compatibility
-                        price: varPrice.toFixed(2).replace('.', ','), // Format as string with comma
-                        salePrice: varPrice, // Redundant for compatibility
+                        availableStock: Math.round(availableStock),
+                        price: Number(varPrice.toFixed(2)), // Must be a number (Double)
                         dispatchTime: 1,
-                        cargoCompany1: "Yurtici Kargo",
-                        maximumPurchasableQuantity: 100,
-                        taxPercentage: 20 // Default VAT
+                        cargoCompany1: "Yurtiçi Kargo", // Fixed name with Turkish characters
+                        maximumPurchasableQuantity: 100
                     };
                     console.log(`📦 HB Inventory Item (Variant):`, hbItem);
                     hbItems.push(hbItem);
@@ -153,14 +150,11 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     
                     const hbItem = {
                         merchantSku: p.sku || p.barcode,
-                        availableStock: availableStock,
-                        stock: availableStock,
-                        price: basePrice.toFixed(2).replace('.', ','),
-                        salePrice: basePrice,
+                        availableStock: Math.round(availableStock),
+                        price: Number(basePrice.toFixed(2)),
                         dispatchTime: 1,
-                        cargoCompany1: "Yurtici Kargo",
-                        maximumPurchasableQuantity: 100,
-                        taxPercentage: 20
+                        cargoCompany1: "Yurtiçi Kargo",
+                        maximumPurchasableQuantity: 100
                     };
                     console.log(`📦 HB Inventory Item:`, hbItem);
                     hbItems.push(hbItem);
@@ -542,24 +536,31 @@ export async function createHepsiburadaTestOrder() {
 
         if (!product) return { success: false, message: "Test siparişi için sistemde barkodlu ürün bulunamadı." };
 
-        const sitUrl = `https://oms-external-sit.hepsiburada.com/orders/merchantid/${config.merchantId}`;
+        // SIT Sipariş Oluşturma için özel STUB adresi
+        const sitUrl = `https://oms-stub-external-sit.hepsiburada.com/orders/merchantId/${config.merchantId}`;
         
         const payload = {
-            items: [{
-                merchantSku: product.sku || product.barcode,
-                quantity: 1,
-                price: Number(product.listPrice) || 100
-            }],
-            customer: {
-                name: "Serinmotor SIT Test",
-                email: "test@serinmotor.com",
-                phone: "5551112233"
+            Customer: {
+                CustomerId: "dfc8a27f-faae-4cb2-859c-8a7d50ee77be", // Dokümandaki test ID
+                Name: "Serinmotor SIT Test"
             },
-            shippingAddress: {
-                addressLine1: "Test Adresi No 1",
-                city: "İstanbul",
-                town: "Kadıköy"
-            }
+            DeliveryAddress: {
+                AddressDetail: "Test Adresi No 1",
+                City: "İstanbul",
+                District: "Kadıköy",
+                Email: "test@serinmotor.com",
+                Name: "Müşteri Adı",
+                PhoneNumber: "905551112233",
+                CountryCode: "TR"
+            },
+            LineItems: [{
+                MerchantSku: product.sku || product.barcode,
+                Quantity: 1,
+                Price: {
+                    Amount: Number(product.listPrice) || 150.0,
+                    Currency: "TRY"
+                }
+            }]
         };
 
         const response = await fetch(sitUrl, {
