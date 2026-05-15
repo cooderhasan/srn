@@ -643,12 +643,43 @@ export async function createHepsiburadaTestOrder() {
         const orderId = `HB${Date.now()}`;
         const merchantId = config.merchantId || config.username;
 
-        // HB SIT sipariş - minimal payload (stub endpoint)
+        // HB SIT sipariş - resmi dokümantasyona tam uygun payload
+        // https://developers.hepsiburada.com/hepsiburada/reference/post_orders-merchantid-merchantid
         const payload = {
+            Customer: {
+                CustomerId: "dfc8a27f-faae-4cb2-859c-8a7d50ee77be",
+                Name: "Test User"
+            },
+            DeliveryAddress: {
+                AddressDetail: "Trump Towers",
+                AddressId: "e66765b3-d37d-488c-ae15-47051245dc9b",
+                AlternatePhoneNumber: "045321538212",
+                City: "İstanbul",
+                CountryCode: "TR",
+                District: "Kustepe",
+                Email: "customer@hepsiburada.com.tr",
+                Name: "Hepsiburada Office",
+                PhoneNumber: "902822613231"
+            },
             LineItems: [{
+                CargoCompanyId: 1,
+                DeliveryOptionId: 1,
                 ListingId: testListingId,
-                Quantity: 1
-            }]
+                MerchantId: merchantId,
+                MerchantSku: testMerchantSku,
+                Quantity: 1,
+                Price: {
+                    Amount: testPrice,
+                    Currency: "TRY"
+                },
+                Sku: testSku,
+                TotalPrice: {
+                    Amount: testPrice,
+                    Currency: "TRY"
+                }
+            }],
+            OrderDate: new Date().toISOString(),
+            OrderNumber: orderId
         };
 
         console.log("🛒 SIT Order Payload:", JSON.stringify(payload, null, 2));
