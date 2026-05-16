@@ -374,7 +374,11 @@ export class HepsiburadaClient {
 
         const payload = {
             InvoiceLink: finalUrl,
-            ContentType: "pdf"
+            ContentType: "pdf",
+            Invoices: [{
+                InvoiceLink: finalUrl,
+                ContentType: "pdf"
+            }]
         };
 
         console.log(`🧾 HB Invoice URL: ${url}`);
