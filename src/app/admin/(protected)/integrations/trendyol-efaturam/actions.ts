@@ -279,14 +279,35 @@ export async function sendOrderInvoice(orderId: string) {
         // 5. Fatura payload'unu oluştur
         const invoicePayload = buildInvoicePayload(order);
 
-        console.log(`📡 E-Fatura gönderiliyor: Sipariş #${order.orderNumber}`);
+        // 6. Alıcı e-Fatura mükellefi mi kontrol et
+        // VKN 10 haneli ve gerçek bir numara ise (11111111111 değilse) kontrol yap
+        const taxId = invoicePayload.receiverTaxId;
+        const isRealTaxId = taxId && taxId !== "11111111111" && taxId.length === 10;
+        let useEInvoice = false;
+        let invoiceType = "e-Arşiv";
+
+        if (isRealTaxId) {
+            try {
+                const taxpayerCheck = await client.checkTaxpayer(taxId);
+                useEInvoice = taxpayerCheck.isEInvoiceUser;
+                if (useEInvoice) invoiceType = "e-Fatura";
+                console.log(`🔍 Mükellef Sorgusu: VKN=${taxId} → ${useEInvoice ? "E-FATURA MÜKELLEFİ ✅" : "E-FATURA MÜKELLEFİ DEĞİL → E-ARŞİV"}`);
+            } catch (e) {
+                console.warn(`⚠️ Mükellef sorgusu başarısız, e-Arşiv olarak devam ediliyor.`);
+            }
+        }
+
+        console.log(`📡 ${invoiceType} gönderiliyor: Sipariş #${order.orderNumber}`);
         console.log(`   Mod: ${config.isTestMode ? "TEST" : "CANLI"}`);
         console.log(`   Alıcı: ${invoicePayload.receiverName} ${invoicePayload.receiverSurname || ""}`);
         console.log(`   VKN/TCKN: ${invoicePayload.receiverTaxId}`);
         console.log(`   Toplam: ${invoicePayload.payableAmount} TL`);
+        console.log(`   Tür: ${invoiceType}`);
 
-        // 6. Fatura gönder (e-Arşiv olarak)
-        const result = await client.createEArchiveInvoice(invoicePayload);
+        // 7. Fatura gönder (e-Fatura veya e-Arşiv)
+        const result = useEInvoice
+            ? await client.createEInvoice(invoicePayload)
+            : await client.createEArchiveInvoice(invoicePayload);
 
         // 7. Sonucu DB'ye kaydet
         const invoiceId = result?.id || result?.invoiceId || result?.uuid || result?.invoiceUuid || null;

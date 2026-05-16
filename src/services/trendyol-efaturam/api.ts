@@ -425,8 +425,138 @@ export class TrendyolEFaturamClient {
         }
     }
 
+    /**
+     * E-Fatura oluşturma (kurumsal alıcılar için)
+     * Alıcının e-Fatura mükellefi olması gerekir
+     */
     async createEInvoice(rawInvoiceData: any): Promise<any> {
-        return await this.request("POST", "/api/invoice/documents/outgoing-einvoice", rawInvoiceData);
+        await this.ensureToken();
+
+        const taxableTotal = rawInvoiceData.taxExcludedPrice;
+        const totalTax = rawInvoiceData.taxAmount;
+
+        const invoicePrefix = this.auth.efaturaPrefix;
+        console.log(`🏷️ E-Fatura prefix: ${invoicePrefix || "VARSAYILAN"} | userId=${this.userId} | companyId=${(this as any).companyId}`);
+
+        const formattedData: any = {
+            autoInvoiceId: true,
+            userId: this.userId,
+            companyId: (this as any).companyId,
+            source: "PARTNER",
+            appCode: "SelfIntegration",
+            recipientInfo: {
+                taxId: rawInvoiceData.receiverTaxId.toString(),
+                name: rawInvoiceData.receiverName,
+                surname: rawInvoiceData.receiverSurname || "",
+                title: rawInvoiceData.receiverTitle || "",
+                city: rawInvoiceData.receiverCity || "İSTANBUL",
+                district: rawInvoiceData.receiverDistrict || "MERKEZ",
+                address: rawInvoiceData.receiverAddress || "ADRES BELİRTİLMEMİŞ",
+                countryCode: "TR",
+                email: rawInvoiceData.receiverEmail || "",
+                taxOffice: rawInvoiceData.receiverTaxOffice || "MERKEZ",
+            },
+            issuedAt: new Date().toISOString(),
+            invoiceInfo: {
+                invoiceType: "EFATURA",
+                invoiceTypeCode: rawInvoiceData.invoiceTypeCode || "SATIS",
+                invoiceDate: new Date().toISOString(),
+                currencyCode: "TRY",
+            },
+            invoiceLines: rawInvoiceData.invoiceLines.map((line: any) => ({
+                itemName: line.name,
+                quantity: Number(line.quantity),
+                unitCode: "C62",
+                unitPriceAmount: this.toKurus(line.unitPrice),
+                taxPercent: Number(line.taxRate),
+                taxAmount: this.toKurus(line.taxAmount),
+                taxableAmount: this.toKurus(line.amount - line.taxAmount),
+                totalAmount: this.toKurus(line.amount),
+                totalDiscountAmount: line.discountAmount ? this.toKurus(line.discountAmount) : 0,
+                taxName: "KDV",
+                taxCode: "0015",
+                totalTax: {
+                    totalTaxAmount: this.toKurus(line.taxAmount),
+                    subTotalTaxes: [{
+                        taxAmount: this.toKurus(line.taxAmount),
+                        taxableAmount: this.toKurus(line.amount - line.taxAmount),
+                        percent: Number(line.taxRate),
+                        taxType: "KDV",
+                    }]
+                }
+            })),
+            totalTax: {
+                totalTaxAmount: this.toKurus(totalTax),
+                subTotalTaxes: [{
+                    taxAmount: this.toKurus(totalTax),
+                    taxableAmount: this.toKurus(taxableTotal),
+                    percent: Number(rawInvoiceData.invoiceLines[0]?.taxRate || 20),
+                    taxType: "KDV",
+                }],
+            },
+            invoiceTotal: {
+                lineExtensionAmount: this.toKurus(taxableTotal),
+                taxExclusiveAmount: this.toKurus(taxableTotal),
+                taxInclusiveAmount: this.toKurus(rawInvoiceData.taxInclusiveAmount),
+                payableAmount: this.toKurus(rawInvoiceData.payableAmount),
+                allowanceTotalAmount: rawInvoiceData.discountAmount ? this.toKurus(rawInvoiceData.discountAmount) : 0,
+            },
+            notes: rawInvoiceData.notes || "",
+            deliveryInfo: {
+                carrierTaxId: rawInvoiceData.carrierTaxId || "3130557323",
+                carrierName: rawInvoiceData.carrierName || "YURTİÇİ KARGO SERVİSİ A.Ş.",
+                sentAt: new Date().toISOString(),
+            },
+            paymentInfo: {
+                paymentType: "KREDIKARTI/BANKAKARTI",
+                paymentMeans: "CREDIT_CARD",
+                paymentDate: new Date().toISOString(),
+                purchaseUrl: rawInvoiceData.purchaseUrl || "https://serinmotor.com",
+            }
+        };
+
+        // E-Fatura prefix'i (GSB gibi)
+        if (invoicePrefix && invoicePrefix.trim() !== "") {
+            formattedData.prefix = invoicePrefix.trim().substring(0, 3).toUpperCase();
+        }
+
+        console.log(`📤 E-Fatura Payload:`, JSON.stringify(formattedData, null, 2));
+
+        try {
+            return await this.request("POST", "/api/invoice/documents/outgoing-einvoice", formattedData);
+        } catch (error: any) {
+            if (error.message?.includes("refix") || error.message?.includes("409") || error.message?.includes("404")) {
+                console.warn(`⚠️ E-Fatura ilk deneme başarısız! source=WEB ile tekrar deneniyor...`);
+                formattedData.source = "WEB";
+                delete formattedData.appCode;
+                try {
+                    return await this.request("POST", "/api/invoice/documents/outgoing-einvoice", formattedData);
+                } catch (retryError: any) {
+                    if (retryError.message?.includes("refix") || retryError.message?.includes("409")) {
+                        delete formattedData.prefix;
+                        return await this.request("POST", "/api/invoice/documents/outgoing-einvoice", formattedData);
+                    }
+                    throw retryError;
+                }
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Alıcının e-Fatura mükellefi olup olmadığını kontrol et
+     * VKN ile sorgulama yapılır
+     */
+    async checkTaxpayer(taxId: string): Promise<{ isEInvoiceUser: boolean }> {
+        try {
+            await this.ensureToken();
+            const result = await this.request("GET", `/api/taxpayer/taxpayers/${taxId}`);
+            // Kayıt varsa e-Fatura mükellefi
+            return { isEInvoiceUser: true };
+        } catch (error: any) {
+            // 404 = e-Fatura mükellefi değil
+            return { isEInvoiceUser: false };
+        }
     }
 
     async getInvoicePdf(invoiceId: string): Promise<any> {
