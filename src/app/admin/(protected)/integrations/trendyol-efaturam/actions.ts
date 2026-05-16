@@ -134,25 +134,27 @@ function buildInvoicePayload(order: any): EArchiveInvoiceData {
 
     // Fatura kalemlerini oluştur
     const invoiceLines: InvoiceLine[] = order.items.map((item: any) => {
-        const unitPrice = Number(item.unitPrice);
+        const unitPriceInclTax = Number(item.unitPrice); // KDV DAHİL fiyat
         const quantity = item.quantity;
         const vatRate = item.vatRate || 20;
         const discountRate = Number(item.discountRate || 0);
         
-        // İndirimli birim fiyat
-        const discountedUnitPrice = unitPrice * (1 - discountRate / 100);
-        const lineAmount = discountedUnitPrice * quantity;
-        const lineTax = lineAmount * (vatRate / 100);
-        const lineDiscount = (unitPrice * quantity) - lineAmount;
+        // KDV dahil fiyattan KDV hariç fiyatı hesapla
+        const discountedPriceInclTax = unitPriceInclTax * (1 - discountRate / 100);
+        const lineTotalInclTax = discountedPriceInclTax * quantity;
+        const lineTotalExclTax = lineTotalInclTax / (1 + vatRate / 100); // KDV hariç
+        const lineTax = lineTotalInclTax - lineTotalExclTax; // KDV tutarı
+        const unitPriceExclTax = unitPriceInclTax / (1 + vatRate / 100);
+        const lineDiscount = (unitPriceInclTax * quantity) - lineTotalInclTax;
 
         return {
             name: item.productName || item.product?.name || "Ürün",
             quantity: quantity,
             unitCode: "C62", // Adet
-            unitPrice: unitPrice,
+            unitPrice: Math.round(unitPriceExclTax * 100) / 100, // KDV hariç birim fiyat
             taxRate: vatRate,
             taxAmount: Math.round(lineTax * 100) / 100,
-            amount: Math.round(lineAmount * 100) / 100,
+            amount: Math.round(lineTotalExclTax * 100) / 100, // KDV hariç toplam
             discountAmount: Math.round(lineDiscount * 100) / 100,
         };
     });
