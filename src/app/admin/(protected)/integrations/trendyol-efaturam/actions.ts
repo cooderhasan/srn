@@ -313,10 +313,23 @@ export async function sendOrderInvoice(orderId: string) {
             ? await client.createEInvoice(invoicePayload)
             : await client.createEArchiveInvoice(invoicePayload);
 
-        // 7. Sonucu DB'ye kaydet
+        // 8. Sonucu DB'ye kaydet
+        console.log(`📋 E-Faturam API Yanıtı:`, JSON.stringify(result, null, 2));
+        
         const invoiceId = result?.id || result?.invoiceId || result?.uuid || result?.invoiceUuid || null;
         const invoiceNo = result?.invoiceNumber || result?.invoiceNo || result?.documentNumber || null;
-        const invoiceUrl = result?.pdfUrl || result?.pdfLink || result?.url || null;
+        
+        // PDF URL'ini bul: API cevabından veya invoiceId ile oluştur
+        let invoiceUrl = result?.pdfUrl || result?.pdfLink || result?.url || result?.documentUrl || null;
+        
+        // Eğer URL yoksa ama invoiceId varsa, kalıcı download linkini kullan
+        if (!invoiceUrl && invoiceId) {
+            // Trendyol e-Faturam kalıcı PDF indirme linki
+            const baseUrl = config.isTestMode 
+                ? "https://stage-apigateway.trendyolecozum.com"
+                : "https://apigateway.trendyolecozum.com";
+            invoiceUrl = `${baseUrl}/api/invoice/permanent-document-download/${invoiceId}`;
+        }
 
         await prisma.order.update({
             where: { id: orderId },
@@ -328,18 +341,22 @@ export async function sendOrderInvoice(orderId: string) {
             },
         });
 
-        // 8. Pazaryeri siparişi ise fatura linkini otomatik gönder
+        // 9. Pazaryeri siparişi ise fatura linkini otomatik gönder
         let marketplaceMessage = "";
-        if (invoiceUrl && order.source !== "WEB") {
+        if (order.source !== "WEB") {
             try {
                 if (order.source === "N11") {
-                    const { N11Client } = await import("@/services/n11/api");
-                    const n11 = new N11Client();
-                    const n11Result = await n11.uploadInvoiceLink(order.orderNumber, invoiceUrl);
-                    if (n11Result.success) {
-                        marketplaceMessage = " | N11'e fatura linki iletildi ✅";
+                    if (invoiceUrl) {
+                        const { N11Client } = await import("@/services/n11/api");
+                        const n11 = new N11Client();
+                        const n11Result = await n11.uploadInvoiceLink(order.orderNumber, invoiceUrl);
+                        if (n11Result.success) {
+                            marketplaceMessage = " | N11'e fatura linki iletildi ✅";
+                        } else {
+                            marketplaceMessage = ` | N11 fatura hatası: ${n11Result.message}`;
+                        }
                     } else {
-                        marketplaceMessage = ` | N11 fatura hatası: ${n11Result.message}`;
+                        marketplaceMessage = " | N11'e fatura linki gönderilemedi (PDF URL bulunamadı)";
                     }
                 } else if (order.source === "HEPSIBURADA") {
                     // HB canlıya geçince aktif olacak
