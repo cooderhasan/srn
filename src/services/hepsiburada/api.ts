@@ -62,8 +62,12 @@ export class HepsiburadaClient {
 
     private getAuthHeader() {
         if (!this.creds) throw new Error("Creds missing");
-        // Basic Auth: username (Merchant ID) : password (Secret Key)
-        const pair = `${this.creds.username}:${this.creds.password}`;
+        // Yeni HB Auth Yapısı (Ağustos 2024):
+        // username = {MerchantID}{ServisAnahtarı} (birleşik, ayraç yok)
+        // password = {ServisAnahtarı}
+        const authUsername = `${this.creds.username}${this.creds.password}`;
+        const authPassword = this.creds.password;
+        const pair = `${authUsername}:${authPassword}`;
         return `Basic ${Buffer.from(pair).toString("base64")}`;
     }
 
