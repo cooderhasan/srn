@@ -379,15 +379,15 @@ export class TrendyolEFaturamClient {
             },
             notes: rawInvoiceData.notes || "",
             deliveryInfo: {
-                carrierTaxId: "8590921777",
-                carrierName: "TRENDYOL LOJİSTİK A.Ş.",
+                carrierTaxId: rawInvoiceData.carrierTaxId || "3130557323",
+                carrierName: rawInvoiceData.carrierName || "YURTİÇİ KARGO SERVİSİ A.Ş.",
                 sentAt: new Date().toISOString(),
             },
             paymentInfo: {
                 paymentType: "KREDIKARTI/BANKAKARTI",
                 paymentMeans: "CREDIT_CARD",
                 paymentDate: new Date().toISOString(),
-                purchaseUrl: "https://www.trendyol.com",
+                purchaseUrl: rawInvoiceData.purchaseUrl || "https://serinmotor.com",
             }
         };
 

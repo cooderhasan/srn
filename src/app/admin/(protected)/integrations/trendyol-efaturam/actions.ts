@@ -186,6 +186,32 @@ function buildInvoicePayload(order: any): EArchiveInvoiceData {
     const finalTaxAmount = invoiceLines.reduce((sum, line) => sum + line.taxAmount, 0);
     const finalTaxInclusive = finalTaxExcluded + finalTaxAmount;
 
+    // Sipariş kaynağına göre web adresi
+    const purchaseUrlMap: Record<string, string> = {
+        "WEB": "https://serinmotor.com",
+        "TRENDYOL": "https://www.trendyol.com",
+        "N11": "https://www.n11.com",
+        "HEPSIBURADA": "https://www.hepsiburada.com",
+    };
+
+    // Kargo firması VKN ve ünvan bilgileri
+    const cargoInfoMap: Record<string, { taxId: string; name: string }> = {
+        "Yurtiçi Kargo": { taxId: "3130557323", name: "YURTİÇİ KARGO SERVİSİ A.Ş." },
+        "DHL ecommerce": { taxId: "6080712084", name: "DHL WORLDWIDE EXPRESS TAŞ. VE TİC. A.Ş." },
+        "DHL": { taxId: "6080712084", name: "DHL WORLDWIDE EXPRESS TAŞ. VE TİC. A.Ş." },
+        "Aras Kargo": { taxId: "7200007379", name: "ARAS KARGO YURTİÇİ YURTDİŞI TAŞ. A.Ş." },
+        "MNG Kargo": { taxId: "6530413903", name: "MNG KARGO YURTİÇİ VE YURTDIŞI TAŞ. A.Ş." },
+        "Sürat Kargo": { taxId: "7870233582", name: "SÜRAT KARGO TAŞ. VE DAĞ. HİZ. A.Ş." },
+        "PTT Kargo": { taxId: "7320068060", name: "PTT A.Ş." },
+        "Trendyol Express": { taxId: "8590921777", name: "TRENDYOL LOJİSTİK A.Ş." },
+        "HepsiJet": { taxId: "9060578745", name: "HEPSİJET LOJİSTİK A.Ş." },
+    };
+
+    const source = order.source || "WEB";
+    const cargoName = order.cargoCompany || "";
+    const cargoInfo = cargoInfoMap[cargoName] || { taxId: "3130557323", name: "YURTİÇİ KARGO SERVİSİ A.Ş." };
+    const purchaseUrl = purchaseUrlMap[source] || "https://serinmotor.com";
+
     return {
         scenario: "EARSIVFATURA",
         invoiceTypeCode: "SATIS",
@@ -209,6 +235,10 @@ function buildInvoicePayload(order: any): EArchiveInvoiceData {
         invoiceLines,
         notes: [`Sipariş No: ${order.orderNumber}`],
         issuedAt: new Date().toISOString(),
+        // Dinamik kargo ve kaynak bilgileri
+        carrierTaxId: cargoInfo.taxId,
+        carrierName: cargoInfo.name,
+        purchaseUrl: purchaseUrl,
     };
 }
 
