@@ -375,6 +375,7 @@ export async function sendOrderInvoice(orderId: string) {
                     } else {
                         marketplaceMessage = " | HB'ye fatura linki gönderilemedi (PDF URL bulunamadı)";
                     }
+                }
             } catch (mpError: any) {
                 console.error(`⚠️ Pazaryeri fatura link hatası (${order.source}):`, mpError.message);
                 marketplaceMessage = ` | ${order.source} fatura link hatası: ${mpError.message}`;
