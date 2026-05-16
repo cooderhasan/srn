@@ -21,14 +21,14 @@ export async function setupRepeatableJobs() {
 
     console.log("⏰ Trendyol Order Sync Cron (15m) registered.");
 
-    // Her 20 dakikada bir Hepsiburada siparişlerini çek
+    // Her 15 dakikada bir Hepsiburada siparişlerini çek
     await queue.add("hepsiburada-order-sync", {}, {
         repeat: {
-            pattern: '*/20 * * * *' // Every 20 minutes
+            pattern: '*/15 * * * *' // Every 15 minutes
         },
         jobId: 'hepsiburada-order-sync-cron'
     });
-    console.log("⏰ Hepsiburada Order Sync Cron (20m) registered.");
+    console.log("⏰ Hepsiburada Order Sync Cron (15m) registered.");
 
     // Her 15 dakikada bir N11 siparişlerini çek
     await queue.add("n11-order-sync", {}, {
