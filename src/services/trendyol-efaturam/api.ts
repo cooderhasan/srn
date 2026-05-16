@@ -319,8 +319,7 @@ export class TrendyolEFaturamClient {
             autoInvoiceId: true,
             userId: this.userId,
             companyId: (this as any).companyId,
-            source: "PARTNER",
-            appCode: "SelfIntegration",
+            source: "WEB",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
                 name: rawInvoiceData.receiverName,
@@ -392,32 +391,16 @@ export class TrendyolEFaturamClient {
             }
         };
 
-        // Prefix gönderme stratejisi:
-        // Portal'daki prefix "Partner" tipinde olmalı. 
-        // Eğer prefix belirtilmişse gönder, yoksa sisteme otomatik seçtir.
+        // Trendyol Destek: source="WEB" kullan + portal'da OLMAYAN yeni bir prefix gönder.
+        // Portal'da tanımlı prefix'ler (DAP, DIP, SRN, TYA, TYB, TYE) API ile kullanılamaz.
+        // Yeni prefix otomatik oluşturulur.
         if (invoicePrefix && invoicePrefix.trim() !== "") {
             formattedData.prefix = invoicePrefix.trim().substring(0, 3).toUpperCase();
         }
 
         console.log(`📤 E-Arşiv Fatura Payload:`, JSON.stringify(formattedData, null, 2));
 
-        try {
-            return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
-        } catch (error: any) {
-            // Prefix hatası aldıysak, prefix olmadan tekrar dene
-            if (error.message?.includes("prefix") || error.message?.includes("Prefix")) {
-                console.warn(`⚠️ Prefix hatası! Prefix olmadan tekrar deneniyor...`);
-                delete formattedData.prefix;
-                
-                // source'u da WEB olarak dene
-                formattedData.source = "WEB";
-                delete formattedData.appCode;
-                
-                console.log(`📤 Retry Payload (no prefix, source=WEB):`, JSON.stringify(formattedData, null, 2));
-                return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
-            }
-            throw error;
-        }
+        return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
     }
 
     async createEInvoice(rawInvoiceData: any): Promise<any> {
