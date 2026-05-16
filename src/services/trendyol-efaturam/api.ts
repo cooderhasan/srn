@@ -392,15 +392,27 @@ export class TrendyolEFaturamClient {
         };
 
         // Trendyol Destek: source="WEB" kullan + portal'da OLMAYAN yeni bir prefix gönder.
-        // Portal'da tanımlı prefix'ler (DAP, DIP, SRN, TYA, TYB, TYE) API ile kullanılamaz.
-        // Yeni prefix otomatik oluşturulur.
+        // İlk kullanımda prefix otomatik oluşturulur.
+        // Sonraki kullanımlarda prefix zaten var olacağı için hata verebilir.
+        // Bu durumda prefix olmadan (autoInvoiceId=true ile) devam ediyoruz.
         if (invoicePrefix && invoicePrefix.trim() !== "") {
             formattedData.prefix = invoicePrefix.trim().substring(0, 3).toUpperCase();
         }
 
         console.log(`📤 E-Arşiv Fatura Payload:`, JSON.stringify(formattedData, null, 2));
 
-        return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
+        try {
+            return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
+        } catch (error: any) {
+            // Prefix hatası (409) aldıysak, prefix olmadan tekrar dene
+            if (error.message?.includes("refix") || error.message?.includes("409")) {
+                console.warn(`⚠️ Prefix hatası! Prefix olmadan tekrar deneniyor...`);
+                delete formattedData.prefix;
+                console.log(`📤 Retry Payload (prefix kaldırıldı):`, JSON.stringify(formattedData, null, 2));
+                return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
+            }
+            throw error;
+        }
     }
 
     async createEInvoice(rawInvoiceData: any): Promise<any> {
