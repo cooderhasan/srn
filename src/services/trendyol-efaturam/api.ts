@@ -319,7 +319,8 @@ export class TrendyolEFaturamClient {
             autoInvoiceId: true,
             userId: this.userId,
             companyId: (this as any).companyId,
-            source: "WEB",
+            source: "PARTNER",
+            appCode: "SelfIntegration",
             recipientInfo: {
                 taxId: rawInvoiceData.receiverTaxId.toString(),
                 name: rawInvoiceData.receiverName,
@@ -391,10 +392,8 @@ export class TrendyolEFaturamClient {
             }
         };
 
-        // Trendyol Destek: source="WEB" kullan + portal'da OLMAYAN yeni bir prefix gönder.
-        // İlk kullanımda prefix otomatik oluşturulur.
-        // Sonraki kullanımlarda prefix zaten var olacağı için hata verebilir.
-        // Bu durumda prefix olmadan (autoInvoiceId=true ile) devam ediyoruz.
+        // GRS prefix "Partner" tipinde oluşturuldu. source, prefix tipiyle eşleşmeli.
+        // source="PARTNER" + prefix="GRS" → Partner tipi prefix kullanılır.
         if (invoicePrefix && invoicePrefix.trim() !== "") {
             formattedData.prefix = invoicePrefix.trim().substring(0, 3).toUpperCase();
         }
@@ -402,14 +401,25 @@ export class TrendyolEFaturamClient {
         console.log(`📤 E-Arşiv Fatura Payload:`, JSON.stringify(formattedData, null, 2));
 
         try {
+            // İlk deneme: PARTNER source ile
             return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
         } catch (error: any) {
-            // Prefix hatası (409) aldıysak, prefix olmadan tekrar dene
-            if (error.message?.includes("refix") || error.message?.includes("409")) {
-                console.warn(`⚠️ Prefix hatası! Prefix olmadan tekrar deneniyor...`);
-                delete formattedData.prefix;
-                console.log(`📤 Retry Payload (prefix kaldırıldı):`, JSON.stringify(formattedData, null, 2));
-                return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
+            // Prefix/source hatası aldıysak, source=WEB olarak tekrar dene
+            if (error.message?.includes("refix") || error.message?.includes("409") || error.message?.includes("404")) {
+                console.warn(`⚠️ İlk deneme başarısız! source=WEB ile tekrar deneniyor...`);
+                formattedData.source = "WEB";
+                console.log(`📤 Retry Payload (source=WEB):`, JSON.stringify(formattedData, null, 2));
+                try {
+                    return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
+                } catch (retryError: any) {
+                    // WEB de çalışmadıysa, prefix kaldırıp son deneme
+                    if (retryError.message?.includes("refix") || retryError.message?.includes("409")) {
+                        console.warn(`⚠️ WEB de başarısız! Prefix kaldırılıp deneniyor...`);
+                        delete formattedData.prefix;
+                        return await this.request("POST", "/api/invoice/documents/earchive", formattedData);
+                    }
+                    throw retryError;
+                }
             }
             throw error;
         }
