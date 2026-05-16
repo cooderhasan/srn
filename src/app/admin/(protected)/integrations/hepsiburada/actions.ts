@@ -416,7 +416,7 @@ export async function getHepsiburadaCategories() {
 
 // Server-side cache for HB categories (avoid re-fetching 6500 categories on every search)
 let hbCategoryCache: { data: any[]; timestamp: number } | null = null;
-const HB_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 saat
+const HB_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 gün (pratikte deploy'a kadar)
 
 async function getHBCategoriesCached(): Promise<any[]> {
     if (hbCategoryCache && Date.now() - hbCategoryCache.timestamp < HB_CACHE_TTL) {
