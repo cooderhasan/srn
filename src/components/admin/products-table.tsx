@@ -475,29 +475,41 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                                             </div>
                                         </TableCell>
                                         {/* Hepsiburada Sync */}
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Badge
-                                                    variant={(product as any).isHepsiburadaActive ? "default" : "secondary"}
-                                                    className={
-                                                        (product as any).isHepsiburadaActive
-                                                            ? "bg-red-100 text-red-800"
-                                                            : "bg-gray-100 text-gray-800"
-                                                    }
-                                                >
-                                                    {(product as any).isHepsiburadaActive ? "Açık" : "Kapalı"}
-                                                </Badge>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                    onClick={() => handleToggleHepsiburadaStatus(product.id, !!(product as any).isHepsiburadaActive)}
-                                                                                                        title={(product as any).isHepsiburadaActive ? "Hepsiburada'da Satışa Kapat" : "Hepsiburada'da Satışa Aç"}
-                                                >
-                                                    <RefreshCw className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
+                                         <TableCell>
+                                             <div className="flex items-center gap-2">
+                                                 <Badge
+                                                     variant={(product as any).isHepsiburadaActive ? "default" : "secondary"}
+                                                     className={
+                                                         (product as any).isHepsiburadaActive
+                                                             ? "bg-red-100 text-red-800"
+                                                             : "bg-gray-100 text-gray-800"
+                                                     }
+                                                 >
+                                                     {(product as any).isHepsiburadaActive ? "Açık" : "Kapalı"}
+                                                 </Badge>
+                                                 <Button
+                                                     variant="ghost"
+                                                     size="icon"
+                                                     className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                     onClick={() => handleToggleHepsiburadaStatus(product.id, !!(product as any).isHepsiburadaActive)}
+                                                     title={(product as any).isHepsiburadaActive ? "Hepsiburada'da Satışa Kapat" : "Hepsiburada'da Satışa Aç"}
+                                                 >
+                                                     <RefreshCw className="h-4 w-4" />
+                                                 </Button>
+                                                 {(product as any).isHepsiburadaActive && (
+                                                     <Button
+                                                         variant="ghost"
+                                                         size="icon"
+                                                         className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                                         onClick={() => handleHepsiburadaSync(product.id)}
+                                                         disabled={hbSyncing === product.id}
+                                                         title="Hepsiburada Fiyat/Stok Anlık Güncelle"
+                                                     >
+                                                         <RefreshCw className={`h-4 w-4 ${hbSyncing === product.id ? 'animate-spin' : ''}`} />
+                                                     </Button>
+                                                 )}
+                                             </div>
+                                         </TableCell>
                                         <TableCell>
                                             <Badge
                                                 variant={product.isActive ? "default" : "secondary"}
