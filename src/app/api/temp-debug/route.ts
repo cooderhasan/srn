@@ -110,6 +110,7 @@ export async function GET() {
                     where: { orderNumber: calculatedOrderNumber }
                 });
                 
+                let dbItems: any[] = [];
                 if (existing) {
                     saveSuccess = true;
                     const correctPackageNumber = String(item.packageNumber || item.id || "");
@@ -131,6 +132,7 @@ export async function GET() {
                     const existingItems = await prisma.orderItem.findMany({
                         where: { orderId: existing.id }
                     });
+                    dbItems = existingItems;
                     
                     let itemsRepaired = false;
                     if (existingItems.length === 0) {
@@ -143,6 +145,9 @@ export async function GET() {
                                 }))
                             });
                             itemsRepaired = true;
+                            dbItems = await prisma.orderItem.findMany({
+                                where: { orderId: existing.id }
+                            });
                         }
                     }
                     
@@ -220,7 +225,8 @@ export async function GET() {
                 dbSaveStatus: {
                     success: saveSuccess,
                     error: dbError
-                }
+                },
+                dbItems: dbItems,
             });
         }
 
