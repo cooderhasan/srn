@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import * as XLSX from "xlsx";
-import path from "path";
+import { excelBase64 } from "@/lib/excel-data";
 
 export async function GET() {
     try {
         console.log("🚀 Canlı Sunucuda Excel Aktarım API'si Çalıştırıldı...");
         
-        // Excel dosyasını oku (public klasöründe yer almaktadır)
-        const filePath = path.join(process.cwd(), "public", "Satisbilgisi-18-05-2026-16_49.xlsx");
-        const workbook = XLSX.readFile(filePath);
+        // Excel dosyasını Base64 verisinden hafızada (Buffer) oku
+        const buffer = Buffer.from(excelBase64, "base64");
+        const workbook = XLSX.read(buffer, { type: "buffer" });
         const sheetName = "Listelerim";
         const sheet = workbook.Sheets[sheetName];
         
