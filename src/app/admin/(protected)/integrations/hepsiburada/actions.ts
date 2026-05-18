@@ -313,6 +313,9 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
             } else {
                 console.log(`🔍 DEBUG - Target '${target}' HB Listing Map içinde bulunamadı!`);
             }
+            // İlk 30 ilanın stok ve katalog kodlarını yazdır
+            const samples = Object.entries(hbSkuMap).slice(0, 30);
+            console.log(`🔍 DEBUG - Hepsiburada'dan Dönen Örnek İlk 30 İlan:`, JSON.stringify(samples));
         } catch (e: any) {
             console.error(`⚠️ HB Listing çekilemedi: ${e.message}`);
         }
