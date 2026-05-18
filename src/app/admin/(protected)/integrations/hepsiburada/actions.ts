@@ -306,6 +306,13 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                 }
             }
             console.log(`📋 HB Listing eşlemesi: ${Object.keys(hbSkuMap).length} ürün bulundu`);
+            const target = "HBCV000007MQETQ";
+            const foundKeys = Object.entries(hbSkuMap).filter(([k, v]) => k.includes(target) || v.includes(target));
+            if (foundKeys.length > 0) {
+                console.log(`🔍 DEBUG - Target '${target}' eşleşmeleri:`, JSON.stringify(foundKeys));
+            } else {
+                console.log(`🔍 DEBUG - Target '${target}' HB Listing Map içinde bulunamadı!`);
+            }
         } catch (e: any) {
             console.error(`⚠️ HB Listing çekilemedi: ${e.message}`);
         }
