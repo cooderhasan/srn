@@ -138,17 +138,41 @@ export async function syncOrdersFromHepsiburada() {
                     continue;
                 }
 
-                // Ürünü bul (merchantSku veya barcode ile)
-                const searchConditions: any[] = [];
-                if (item.merchantSku) searchConditions.push({ sku: String(item.merchantSku) });
-                if (item.sku) searchConditions.push({ sku: String(item.sku) });
-                if (item.barcode) searchConditions.push({ barcode: String(item.barcode) });
-
+                // Ürünü bul (HepsiburadaProduct eşleşmelerinden veya doğrudan merchantSku, sku, barcode ile)
                 let product = null;
-                if (searchConditions.length > 0) {
-                    product = await prisma.product.findFirst({
-                        where: { OR: searchConditions }
+
+                // 1. Önce HepsiburadaProduct tablosundaki özel sihirbaz eşleşmelerine bakalım
+                const hbConditions: any[] = [];
+                if (item.merchantSku) {
+                    hbConditions.push({ merchantSku: String(item.merchantSku) });
+                }
+                if (item.sku) {
+                    hbConditions.push({ hbSku: String(item.sku) });
+                    hbConditions.push({ merchantSku: String(item.sku) });
+                }
+
+                if (hbConditions.length > 0) {
+                    const hbMapping = await prisma.hepsiburadaProduct.findFirst({
+                        where: { OR: hbConditions },
+                        include: { product: true }
                     });
+                    if (hbMapping && hbMapping.product) {
+                        product = hbMapping.product;
+                    }
+                }
+
+                // 2. Eğer özel eşleşme bulunamazsa, doğrudan Product tablosundaki sku ve barkod ile eşleştir
+                if (!product) {
+                    const searchConditions: any[] = [];
+                    if (item.merchantSku) searchConditions.push({ sku: String(item.merchantSku) });
+                    if (item.sku) searchConditions.push({ sku: String(item.sku) });
+                    if (item.barcode) searchConditions.push({ barcode: String(item.barcode) });
+
+                    if (searchConditions.length > 0) {
+                        product = await prisma.product.findFirst({
+                            where: { OR: searchConditions }
+                        });
+                    }
                 }
 
                 // Fiyat bilgileri
