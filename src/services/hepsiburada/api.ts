@@ -275,12 +275,15 @@ export class HepsiburadaClient {
         const sitSuffix = this.isTestMode ? "-sit" : "";
         // Hepsiburada API'sinde renk ve menşei gibi çok sayıda seçenek içeren özellik değerleri varsayılan boyutta
         // kesintiye uğrayabilir. Tüm ana renkleri (Siyah, Beyaz vb.) ve menşeileri (Çin vb.) tam çekebilmek için
-        // sayfa boyutunu explicit olarak 5000 olarak ayarlıyoruz.
-        const url = `https://mpop${sitSuffix}.hepsiburada.com/product/api/categories/${categoryId}/attribute/${attributeId}/values?page=0&size=5000`;
+        // sayfa boyutunu resmi güvenli limit olan 1000 olarak ayarlıyoruz (5000 limiti API tarafından reddedilebilir).
+        const url = `https://mpop${sitSuffix}.hepsiburada.com/product/api/categories/${categoryId}/attribute/${attributeId}/values?page=0&size=1000`;
+        console.log(`📡 HB Fetching attribute values from: ${url}`);
         const response = await fetch(url, {
             headers: this.getHeaders(),
         });
         if (!response.ok) {
+            const errText = await response.text();
+            console.error(`❌ HB Fetch Attribute Values Error (${response.status}) for ${attributeId}:`, errText);
             return [];
         }
         return await response.json();
