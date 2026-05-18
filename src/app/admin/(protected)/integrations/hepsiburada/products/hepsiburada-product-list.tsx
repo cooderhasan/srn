@@ -34,12 +34,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchablePicker } from "@/components/ui/searchable-picker";
 
 function DynamicAttributeField({ attr, categoryId, onChange, product }: { attr: any, categoryId: string, onChange: (val: string, name: string) => void, product: any }) {
     const [values, setValues] = useState<{id: string, value: string}[]>([]);
     const [loading, setLoading] = useState(false);
     const [isManual, setIsManual] = useState(false);
+    const [selectedValue, setSelectedValue] = useState("");
 
     useEffect(() => {
         if (attr.type === 'enum' && !isManual) {
@@ -51,7 +52,9 @@ function DynamicAttributeField({ attr, categoryId, onChange, product }: { attr: 
         }
         // Paket görseli zorunluysa ve boşsa ana görseli öner
         if (attr.name.includes("Paket Görseli") && product?.images?.[0]) {
-            onChange(product.images[0], attr.name);
+            const defaultImg = product.images[0];
+            setSelectedValue(defaultImg);
+            onChange(defaultImg, attr.name);
         }
     }, [attr.id, categoryId, attr.type, isManual]);
 
@@ -69,16 +72,20 @@ function DynamicAttributeField({ attr, categoryId, onChange, product }: { attr: 
                         Elle Gir
                     </Button>
                 </div>
-                <Select onValueChange={(val) => onChange(val, attr.name)} disabled={loading}>
-                    <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder={loading ? "Yükleniyor..." : `${attr.name} seçin...`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {values.map((v) => (
-                            <SelectItem key={v.id} value={v.value}>{v.value}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <SearchablePicker
+                    options={values.map((v) => v.value)}
+                    value={selectedValue}
+                    onValueChange={(val) => {
+                        setSelectedValue(val);
+                        onChange(val, attr.name);
+                    }}
+                    placeholder={loading ? "Yükleniyor..." : `${attr.name} seçin...`}
+                    searchPlaceholder={`${attr.name} ara...`}
+                    emptyMessage="Sonuç bulunamadı."
+                    title={attr.name}
+                    disabled={loading}
+                    className="h-8 text-sm"
+                />
             </div>
         );
     }
