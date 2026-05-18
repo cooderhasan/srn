@@ -41,7 +41,7 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ id:
     const shippingAddress = order.shippingAddress as any; // Type assertion for now
 
     return (
-        <div className="bg-white min-h-screen text-black p-8 max-w-[210mm] mx-auto">
+        <div className="bg-white min-h-screen text-black p-6 max-w-[210mm] mx-auto font-sans">
             {/* Print CSS to hide non-print elements */}
             <style>{`
                 @media print {
@@ -55,12 +55,11 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ id:
                 }
             `}</style>
 
-
             {/* Auto-print component */}
             <AutoPrint />
 
             {/* Actions (Hidden in Print) */}
-            <div className="no-print mb-8 flex justify-between items-center bg-gray-100 p-4 rounded-lg">
+            <div className="no-print mb-6 flex justify-between items-center bg-gray-100 p-4 rounded-lg">
                 <div className="flex flex-col">
                     <span className="text-gray-600 font-medium">Baskı Önizleme</span>
                     <span className="text-xs text-gray-500">Bu sayfa otomatik olarak yazıcı diyaloğunu açar.</span>
@@ -68,229 +67,247 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ id:
                 <PrintButton />
             </div>
 
-            {/* Invoice Header / Trendyol Style Header */}
-            {order.source === "TRENDYOL" ? (
-                <div className="space-y-6 mb-8">
-                    {/* Warning Box */}
-                    <div className="border border-gray-400 p-3 rounded-sm flex items-center gap-3 text-sm font-bold">
-                        <span className="text-xl">⚠️</span>
-                        <p>Kargo şirketinin dikkatine, bu bir trendyol.com gönderisidir. Trendyol anlaşmasına uygun işlem yapabilirsiniz.</p>
+            {/* Main Label Box */}
+            <div className="border-2 border-black p-6 rounded-lg space-y-6">
+                
+                {/* Marketplace Warning Header */}
+                {order.source !== "WEB" && order.source && (
+                    <div className="border border-black bg-gray-50 p-3 rounded flex items-center gap-3 text-xs font-bold leading-tight">
+                        <span className="text-base">⚠️</span>
+                        <p className="uppercase tracking-wide">
+                            Kargo şirketinin dikkatine: Bu bir {order.source.toLowerCase()}.com gönderisidir. {order.source} anlaşması kapsamında işlem yapılması rica olunur.
+                        </p>
                     </div>
+                )}
 
-                    {/* Logo Section */}
-                    <div className="flex justify-between items-center">
-                        <img src="/img/trendyol-logo.png" alt="Trendyol" className="h-8 w-auto object-contain" />
-                        <div className="text-right">
-                            <span className="text-lg font-bold italic text-gray-700">trendyol</span>
-                            <span className="text-sm font-medium block text-gray-500 uppercase -mt-1">express</span>
-                        </div>
-                    </div>
-
-                    {/* Info & Barcode Grid */}
-                    <div className="grid grid-cols-2 gap-4">
-                        {/* Address Box */}
-                        <div className="border-2 border-gray-300 rounded-lg p-4 space-y-3">
-                            <h3 className="text-lg font-black text-blue-900 border-b-2 border-gray-100 pb-1 mb-2 uppercase">Alıcı Bilgileri</h3>
-                            <div className="grid grid-cols-[80px_1fr] gap-y-1.5 text-sm">
-                                <span className="font-bold">Sipariş No</span>
-                                <span className="font-medium">: {order.orderNumber}</span>
-                                
-                                <span className="font-bold">Ad-Soyad</span>
-                                <span className="font-medium uppercase">: {shippingAddress?.fullName || shippingAddress?.name}</span>
-                                
-                                <span className="font-bold">Adres</span>
-                                <div className="font-medium">
-                                    : {shippingAddress?.address}
-                                    <div className="font-bold mt-1 uppercase">{shippingAddress?.district} / {shippingAddress?.city}</div>
-                                </div>
-                                
-                                <span className="font-bold">Çıkış Şubesi</span>
-                                <span className="font-medium">: Kanyon Şube</span>
-                            </div>
-                        </div>
-
-                        {/* Barcode Box */}
-                        <div className="border-2 border-gray-300 rounded-lg p-3 flex flex-col items-center justify-center overflow-hidden">
-                            <h3 className="text-base font-black text-blue-900 w-full mb-2 uppercase text-center">Kargo Barkodu</h3>
+                {/* Top Section: Barcode & Cargo Company */}
+                <div className="flex justify-between items-center border-b-2 border-black pb-4">
+                    {/* Barcode */}
+                    <div className="flex flex-col items-start space-y-1">
+                        <span className="text-[10px] font-black uppercase text-gray-400">Kargo Takip / Sipariş Barkodu</span>
+                        <div className="bg-white p-1">
                             <Barcode 
                                 value={order.cargoTrackingNumber || order.orderNumber} 
-                                width={2.2} 
-                                height={100} 
+                                width={1.8} 
+                                height={60} 
                             />
                         </div>
                     </div>
-                </div>
-            ) : (
-                <div className="flex justify-between items-start border-b border-gray-300 pb-8 mb-8">
-                    <div className="space-y-2">
-                        {settings.logoUrl && (
-                            <div className="mb-2">
-                                <img src={settings.logoUrl} alt="Logo" className="h-16 w-auto object-contain" />
-                            </div>
-                        )}
-                        <h1 className="text-2xl font-bold uppercase">{settings.companyName || "SERİN MOTOR"}</h1>
-                        <div className="text-sm text-gray-600 whitespace-pre-wrap">
-                            {settings.address}
-                            <br />
-                            {settings.phone} | {settings.email}
-                        </div>
-                    </div>
-                    <div className="text-right space-y-2">
-                        <h2 className="text-3xl font-bold text-gray-800">SİPARİŞ BİLGİ FİŞİ</h2>
-                        <p className="text-lg font-semibold">#{order.orderNumber}</p>
-                        <p className="text-gray-600">{formatDate(order.createdAt)}</p>
-                    </div>
-                </div>
-            )}
 
-            {/* Standard Header (Customer & Shipping) - Hidden if Trendyol source (already shown above) */}
-            {order.source !== "TRENDYOL" && (
-                <div className="grid grid-cols-2 gap-12 mb-8">
-                    <div>
-                        <h3 className="text-gray-500 font-semibold mb-2 uppercase tracking-wider text-sm">Müşteri Bilgileri</h3>
-                        <div className="text-gray-800">
-                            <p className="font-bold text-lg">
-                                {shippingAddress?.fullName || shippingAddress?.name || order.user?.name || order.user?.companyName || order.user?.email || (order as any).guestEmail || "Misafir"}
-                            </p>
-                            <p>{order.user?.email || (order as any).guestEmail}</p>
-                            <p>{order.user?.phone || "-"}</p>
-                            <p className="mt-2 whitespace-pre-wrap">{order.user?.address}</p>
-                            <p>{order.user?.district} {order.user?.district && '/'} {order.user?.city}</p>
-                        </div>
-                    </div>
-                    <div>
-                        <h3 className="text-gray-500 font-semibold mb-2 uppercase tracking-wider text-sm">Teslimat Adresi</h3>
-                        <div className="text-gray-800">
-                            {shippingAddress ? (
-                                <>
-                                    <p className="font-bold">{shippingAddress.title || "Adres"}</p>
-                                    <p className="whitespace-pre-wrap">{shippingAddress.address}</p>
-                                    <p>{shippingAddress.district} / {shippingAddress.city}</p>
-                                    <p className="mt-1">Tel: {shippingAddress.phone}</p>
-                                </>
+                    {/* Cargo Company Logo */}
+                    <div className="text-right">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-black uppercase text-gray-400 mb-1">Taşıyıcı Firma</span>
+                            {order.cargoCompany ? (
+                                <div className="text-2xl font-black tracking-tighter border-2 border-black px-4 py-1.5 rounded bg-black text-white uppercase">
+                                    {order.cargoCompany}
+                                </div>
                             ) : (
-                                <p className="text-gray-500 italic">Müşteri adresi ile aynı veya belirtilmemiş.</p>
+                                <div className="text-xl font-bold tracking-tight border-2 border-dashed border-gray-300 px-4 py-1.5 rounded text-gray-400">
+                                    BELİRTİLMEDİ
+                                </div>
                             )}
                         </div>
-                        <div className="mt-4">
-                            <h3 className="text-gray-500 font-semibold mb-1 uppercase tracking-wider text-sm">Ödeme Yöntemi</h3>
-                            <p className="font-medium">
-                                {order.payment?.method === "BANK_TRANSFER" ? "Havale / EFT" : "Kredi Kartı"}
-                            </p>
+                    </div>
+                </div>
+
+                {/* Grid 1: Delivery & Billing Details */}
+                <div className="grid grid-cols-2 gap-6 border-b border-black pb-6">
+                    {/* Delivery Address (Alıcı) */}
+                    <div className="space-y-3 border-r border-gray-200 pr-6">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 border-b border-black pb-1.5 flex items-center gap-1.5">
+                            <span>📦</span> TESLİMAT BİLGİLERİ (ALICI)
+                        </h3>
+                        <div className="text-[11px] space-y-1.5 text-gray-800">
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Teslim Alacak:</span>
+                                <span className="font-black text-sm uppercase text-black">
+                                    {shippingAddress?.fullName || shippingAddress?.name || order.user?.name || "Belirtilmedi"}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Semt/İlçe/İl:</span>
+                                <span className="font-black uppercase text-black">
+                                    {shippingAddress?.district || order.user?.district || "-"} / {shippingAddress?.city || order.user?.city || "-"}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr] items-start">
+                                <span className="font-bold text-gray-500 uppercase">Adres:</span>
+                                <span className="font-bold text-gray-900 leading-tight">
+                                    {shippingAddress?.address || order.user?.address || "Belirtilmedi"}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Telefon:</span>
+                                <span className="font-bold text-black">{shippingAddress?.phone || order.user?.phone || "-"}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Billing Address (Fatura) */}
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 border-b border-black pb-1.5 flex items-center gap-1.5">
+                            <span>🧾</span> FATURA BİLGİLERİ
+                        </h3>
+                        <div className="text-[11px] space-y-1.5 text-gray-800">
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Fatura Sahibi:</span>
+                                <span className="font-black text-sm uppercase text-black">
+                                    {shippingAddress?.fullName || shippingAddress?.name || order.user?.companyName || order.user?.name || "Belirtilmedi"}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Semt/İlçe/İl:</span>
+                                <span className="font-black uppercase text-black">
+                                    {shippingAddress?.district || order.user?.district || "-"} / {shippingAddress?.city || order.user?.city || "-"}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr] items-start">
+                                <span className="font-bold text-gray-900 leading-tight">
+                                    {shippingAddress?.address || order.user?.address || "Belirtilmedi"}
+                                </span>
+                            </div>
+                            {shippingAddress?.taxNumber && (
+                                <div className="grid grid-cols-[100px_1fr]">
+                                    <span className="font-bold text-gray-500 uppercase">Vergi/T.C. No:</span>
+                                    <span className="font-bold text-black">{shippingAddress.taxNumber}</span>
+                                </div>
+                            )}
+                            {shippingAddress?.taxOffice && (
+                                <div className="grid grid-cols-[100px_1fr]">
+                                    <span className="font-bold text-gray-500 uppercase">Vergi Dairesi:</span>
+                                    <span className="font-bold uppercase text-black">{shippingAddress.taxOffice}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
-            )}
 
-            {/* Customer Note */}
-            {order.notes && (
-                <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <h3 className="text-gray-500 font-semibold mb-2 uppercase tracking-wider text-xs">Müşteri Notu</h3>
-                    <p className="text-gray-800 whitespace-pre-wrap">{order.notes}</p>
-                </div>
-            )}
-
-            {/* Order Items Section - Compact Style for Trendyol */}
-            <div className={`mb-6 ${order.source === "TRENDYOL" ? "border-2 border-gray-300 rounded-lg overflow-hidden" : ""}`}>
-                {order.source === "TRENDYOL" && (
-                    <div className="bg-gray-50 px-5 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-lg font-black text-blue-900 uppercase">Ürün Bilgileri</h3>
-                    </div>
-                )}
-                
-                {order.source === "TRENDYOL" ? (
-                    <div className="p-4 space-y-4">
-                        {order.items.map((item, idx) => (
-                            <div key={item.id} className="flex items-start gap-4 p-2">
-                                <div className="w-10 h-10 rounded-full border-2 border-gray-300 flex items-center justify-center font-bold shrink-0">
-                                    {idx + 1}
-                                </div>
-                                <div className="flex-1">
-                                    <p className="font-black text-sm leading-tight mb-3">{item.productName}</p>
-                                    <div className="grid grid-cols-4 text-[10px] text-gray-500 font-medium">
-                                        <div className="flex flex-col">
-                                            <span>Adet</span>
-                                            <span className="text-gray-900 font-bold">{item.quantity} Adet</span>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span>Varyant</span>
-                                            <span className="text-gray-900 font-bold">{item.variantInfo || "-"}</span>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span>Barkod</span>
-                                            <span className="text-gray-900 font-bold">{item.variant?.barcode || item.product?.barcode || "-"}</span>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span>Stok Kodu</span>
-                                            <span className="text-gray-900 font-bold">{item.variant?.sku || item.product?.sku || "-"}</span>
-                                        </div>
-                                    </div>
-                                </div>
+                {/* Grid 2: Seller & Order Info */}
+                <div className="grid grid-cols-2 gap-6 border-b border-black pb-6">
+                    {/* Seller Details */}
+                    <div className="space-y-3 border-r border-gray-200 pr-6">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 border-b border-black pb-1.5 flex items-center gap-1.5">
+                            <span>🏢</span> SATICI BİLGİLERİ
+                        </h3>
+                        <div className="text-[11px] space-y-1.5 text-gray-800">
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Satıcı Adı:</span>
+                                <span className="font-black text-xs uppercase text-black">
+                                    {settings.companyName || "MOTOVİTRİN (MEHMET FATİH BARDAKCI)"}
+                                </span>
                             </div>
-                        ))}
+                            <div className="grid grid-cols-[100px_1fr] items-start">
+                                <span className="font-bold text-gray-500 uppercase">Adres:</span>
+                                <span className="font-medium leading-tight text-gray-700">
+                                    {settings.address || "Vişnelik, Odunpazarı, Eskişehir"}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">İletişim:</span>
+                                <span className="font-medium text-gray-700">
+                                    {settings.phone} | {settings.email}
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                ) : (
+
+                    {/* Order Details */}
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 border-b border-black pb-1.5 flex items-center gap-1.5">
+                            <span>📋</span> SİPARİŞ BİLGİLERİ
+                        </h3>
+                        <div className="text-[11px] space-y-1.5 text-gray-800">
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Sipariş No:</span>
+                                <span className="font-black text-sm text-black">#{order.orderNumber}</span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Sipariş Tarihi:</span>
+                                <span className="font-bold text-black">{formatDate(order.createdAt)}</span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr]">
+                                <span className="font-bold text-gray-500 uppercase">Ödeme Tipi:</span>
+                                <span className="font-bold uppercase text-black">
+                                    {order.payment?.method === "BANK_TRANSFER" ? "Havale / EFT" : "Kredi Kartı"}
+                                </span>
+                            </div>
+                            {order.notes && (
+                                <div className="grid grid-cols-[100px_1fr] items-start">
+                                    <span className="font-bold text-red-500 uppercase">Müşteri Notu:</span>
+                                    <span className="font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded leading-tight">
+                                        {order.notes}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grid 3: Order Items */}
+                <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 border-b border-black pb-1.5 flex items-center gap-1.5">
+                        <span>🛒</span> SİPARİŞ EDİLEN ÜRÜNLER (KONTROL LİSTESİ)
+                    </h3>
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="border-b-2 border-gray-800">
-                                <th className="py-3 font-bold text-gray-700">Ürün Adı</th>
-                                <th className="py-3 font-bold text-gray-700 text-center">Adet</th>
-                                <th className="py-3 font-bold text-gray-700 text-right">Birim Fiyat</th>
-                                <th className="py-3 font-bold text-gray-700 text-right">Toplam</th>
+                            <tr className="border-b border-black bg-gray-50">
+                                <th className="py-2 px-3 font-black text-[11px] text-gray-700 uppercase">Ürün Adı</th>
+                                <th className="py-2 px-3 font-black text-[11px] text-gray-700 uppercase text-center w-[150px]">Stok Kodu (SKU)</th>
+                                <th className="py-2 px-3 font-black text-[11px] text-gray-700 uppercase text-center w-[150px]">Barkod</th>
+                                <th className="py-2 px-3 font-black text-[11px] text-gray-700 uppercase text-right w-[80px]">Adet</th>
                             </tr>
                         </thead>
-                        <tbody className="text-gray-700">
+                        <tbody>
                             {order.items.map((item) => (
                                 <tr key={item.id} className="border-b border-gray-200">
-                                    <td className="py-3">
-                                        <div className="font-medium">{item.productName}</div>
-                                        <div className="text-xs text-gray-500">KDV: %{item.vatRate}</div>
+                                    <td className="py-2.5 px-3">
+                                        <div className="font-black text-xs text-gray-900 leading-snug">{item.productName}</div>
+                                        {item.variantInfo && (
+                                            <div className="text-[10px] font-bold text-blue-600 mt-0.5">Varyant: {item.variantInfo}</div>
+                                        )}
                                     </td>
-                                    <td className="py-3 text-center">{item.quantity}</td>
-                                    <td className="py-3 text-right">{formatPrice(toNumber(item.unitPrice))}</td>
-                                    <td className="py-3 text-right font-medium">{formatPrice(toNumber(item.lineTotal))}</td>
+                                    <td className="py-2.5 px-3 text-center font-mono font-bold text-xs text-gray-800">
+                                        {item.variant?.sku || item.product?.sku || "-"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center font-mono text-xs text-gray-600">
+                                        {item.variant?.barcode || item.product?.barcode || "-"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right">
+                                        <span className="inline-block bg-black text-white text-xs font-black px-2.5 py-0.5 rounded-full">
+                                            {item.quantity}
+                                        </span>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Prices: Visible only for WEB orders to keep marketplace prices confidential if preferred */}
+                {order.source === "WEB" && (
+                    <div className="flex justify-end pt-2">
+                        <div className="w-64 space-y-1.5">
+                            <div className="flex justify-between text-[11px] font-bold text-gray-500">
+                                <span>ARA TOPLAM:</span>
+                                <span className="text-gray-900">{formatPrice(toNumber(order.subtotal))}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] font-bold text-gray-500">
+                                <span>KDV TOPLAM:</span>
+                                <span className="text-gray-900">{formatPrice(toNumber(order.vatAmount))}</span>
+                            </div>
+                            <div className="flex justify-between text-sm font-black text-black border-t-2 border-black pt-1.5 mt-1">
+                                <span>GENEL TOPLAM:</span>
+                                <span>{formatPrice(toNumber(order.total))}</span>
+                            </div>
+                        </div>
+                    </div>
                 )}
-            </div>
 
-            {/* Totals - Hidden if Trendyol to keep prices confidential */}
-            {order.source !== "TRENDYOL" && (
-                <div className="flex justify-end mt-4">
-                    <div className="w-64 space-y-1.5">
-                        <div className="flex justify-between text-sm text-gray-500">
-                            <span>Ara Toplam:</span>
-                            <span>{formatPrice(toNumber(order.subtotal))}</span>
-                        </div>
-                        <div className="flex justify-between text-sm text-gray-500">
-                            <span>KDV Toplam:</span>
-                            <span>{formatPrice(toNumber(order.vatAmount))}</span>
-                        </div>
-                        <div className="flex justify-between text-lg font-black border-t-2 border-gray-100 pt-1 mt-1">
-                            <span>GENEL TOPLAM:</span>
-                            <span>{formatPrice(toNumber(order.total))}</span>
-                        </div>
-                    </div>
+                {/* Footer Disclaimer */}
+                <div className="pt-6 text-center border-t border-dashed border-gray-300 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                    Bu belge paketleme ve kontrol listesidir. Fatura niteliği taşımaz. Bizi tercih ettiğiniz için teşekkür ederiz!
                 </div>
-            )}
-
-            {/* Bank Info (Only if Bank Transfer) */}
-            {order.payment?.method === "BANK_TRANSFER" && (settings.bankIban1 || settings.bankIban2) && (
-                <div className="mt-8 p-4 border rounded-lg border-gray-200">
-                    <h4 className="font-bold text-gray-800 mb-2">Ödeme Yapılacak Banka Hesapları</h4>
-                    <p className="text-sm text-gray-600 mb-2">Lütfen ödeme açıklamasında <strong>sipariş numaranızı (#{order.orderNumber})</strong> belirtiniz.</p>
-                    <div className="space-y-1 text-sm font-mono text-gray-700">
-                        {settings.bankIban1 && <p>{settings.bankIban1}</p>}
-                        {settings.bankIban2 && <p>{settings.bankIban2}</p>}
-                    </div>
-                </div>
-            )}
-
-            {/* Footer Notes */}
-            <div className="mt-8 pt-4 border-t border-gray-300 text-center text-[10px] text-gray-400">
-                <p>Bu belge bilgilendirme amaçlıdır. Fatura niteliği taşımaz. Teşekkürler, yine bekleriz.</p>
             </div>
         </div>
     );

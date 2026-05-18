@@ -579,6 +579,11 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                         N11
                                                     </Badge>
                                                 )}
+                                                {order.source === "HEPSIBURADA" && (
+                                                    <Badge className="bg-[#ff6000] hover:bg-[#e05300] text-white border-none px-1.5 py-0 text-[10px] font-bold">
+                                                        HEPSİBURADA
+                                                    </Badge>
+                                                )}
                                                 {(order.source === "WEB" || !order.source) && (
                                                     <Badge variant="outline" className="text-gray-500 border-gray-200 px-1.5 py-0.5 text-[10px] font-bold uppercase">
                                                         WEB
