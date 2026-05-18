@@ -190,7 +190,7 @@ export class TrendyolEFaturamClient {
         }
     }
 
-    private async request<T = any>(method: string, endpoint: string, data?: any): Promise<T> {
+    private async request<T = any>(method: string, endpoint: string, data?: any, customHeaders?: Record<string, string>): Promise<T> {
         await this.ensureToken();
 
         try {
@@ -206,6 +206,7 @@ export class TrendyolEFaturamClient {
                     "Content-Type": "application/json",
                     Accept: "application/json",
                     "User-Agent": "SelfIntegration",
+                    ...customHeaders,
                 },
                 timeout: 30000,
             });
@@ -589,8 +590,10 @@ export class TrendyolEFaturamClient {
             };
             console.log(`📎 Kalıcı PDF link isteniyor: UUID=${documentUuid}, Type=${documentType}`);
             
-            // Bu endpoint text/plain olarak URL döner
-            const result = await this.request("POST", "/api/invoice/documents/download/permanent-url", payload);
+            // Bu endpoint text/plain veya application/problem+json olarak URL döner
+            const result = await this.request("POST", "/api/invoice/documents/download/permanent-url", payload, {
+                Accept: "text/plain, application/problem+json"
+            });
             
             // Cevap string ise direkt URL'dir, object ise url alanını al
             const url = typeof result === "string" ? result : (result?.url || result?.downloadUrl || null);
