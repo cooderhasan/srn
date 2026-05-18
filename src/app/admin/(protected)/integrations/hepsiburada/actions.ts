@@ -310,6 +310,12 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     hasMore = false;
                 } else {
                     for (const l of listingsArray) {
+                        // HAM VERİ ARAMASI (Hiçbir filtreye takılmadan)
+                        const rawStr = JSON.stringify(l);
+                        if (rawStr.includes("HBCV000007MQETQ")) {
+                            console.log(`🔍 DEBUG - RAW MATCH FOUND IN LISTINGS:`, rawStr);
+                        }
+
                         if (l.merchantSku && l.hepsiburadaSku) {
                             hbSkuMap[l.merchantSku] = l.hepsiburadaSku;
                         }
