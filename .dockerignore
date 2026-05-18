@@ -20,10 +20,8 @@ yapilacaklar.md
 check-*.ts
 fix-*.ts
 debug-*.ts
-*.xlsx
 *.docx
 *.doc
-*.xlsx
 *.pdf
 *.zip
 *.gz
