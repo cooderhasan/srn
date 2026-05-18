@@ -196,8 +196,8 @@ export function HepsiburadaProductList({ initialProducts }: HepsiburadaProductLi
                         ...p, 
                         hepsiburadaProduct: { 
                             ...p.hepsiburadaProduct,
-                            hbSku: hbSku || (p as any).hepsiburadaProduct?.hbSku || "",
-                            merchantSku: hbMerchantSku || (p as any).hepsiburadaProduct?.merchantSku || "",
+                            hbSku: hbSku !== undefined ? hbSku : ((p as any).hepsiburadaProduct?.hbSku || ""),
+                            merchantSku: hbMerchantSku !== undefined ? hbMerchantSku : ((p as any).hepsiburadaProduct?.merchantSku || ""),
                             isSynced: true, 
                             lastSyncedAt: new Date() 
                         } 
