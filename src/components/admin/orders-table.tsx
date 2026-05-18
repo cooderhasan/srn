@@ -691,7 +691,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                             <Barcode className="h-4 w-4" />
                                                         </Button>
                                                     )}
-                                                    {!(order as any).invoiceNo && (
+                                                    {!(order as any).invoiceNo ? (
                                                         <Button
                                                             variant="outline"
                                                             size="icon"
@@ -702,7 +702,18 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                         >
                                                             <ReceiptText className="h-5 w-5" />
                                                         </Button>
-                                                    )}
+                                                    ) : (order.source === "HEPSIBURADA" || order.source === "N11") && (
+                                                         <Button
+                                                             variant="outline"
+                                                             size="icon"
+                                                             className="border-orange-300 bg-orange-50/50 text-orange-600 hover:bg-orange-100 h-9 w-9"
+                                                             title="Pazaryeri Faturasını Güncelle / Yeniden Gönder"
+                                                             disabled={loadingId === order.id}
+                                                             onClick={() => handleSendInvoice(order.id)}
+                                                         >
+                                                             <RefreshCw className={`h-4 w-4 text-orange-600 ${loadingId === order.id ? 'animate-spin' : ''}`} />
+                                                         </Button>
+                                                     )}
                                                 </div>
                                                 <Button
                                                     variant="ghost"
