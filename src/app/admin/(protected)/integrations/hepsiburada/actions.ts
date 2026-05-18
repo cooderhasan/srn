@@ -551,10 +551,15 @@ export async function getHepsiburadaAttributeValues(categoryId: string, attribut
 
 export async function updateHepsiburadaSku(productId: string, hbSku: string, hbMerchantSku?: string) {
     try {
-        const updateData: any = {};
-        const createData: any = { productId };
-        if (hbSku) { updateData.hbSku = hbSku; createData.hbSku = hbSku; }
-        if (hbMerchantSku) { updateData.merchantSku = hbMerchantSku; createData.merchantSku = hbMerchantSku; }
+        const updateData: any = {
+            hbSku: hbSku || "",
+            merchantSku: hbMerchantSku || ""
+        };
+        const createData: any = {
+            productId,
+            hbSku: hbSku || "",
+            merchantSku: hbMerchantSku || ""
+        };
         
         await (prisma as any).hepsiburadaProduct.upsert({
             where: { productId },
