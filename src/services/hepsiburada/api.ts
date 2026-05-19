@@ -203,9 +203,12 @@ export class HepsiburadaClient {
         await this.init();
         if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
 
-        const { status = "New", page = 0, size = 50 } = options;
+        const { status, page = 0, size = 50 } = options;
         
-        let url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?status=${status}&limit=${size}&offset=${page * size}`;
+        let url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?limit=${size}&offset=${page * size}`;
+        if (status) {
+            url += `&status=${status}`;
+        }
         
         if (options.beginDate) url += `&beginDate=${options.beginDate}`;
         if (options.endDate) url += `&endDate=${options.endDate}`;

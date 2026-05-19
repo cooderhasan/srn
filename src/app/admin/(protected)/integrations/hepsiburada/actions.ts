@@ -136,12 +136,12 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
             // HB API requires YYYY-MM-DDTHH:mm:ss format
             const beginDateStr = beginDate.toISOString().split('.')[0];
 
-            // HB sipariş durumları: New, Approved, Unacked, Packaged, Shipped, Delivered
-            for (const status of ["New", "Approved", "Unacked", "Packaged", "Shipped", "Delivered"]) {
+            // Bazı statüler API dokümanında farklı (Open), ya da statü parametresi göndermeyerek ("") hepsini çekebiliriz
+            for (const status of ["", "New", "Approved", "Unacked", "Packaged", "Open", "Shipped"]) {
                 try {
                     const res = await client.getOrders({ status, size: 100, beginDate: beginDateStr });
                     if (res?.items && res.items.length > 0) {
-                        console.log(`📦 HB ${status}: ${res.items.length} sipariş bulundu`);
+                        console.log(`📦 HB Status '${status || "ALL"}': ${res.items.length} sipariş bulundu`);
                         allItems.push(...res.items);
                     }
                 } catch (err: any) {
