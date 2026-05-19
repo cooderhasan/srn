@@ -126,6 +126,7 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 console.warn(`⚠️ HB Specific Order '${specificOrderNumber}' çekilemedi:`, err.message);
                 return { success: false, message: `Sipariş Hepsiburada'dan çekilemedi: ${err.message}` };
             }
+        } else {
             // Son 7 günün siparişlerini çekmek için beginDate ve endDate ayarla
             const endDate = new Date();
             const endDateStr = endDate.toISOString().split('.')[0];
