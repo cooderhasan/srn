@@ -105,7 +105,9 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
         // 🛠️ GEÇİCİ TEST: Spesifik siparişin durumunu kontrol etmek için log bırakalım
         try {
             const testOrder = await client.getOrderByNumber("4454906686");
-            console.log("🛠️ TEST HB SİPARİŞ DETAYI (4454906686):", JSON.stringify(testOrder).substring(0, 800));
+            const items = Array.isArray(testOrder) ? testOrder : (testOrder.items ? testOrder.items : [testOrder]);
+            const statuses = items.map((i: any) => i.status).join(", ");
+            console.log(`🛠️ TEST HB SİPARİŞ DURUMU (4454906686): ${statuses}`);
         } catch(e: any) {
             console.log("🛠️ TEST HB SİPARİŞ ÇEKİLEMEDİ (4454906686):", e.message);
         }
@@ -133,8 +135,8 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
             // HB API requires YYYY-MM-DDTHH:mm:ss format
             const beginDateStr = beginDate.toISOString().split('.')[0];
 
-            // HB sipariş durumları: New, Approved, Unacked, Packed
-            for (const status of ["New", "Approved", "Unacked", "Packed"]) {
+            // HB sipariş durumları: New, Approved, Unacked, Packed, Shipped, Delivered
+            for (const status of ["New", "Approved", "Unacked", "Packed", "Shipped", "Delivered"]) {
                 try {
                     const res = await client.getOrders({ status, size: 100, beginDate: beginDateStr, endDate: endDateStr });
                     if (res?.items && res.items.length > 0) {
