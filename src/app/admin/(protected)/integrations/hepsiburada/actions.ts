@@ -160,6 +160,19 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                     if (existing.items.length === 0) {
                         // Daha önce ürün eşleşmediği için boş eklenmiş, silip yeniden deneyelim.
                         await prisma.order.delete({ where: { id: existing.id } });
+                    } else if (existing.items.length < items.length && !existing.invoiceNo && !existing.invoiceId) {
+                        // Kısmen eklenmiş (örneğin sadece 1 ürünü gelmiş, diğeri eşleşmediği için alınmamış)
+                        // Henüz faturası da kesilmemişse, silip eksiksiz şekilde tekrar oluşturalım.
+                        
+                        // Önce eski siparişin düştüğü stokları geri verelim (mükerrer stok düşmesini engellemek için)
+                        for (const oldItem of existing.items) {
+                            await prisma.product.update({
+                                where: { id: oldItem.productId },
+                                data: { stock: { increment: oldItem.quantity } }
+                            });
+                        }
+                        // Siparişi silelim
+                        await prisma.order.delete({ where: { id: existing.id } });
                     } else {
                         skippedCount++;
                         continue;
