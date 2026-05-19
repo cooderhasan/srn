@@ -117,10 +117,15 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 return { success: false, message: `Sipariş Hepsiburada'dan çekilemedi: ${err.message}` };
             }
         } else {
+            // Son 7 günün siparişlerini çekmek için beginDate ayarla
+            const beginDate = new Date();
+            beginDate.setDate(beginDate.getDate() - 7);
+            const beginDateStr = beginDate.toISOString();
+
             // HB sipariş durumları: New, Approved, Unacked, Packed
             for (const status of ["New", "Approved", "Unacked", "Packed"]) {
                 try {
-                    const res = await client.getOrders({ status, size: 100 });
+                    const res = await client.getOrders({ status, size: 100, beginDate: beginDateStr });
                     if (res?.items && res.items.length > 0) {
                         console.log(`📦 HB ${status}: ${res.items.length} sipariş bulundu`);
                         allItems.push(...res.items);
