@@ -5,6 +5,7 @@ import { BulkTrendyolPriceForm } from "@/components/admin/bulk-trendyol-price-fo
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { BulkN11PriceForm } from "@/components/admin/bulk-n11-price-form";
+import { BulkHbPriceForm } from "@/components/admin/bulk-hb-price-form";
 
 export default async function BulkUpdatesPage() {
     const [categories, brands] = await Promise.all([
@@ -37,10 +38,11 @@ export default async function BulkUpdatesPage() {
             </div>
 
             <Tabs defaultValue="price" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 max-w-[800px]">
+                <TabsList className="grid w-full grid-cols-5 max-w-[1000px]">
                     <TabsTrigger value="price">Fiyat Güncelleme</TabsTrigger>
                     <TabsTrigger value="trendyol">Trendyol Fiyatları</TabsTrigger>
                     <TabsTrigger value="n11">N11 Fiyatları</TabsTrigger>
+                    <TabsTrigger value="hepsiburada">Hepsiburada Fiyatları</TabsTrigger>
                     <TabsTrigger value="stock">Stok Güncelleme</TabsTrigger>
                 </TabsList>
                 <TabsContent value="price" className="mt-6">
@@ -51,6 +53,9 @@ export default async function BulkUpdatesPage() {
                 </TabsContent>
                 <TabsContent value="n11" className="mt-6">
                     <BulkN11PriceForm categories={categories} brands={brands} />
+                </TabsContent>
+                <TabsContent value="hepsiburada" className="mt-6">
+                    <BulkHbPriceForm categories={categories} brands={brands} />
                 </TabsContent>
                 <TabsContent value="stock" className="mt-6">
                     <BulkStockForm categories={categories} brands={brands} />

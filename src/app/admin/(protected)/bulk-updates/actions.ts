@@ -503,3 +503,123 @@ export async function executeBulkN11PriceUpdate(
         throw new Error("N11 toplu fiyat güncelleme sırasında hata oluştu.");
     }
 }
+
+// ==================== HEPSIBURADA PRICE UPDATE ====================
+
+export interface HepsiburadaPricePreviewResult {
+    id: string;
+    name: string;
+    oldPrice: number;
+    newPrice: number;
+    sku: string | null;
+    barcode: string | null;
+}
+
+export async function previewBulkHepsiburadaPriceUpdate(
+    criteria: BulkUpdateCriteria,
+    params: PriceUpdateParams
+): Promise<HepsiburadaPricePreviewResult[]> {
+    const where: any = {
+        isHepsiburadaActive: true,
+    };
+
+    if (criteria.brandId && criteria.brandId !== "ALL") where.brandId = criteria.brandId;
+    if (criteria.categoryId && criteria.categoryId !== "ALL") {
+        where.categories = { some: { id: criteria.categoryId } };
+    }
+
+    const products = await prisma.product.findMany({
+        where,
+        select: {
+            id: true,
+            name: true,
+            hepsiburadaPrice: true,
+            listPrice: true,
+            sku: true,
+            barcode: true,
+        },
+    });
+
+    return products.map((p) => {
+        // Hepsiburada price defaults to listPrice if not set
+        const oldPrice = p.hepsiburadaPrice ? Number(p.hepsiburadaPrice) : Number(p.listPrice);
+        let newPrice = oldPrice;
+
+        if (params.type === "PERCENTAGE") {
+            const amount = oldPrice * (params.value / 100);
+            newPrice = params.operation === "INCREASE" ? oldPrice + amount : oldPrice - amount;
+        } else {
+            newPrice = params.operation === "INCREASE" ? oldPrice + params.value : oldPrice - params.value;
+        }
+
+        if (newPrice < 0) newPrice = 0;
+
+        return {
+            id: p.id,
+            name: p.name,
+            oldPrice,
+            newPrice: Number(newPrice.toFixed(2)),
+            sku: p.sku,
+            barcode: p.barcode
+        };
+    });
+}
+
+export async function executeBulkHepsiburadaPriceUpdate(
+    criteria: BulkUpdateCriteria,
+    params: PriceUpdateParams
+) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        throw new Error("Unauthorized");
+    }
+
+    const preview = await previewBulkHepsiburadaPriceUpdate(criteria, params);
+    const CHUNK_SIZE = 50;
+
+    try {
+        for (let i = 0; i < preview.length; i += CHUNK_SIZE) {
+            const chunk = preview.slice(i, i + CHUNK_SIZE);
+            await prisma.$transaction(
+                chunk.map((item) =>
+                    prisma.product.update({
+                        where: { id: item.id },
+                        data: { hepsiburadaPrice: item.newPrice },
+                    })
+                )
+            );
+        }
+
+        // Log the action
+        await prisma.adminLog.create({
+            data: {
+                action: "BULK_HEPSIBURADA_PRICE_UPDATE",
+                details: `Updated ${preview.length} products' Hepsiburada prices. Criteria: ${JSON.stringify(criteria)}, Params: ${JSON.stringify(params)}`,
+                entityId: "BULK",
+                entityType: "PRODUCT",
+                adminId: session.user.id,
+            }
+        });
+
+        // Add Marketplace Sync Job
+        try {
+            const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+            const productIds = preview.map(p => p.id);
+            if (productIds.length > 0) {
+                await addMarketplaceSyncJob({ 
+                    marketplace: "hepsiburada", 
+                    type: "stocks", 
+                    productIds 
+                });
+            }
+        } catch (e) {
+            console.error("Bulk Hepsiburada price sync queue error:", e);
+        }
+
+        return { success: true, count: preview.length };
+    } catch (error) {
+        console.error("Bulk Hepsiburada price update error:", error);
+        throw new Error("Hepsiburada toplu fiyat güncelleme sırasında hata oluştu.");
+    }
+}
+
