@@ -113,31 +113,112 @@ export default async function ProductPage({ params }: ProductPageProps) {
         })),
     };
 
-    const schema = {
-        "@context": "https://schema.org",
+    // Helper to build category breadcrumbs for JSON-LD
+    const getCategoryPath = (cat: any) => {
+        const path = [];
+        let current = cat;
+        while (current) {
+            path.unshift(current);
+            current = current.parent;
+        }
+        return path;
+    };
+
+    const primaryCategory = (product.categories || []).find((c: any) => c.parent) 
+        || (product.categories || [])[0] 
+        || null;
+    const categoryPath = primaryCategory ? getCategoryPath(primaryCategory) : [];
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.serinmotor.com";
+
+    // 1. Product Schema
+    const productSchema: any = {
         "@type": "Product",
-        name: product.name,
-        image: product.images,
-        description: product.description?.replace(/<[^>]*>?/gm, "") || product.name, // Strip HTML
-        sku: product.sku,
-        mpn: product.sku,
-        brand: {
+        "name": product.name,
+        "image": product.images,
+        "description": product.description?.replace(/<[^>]*>?/gm, "") || product.name, // Strip HTML
+        "sku": product.sku || undefined,
+        "mpn": product.sku || undefined,
+        "brand": {
             "@type": "Brand",
-            name: product.brand?.name || "Serin Motor",
+            "name": product.brand?.name || "Serin Motor",
         },
-        offers: {
+        "offers": {
             "@type": "Offer",
-            url: `${process.env.NEXT_PUBLIC_APP_URL}/products/${product.slug}`,
-            priceCurrency: "TRY",
-            price: Number(product.listPrice),
-            priceValidUntil: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split("T")[0],
-            itemCondition: "https://schema.org/NewCondition",
-            availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-            seller: {
+            "url": `${baseUrl}/products/${product.slug}`,
+            "priceCurrency": "TRY",
+            "price": Number(product.listPrice),
+            "priceValidUntil": new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split("T")[0],
+            "itemCondition": "https://schema.org/NewCondition",
+            "availability": product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            "seller": {
                 "@type": "Organization",
-                name: "Serin Motor",
+                "name": "Serin Motor",
             },
         },
+    };
+
+    // Enrich with review and rating data if available
+    if (reviewStats.totalReviews > 0) {
+        productSchema.aggregateRating = {
+            "@type": "AggregateRating",
+            "ratingValue": reviewStats.averageRating,
+            "reviewCount": reviewStats.totalReviews,
+        };
+        productSchema.review = reviews.map(r => ({
+            "@type": "Review",
+            "author": {
+                "@type": "Person",
+                "name": r.user.companyName || r.user.email || "Müşteri",
+            },
+            "datePublished": r.createdAt.toISOString().split("T")[0],
+            "reviewBody": r.comment || "",
+            "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": r.rating,
+            },
+        }));
+    }
+
+    // 2. BreadcrumbList Schema
+    const breadcrumbListItems = [
+        {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Ana Sayfa",
+            "item": baseUrl,
+        }
+    ];
+
+    let currentPos = 2;
+    categoryPath.forEach((cat: any) => {
+        breadcrumbListItems.push({
+            "@type": "ListItem",
+            "position": currentPos++,
+            "name": cat.name,
+            "item": `${baseUrl}/category/${cat.slug}`,
+        });
+    });
+
+    breadcrumbListItems.push({
+        "@type": "ListItem",
+        "position": currentPos,
+        "name": product.name,
+        "item": `${baseUrl}/products/${product.slug}`,
+    });
+
+    const breadcrumbSchema = {
+        "@type": "BreadcrumbList",
+        "itemListElement": breadcrumbListItems,
+    };
+
+    // Combine using @graph structure
+    const schema = {
+        "@context": "https://schema.org",
+        "@graph": [
+            productSchema,
+            breadcrumbSchema
+        ]
     };
 
     return (
