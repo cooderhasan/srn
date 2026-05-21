@@ -170,7 +170,7 @@ export function LoginForm({ logoUrl, siteName }: LoginFormProps) {
             {/* Footer Text */}
             <p className="text-center text-sm text-gray-500 mt-6">
                 Giriş yaparak{" "}
-                <Link href="/policies/membership" className="text-[#009AD0] hover:underline">Kullanım Şartları</Link>
+                <Link href="/policies/distance-sales" className="text-[#009AD0] hover:underline">Kullanım Şartları</Link>
                 {" "}ve{" "}
                 <Link href="/policies/privacy" className="text-[#009AD0] hover:underline">Gizlilik Politikası</Link>
                 'nı kabul etmiş olursunuz.
