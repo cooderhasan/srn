@@ -127,20 +127,79 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 return { success: false, message: `Sipariş Hepsiburada'dan çekilemedi: ${err.message}` };
             }
         } else {
-            // Son 7 günün siparişlerini çekmek için beginDate ayarla
-            const beginDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-            const beginDateStr = beginDate.toISOString().substring(0, 19); // "YYYY-MM-DDTHH:mm:ss"
-            
-            // Statü parametresi ve beginDate ile siparişleri çekiyoruz
-            for (const status of ["", "Created", "New", "Approved", "Unacked", "Packed", "Open", "Shipped"]) {
-                try {
-                    const res = await client.getOrders({ status, size: 100, beginDate: beginDateStr });
-                    if (res?.items && res.items.length > 0) {
-                        console.log(`📦 HB Status '${status || "ALL"}': ${res.items.length} sipariş bulundu`);
-                        allItems.push(...res.items);
+            // Define timezone-aware Turkish date formatting helper
+            const formatHBDate = (date: Date): string => {
+                const formatter = new Intl.DateTimeFormat("en-US", {
+                    timeZone: "Europe/Istanbul",
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hourCycle: "h23",
+                });
+                const parts = formatter.formatToParts(date);
+                const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+                return `${partMap.year}-${partMap.month}-${partMap.day} ${partMap.hour}:${partMap.minute}`;
+            };
+
+            const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+            // HB API allows max 24 hours difference between begindate and enddate.
+            // We fetch the last 3 days by splitting them into three 24-hour windows.
+            const intervals: { start: Date; end: Date }[] = [];
+            const now = new Date();
+            for (let i = 0; i < 3; i++) {
+                const end = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+                const start = new Date(now.getTime() - (i + 1) * 24 * 60 * 60 * 1000);
+                intervals.push({ start, end });
+            }
+
+            const statuses = ["", "New", "Approved", "Unacked", "Packed", "Open", "Shipped"];
+
+            for (const interval of intervals) {
+                const startStr = formatHBDate(interval.start);
+                const endStr = formatHBDate(interval.end);
+                
+                for (const status of statuses) {
+                    let page = 0;
+                    const size = 100;
+                    let hasMore = true;
+                    
+                    while (hasMore) {
+                        try {
+                            console.log(`📡 HB Fetching Page ${page} for status '${status || "ALL"}', range: [${startStr} - ${endStr}]`);
+                            const res = await client.getOrders({
+                                status,
+                                size,
+                                page,
+                                begindate: startStr,
+                                enddate: endStr
+                            });
+                            
+                            const items = res?.items || [];
+                            if (items.length > 0) {
+                                console.log(`📦 HB Page ${page} (status '${status || "ALL"}'): ${items.length} sipariş bulundu`);
+                                allItems.push(...items);
+                            }
+                            
+                            if (items.length < size) {
+                                hasMore = false;
+                            } else {
+                                page++;
+                                if (page > 50) {
+                                    console.warn("⚠️ HB Fetching reached safety limit of 50 pages, stopping.");
+                                    hasMore = false;
+                                }
+                            }
+                            
+                            // Sleep slightly to respect rate limits
+                            await sleep(200);
+                        } catch (err: any) {
+                            console.warn(`⚠️ HB ${status || "ALL"} siparişleri çekilirken hata (Sayfa ${page}, Tarih [${startStr} - ${endStr}]):`, err.message);
+                            hasMore = false;
+                        }
                     }
-                } catch (err: any) {
-                    console.warn(`⚠️ HB ${status} siparişleri çekilirken hata:`, err.message);
                 }
             }
         }

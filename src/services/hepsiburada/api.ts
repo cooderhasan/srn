@@ -199,7 +199,7 @@ export class HepsiburadaClient {
      * GET /orders/merchantid/{merchantId}
      * status: New, Unacked, Packed, Shipped, Delivered, Cancelled, UnDelivered
      */
-    async getOrders(options: { status?: string; beginDate?: string; endDate?: string; page?: number; size?: number } = {}) {
+    async getOrders(options: { status?: string; beginDate?: string; endDate?: string; begindate?: string; enddate?: string; page?: number; size?: number } = {}) {
         await this.init();
         if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
 
@@ -210,8 +210,11 @@ export class HepsiburadaClient {
             url += `&status=${status}`;
         }
         
-        if (options.beginDate) url += `&beginDate=${options.beginDate}`;
-        if (options.endDate) url += `&endDate=${options.endDate}`;
+        const begin = options.begindate || options.beginDate;
+        const end = options.enddate || options.endDate;
+
+        if (begin) url += `&begindate=${begin}`;
+        if (end) url += `&enddate=${end}`;
 
         console.log(`📡 HB Fetching Orders: ${url}`);
 
@@ -389,6 +392,7 @@ export class HepsiburadaClient {
      */
     async packageItems(orderId: string, lineItemIds: string[]) {
         await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
         const url = `${this.orderBaseUrl}/packages/merchantid/${this.creds.merchantId}`;
         
         // Resmi HB docs formatı: lineItemRequests (id+quantity), packageNumber, deci
@@ -425,6 +429,7 @@ export class HepsiburadaClient {
      */
     async uploadInvoiceLink(packageId: string, invoiceUrl: string, orderNumber: string) {
         await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
         // Fatura linki: PUT /packages/merchantid/{merchantId}/packagenumber/{packageNumber}/invoice
         const url = `${this.orderBaseUrl}/packages/merchantid/${this.creds.merchantId}/packagenumber/${packageId}/invoice`;
         
