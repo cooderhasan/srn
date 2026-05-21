@@ -150,6 +150,14 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
             return { success: true, message: "Hepsiburada siparişi bulunamadı." };
         }
 
+        // Deduplicate items by their unique Hepsiburada line item id to avoid duplicate products on status overlap
+        const uniqueItemsMap = new Map<string, any>();
+        for (const item of allItems) {
+            const itemId = item.id || `${item.orderNumber || item.orderId || ''}-${item.merchantSku || item.merchantSKU || ''}`;
+            uniqueItemsMap.set(String(itemId), item);
+        }
+        allItems = Array.from(uniqueItemsMap.values());
+
         let importedCount = 0;
         let skippedCount = 0;
 
