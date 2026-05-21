@@ -127,15 +127,14 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 return { success: false, message: `Sipariş Hepsiburada'dan çekilemedi: ${err.message}` };
             }
         } else {
-            // Son 7 günün siparişlerini çekmek için beginDate ve endDate ayarla
-            const endDate = new Date();
-            const endDateStr = endDate.toISOString().split('.')[0];
+            // Son 7 günün siparişlerini çekmek için beginDate ayarla
+            const beginDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const beginDateStr = beginDate.toISOString().substring(0, 19); // "YYYY-MM-DDTHH:mm:ss"
             
-            // Tarih filtrelerini Hepsiburada'nın inisiyatifine (varsayılan 24 saat) bırakıyoruz
-            // Bazı statüler API dokümanında farklı (Open), ya da statü parametresi göndermeyerek ("") hepsini çekebiliriz
+            // Statü parametresi ve beginDate ile siparişleri çekiyoruz
             for (const status of ["", "Created", "New", "Approved", "Unacked", "Packed", "Open", "Shipped"]) {
                 try {
-                    const res = await client.getOrders({ status, size: 100 });
+                    const res = await client.getOrders({ status, size: 100, beginDate: beginDateStr });
                     if (res?.items && res.items.length > 0) {
                         console.log(`📦 HB Status '${status || "ALL"}': ${res.items.length} sipariş bulundu`);
                         allItems.push(...res.items);
