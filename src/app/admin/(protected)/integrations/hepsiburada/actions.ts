@@ -821,7 +821,7 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                 VaryantGroupID: (product as any).hepsiburadaProduct?.merchantSku || product.sku || product.id,
                 Barcode: product.barcode || product.sku || "",
                 UrunAdi: product.name,
-                UrunAciklamasi: product.description || product.name,
+                UrunAciklamasi: product.marketplaceDescription || product.description || product.name,
                 Marka: product.brand?.name || "Diğer",
                 // Garanti Süresi (GarantiSuresi ID'si ile geliyor)
                 GarantiSuresi: attributes.find(a => a.id === "GarantiSuresi") ? Number(attributes.find(a => a.id === "GarantiSuresi").value) : 24,

@@ -33,6 +33,7 @@ export const productSchema = z.object({
     brandId: z.string().optional(),
     origin: z.string().optional(),
     description: z.string().optional(),
+    marketplaceDescription: z.string().optional(),
     listPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz"),
     salePrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").nullable().optional(),
     trendyolPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").optional(),

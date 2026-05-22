@@ -195,7 +195,7 @@ export async function syncProductsToTrendyol(productIds?: string[], type: "produ
                 productMainId: p.sku || p.id, // Model Kodu (Grup Kodu)
                 brandId: Number(brandId),
                 categoryId: Number(trendyolCatId),
-                description: p.description || p.name,
+                description: p.marketplaceDescription || p.description || p.name,
                 currencyType: "TRY",
                 vatRate: p.vatRate,
                 images: p.images.map((url: string) => ({ url })),
@@ -748,7 +748,7 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             productMainId: product.sku || product.id,
             brandId: Number(brandId),
             categoryId: Number(mappedCategory.trendyolCategoryId),
-            description: product.description || product.name,
+            description: product.marketplaceDescription || product.description || product.name,
             currencyType: "TRY",
             vatRate: product.vatRate,
             cargoCompanyId: Number(cargoCompanyId),

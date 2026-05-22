@@ -71,6 +71,7 @@ interface Product {
     origin: string | null;
     brandId: string | null;
     description: string | null;
+    marketplaceDescription?: string | null;
     listPrice: number;
     trendyolPrice?: number | null;
     n11Price?: number | null;
@@ -121,6 +122,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
         name: product?.name || "",
         slug: product?.slug || "",
         description: product?.description || "",
+        marketplaceDescription: product?.marketplaceDescription || "",
         sku: product?.sku || "",
         barcode: product?.barcode || "",
         origin: product?.origin || "",
@@ -506,6 +508,20 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                     content={formData.description}
                                     onChange={(html) => handleChange("description", html)}
                                     placeholder="Ürün açıklaması..."
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex flex-col gap-1">
+                                    <Label>Pazar Yeri Açıklaması (Opsiyonel)</Label>
+                                    <span className="text-xs text-gray-500">
+                                        Pazar yerleri için özel açıklama. Boş bırakılırsa normal ürün açıklaması gönderilir. Pazar yerleri çok uzun açıklamaları kabul etmediği için buraya daha kısa ve öz açıklamalar girebilirsiniz.
+                                    </span>
+                                </div>
+                                <RichTextEditor
+                                    content={formData.marketplaceDescription}
+                                    onChange={(html) => handleChange("marketplaceDescription", html)}
+                                    placeholder="Pazar yerleri için ürün açıklaması..."
                                 />
                             </div>
                         </CardContent>

@@ -429,7 +429,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                 
                 return {
                     title: variantTitle,
-                    description: product.description || product.name,
+                    description: product.marketplaceDescription || product.description || product.name,
                     categoryId: mappedCat.n11CategoryId,
                     currencyType: "TL",
                     productMainId: productMainId,
@@ -452,7 +452,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
 
             payload = {
                 title: product.name,
-                description: product.description || product.name,
+                description: product.marketplaceDescription || product.description || product.name,
                 categoryId: mappedCat.n11CategoryId,
                 currencyType: "TL",
                 productMainId: productMainId,
@@ -473,7 +473,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
             // Single product (no variants)
             payload = {
                 title: product.name,
-                description: product.description || product.name,
+                description: product.marketplaceDescription || product.description || product.name,
                 categoryId: mappedCat.n11CategoryId,
                 currencyType: "TL",
                 productMainId: productMainId,
