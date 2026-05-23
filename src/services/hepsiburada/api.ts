@@ -231,7 +231,29 @@ export class HepsiburadaClient {
             throw new Error(`HB Order API Error: ${response.status} - ${errorText}`);
         }
 
-        return await response.json();
+        const data = await response.json();
+        
+        // HB API siparişleri düz dizi olarak dönebilir veya {items: [...]} formatında dönebilir
+        // Her iki durumu da destekle
+        if (Array.isArray(data)) {
+            console.log(`📦 HB Orders raw response: array with ${data.length} items`);
+            return { items: data };
+        }
+        
+        // Eğer obje ise ve items yoksa, content veya başka anahtarı kontrol et
+        if (data && typeof data === 'object' && !data.items) {
+            // Objede dizi barındıran bir anahtar ara
+            const possibleKeys = ['content', 'orders', 'data', 'results'];
+            for (const key of possibleKeys) {
+                if (Array.isArray(data[key])) {
+                    console.log(`📦 HB Orders raw response: object with '${key}' key, ${data[key].length} items`);
+                    return { items: data[key] };
+                }
+            }
+            console.log(`📦 HB Orders raw response (unknown format):`, JSON.stringify(data).substring(0, 500));
+        }
+        
+        return data;
     }
 
     /**
@@ -255,7 +277,55 @@ export class HepsiburadaClient {
             throw new Error(`HB Single Order API Error: ${response.status} - ${errorText}`);
         }
 
-        return await response.json();
+        const data = await response.json();
+        // Tek sipariş da düz dizi olarak gelebilir
+        if (Array.isArray(data)) {
+            return { items: data };
+        }
+        return data;
+    }
+
+    /**
+     * Get Unpacked Packages (Paketlenmiş ama henüz kargoya verilmemiş siparişler)
+     * GET /packages/merchantid/{merchantId}/querytype/unpackaged
+     * Bu endpoint, gönderime hazır siparişleri döner.
+     */
+    async getUnpackedOrders(options: { begindate?: string; enddate?: string; page?: number; size?: number } = {}) {
+        await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
+
+        const { page = 0, size = 50 } = options;
+        
+        let url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}?limit=${size}&offset=${page * size}`;
+        
+        if (options.begindate) url += `&begindate=${encodeURIComponent(options.begindate)}`;
+        if (options.enddate) url += `&enddate=${encodeURIComponent(options.enddate)}`;
+
+        console.log(`📡 HB Fetching Unpacked Orders: ${url}`);
+
+        const response = await fetch(url, {
+            headers: this.getHeaders(),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`❌ HB Unpacked Orders API Error: ${response.status}`, errorText);
+            throw new Error(`HB Unpacked API Error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        if (Array.isArray(data)) {
+            return { items: data };
+        }
+        if (data && typeof data === 'object' && !data.items) {
+            const possibleKeys = ['content', 'orders', 'data', 'results'];
+            for (const key of possibleKeys) {
+                if (Array.isArray(data[key])) {
+                    return { items: data[key] };
+                }
+            }
+        }
+        return data;
     }
 
     /**

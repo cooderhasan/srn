@@ -4,12 +4,13 @@ import "dotenv/config";
 const prisma = new PrismaClient();
 
 async function main() {
-    console.log("Checking database...");
-    const product = await prisma.product.findFirst({
-        where: { slug: 'kablosuz-mouse' },
-        select: { id: true, name: true, origin: true, sku: true, barcode: true }
-    });
-    console.log('Product Data:', JSON.stringify(product, null, 2));
+    console.log("Checking configurations...");
+    const hb = await prisma.hepsiburadaConfig.findMany();
+    const ty = await prisma.trendyolConfig.findMany();
+    const n11 = await prisma.n11Config.findMany();
+    console.log('HB Configs:', JSON.stringify(hb, null, 2));
+    console.log('Trendyol Configs:', JSON.stringify(ty, null, 2));
+    console.log('N11 Configs:', JSON.stringify(n11, null, 2));
 }
 
 main()

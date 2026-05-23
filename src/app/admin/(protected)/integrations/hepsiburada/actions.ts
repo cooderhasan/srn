@@ -165,10 +165,19 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                             enddate: endStr
                         });
                         
-                        const items = res?.items || [];
+                        // Debug: API'den gelen ham veriyi logla
+                        console.log(`📦 HB Raw Response keys:`, res ? Object.keys(res) : 'null');
+                        console.log(`📦 HB Raw Response preview:`, JSON.stringify(res).substring(0, 500));
+                        
+                        const items = res?.items || (Array.isArray(res) ? res : []);
                         if (items.length > 0) {
                             console.log(`📦 HB Page ${page}: ${items.length} sipariş bulundu`);
+                            // İlk item'ın yapısını logla (hangi alanlar var?)
+                            console.log(`📦 HB First item keys:`, Object.keys(items[0]));
+                            console.log(`📦 HB First item sample:`, JSON.stringify(items[0]).substring(0, 500));
                             allItems.push(...items);
+                        } else {
+                            console.log(`📦 HB Page ${page}: 0 sipariş (boş response)`);
                         }
                         
                         if (items.length < size) {

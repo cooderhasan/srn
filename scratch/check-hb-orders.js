@@ -36,8 +36,8 @@ async function main() {
 
         const sitSuffix = isTestMode ? "-sit" : "";
         const orderBaseUrl = isTestMode 
-            ? "https://ims-external-sit.hepsiburada.com" 
-            : "https://ims-external.hepsiburada.com";
+            ? "https://oms-external-sit.hepsiburada.com" 
+            : "https://oms-external.hepsiburada.com";
 
         const pair = `${username}:${password}`;
         const authHeader = `Basic ${Buffer.from(pair).toString("base64")}`;
