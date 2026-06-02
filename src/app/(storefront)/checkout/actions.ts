@@ -338,14 +338,13 @@ export async function createOrder(data: CreateOrderData) {
 
         const { newOrder: order, affectedProductIds } = transactionResult;
 
-        // --- ENQUEUE MARKETPLACE SYNC JOB ---
-        // Fire and forget: Immediately notify BullMQ to sync stocks of sold products to marketplaces
+        // --- MARKETPLACE STOCK SYNC ---
+        // If stock reached critical level, this will push stock=0 immediately (no queue delay)
+        // Also syncs to ALL marketplaces (Trendyol, N11, HB)
         if (affectedProductIds.length > 0) {
-            Promise.all([
-                addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: affectedProductIds }).catch(console.error),
-                addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: affectedProductIds }).catch(console.error),
-                addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds: affectedProductIds }).catch(console.error)
-            ]).catch(console.error);
+            import("@/lib/stock-sync").then(({ handlePostOrderStockSync }) => {
+                handlePostOrderStockSync(affectedProductIds, "site").catch(console.error);
+            }).catch(console.error);
         }
 
         // Fetch User Company Name for email (if logged in)

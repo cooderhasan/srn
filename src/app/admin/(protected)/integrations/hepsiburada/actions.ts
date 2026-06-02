@@ -424,47 +424,51 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 const taxNumber = invoiceInfo.taxNumber || invoiceInfo.turkishIdentityNumber || "";
                 const taxOffice = invoiceInfo.taxOffice || "";
 
-                await prisma.order.create({
-                    data: {
-                        orderNumber: orderNumber,
-                        status: "CONFIRMED",
-                        total: totalOrderLineTotal - discountTotal,
-                        subtotal: totalOrderLineTotal,
-                        discountAmount: discountTotal,
-                        appliedDiscountRate: 0,
-                        vatAmount: vatAmountTotal,
-                        guestEmail: customerEmail,
-                        shippingAddress: {
-                            fullName: customerName,
-                            address: shippingAddressInfo.address || "",
-                            city: shippingAddressInfo.city || "",
-                            district: shippingAddressInfo.town || shippingAddressInfo.district || "",
-                            phone: customerPhone,
-                            taxNumber: taxNumber || undefined,
-                            taxOffice: taxOffice || undefined,
-                        },
-                        items: {
-                            create: orderItemsToCreate
-                        },
-                        source: "HEPSIBURADA",
-                        cargoCompany: cargoCompany,
-                        shipmentPackageId: packageId,
+                // Use $transaction to atomically create order AND decrement stock
+                await prisma.$transaction(async (tx) => {
+                    await tx.order.create({
+                        data: {
+                            orderNumber: orderNumber,
+                            status: "CONFIRMED",
+                            total: totalOrderLineTotal - discountTotal,
+                            subtotal: totalOrderLineTotal,
+                            discountAmount: discountTotal,
+                            appliedDiscountRate: 0,
+                            vatAmount: vatAmountTotal,
+                            guestEmail: customerEmail,
+                            shippingAddress: {
+                                fullName: customerName,
+                                address: shippingAddressInfo.address || "",
+                                city: shippingAddressInfo.city || "",
+                                district: shippingAddressInfo.town || shippingAddressInfo.district || "",
+                                phone: customerPhone,
+                                taxNumber: taxNumber || undefined,
+                                taxOffice: taxOffice || undefined,
+                            },
+                            items: {
+                                create: orderItemsToCreate
+                            },
+                            source: "HEPSIBURADA",
+                            cargoCompany: cargoCompany,
+                            shipmentPackageId: packageId,
+                        }
+                    });
+
+                    // Decrement stock atomically for each item
+                    for (const update of stockUpdates) {
+                        await tx.product.update({
+                            where: { id: update.id },
+                            data: { stock: { decrement: update.qty } }
+                        });
                     }
                 });
 
-                // Stok düş
-                for (const update of stockUpdates) {
-                    await prisma.product.update({
-                        where: { id: update.id },
-                        data: { stock: { decrement: update.qty } }
-                    });
-                }
-
-                // Trigger stock sync to other marketplaces
+                // Trigger stock sync to ALL marketplaces (including HB itself)
+                // If stock reached critical level, this will push stock=0 immediately
                 const affectedProductIds = Array.from(new Set(orderItemsToCreate.map(item => item.productId)));
                 if (affectedProductIds.length > 0) {
-                    addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: affectedProductIds }).catch(console.error);
-                    addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: affectedProductIds }).catch(console.error);
+                    const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
+                    handlePostOrderStockSync(affectedProductIds, "hepsiburada").catch(console.error);
                 }
 
                 importedCount++;

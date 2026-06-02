@@ -249,45 +249,52 @@ export async function syncOrdersFromN11() {
                         discountRate: 0
                     });
                     total += line.price * line.quantity;
-
-                    // Update local stock
-                    await prisma.product.update({
-                        where: { id: product.id },
-                        data: { stock: { decrement: line.quantity } }
-                    });
+                    // Stock is now decremented inside $transaction below
                 }
             }
 
             if (orderItems.length > 0) {
-                await prisma.order.create({
-                    data: {
-                        orderNumber: pkg.orderNumber,
-                        status: "CONFIRMED",
-                        total: pkg.totalAmount || total,
-                        subtotal: total,
-                        discountAmount: pkg.totalDiscountAmount || 0,
-                        appliedDiscountRate: 0,
-                        vatAmount: total * 0.2, // Default VAT
-                        guestEmail: pkg.customerEmail || "n11@customer.com",
-                        shippingAddress: {
-                            fullName: pkg.shippingAddress?.fullName || pkg.customerfullName || "N11 Müşterisi",
-                            address: pkg.shippingAddress?.address || "",
-                            city: pkg.shippingAddress?.city || "",
-                            district: pkg.shippingAddress?.district || ""
-                        },
-                        items: { create: orderItems },
-                        source: "N11",
-                        cargoTrackingNumber: pkg.cargoTrackingNumber || null,
-                        shipmentPackageId: String(pkg.id || ""),
-                        cargoCompany: pkg.cargoProviderName || null
+                // Use $transaction to atomically create order AND decrement stock
+                await prisma.$transaction(async (tx) => {
+                    await tx.order.create({
+                        data: {
+                            orderNumber: pkg.orderNumber,
+                            status: "CONFIRMED",
+                            total: pkg.totalAmount || total,
+                            subtotal: total,
+                            discountAmount: pkg.totalDiscountAmount || 0,
+                            appliedDiscountRate: 0,
+                            vatAmount: total * 0.2, // Default VAT
+                            guestEmail: pkg.customerEmail || "n11@customer.com",
+                            shippingAddress: {
+                                fullName: pkg.shippingAddress?.fullName || pkg.customerfullName || "N11 Müşterisi",
+                                address: pkg.shippingAddress?.address || "",
+                                city: pkg.shippingAddress?.city || "",
+                                district: pkg.shippingAddress?.district || ""
+                            },
+                            items: { create: orderItems },
+                            source: "N11",
+                            cargoTrackingNumber: pkg.cargoTrackingNumber || null,
+                            shipmentPackageId: String(pkg.id || ""),
+                            cargoCompany: pkg.cargoProviderName || null
+                        }
+                    });
+
+                    // Decrement stock atomically for each item
+                    for (const item of orderItems) {
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: { stock: { decrement: item.quantity } }
+                        });
                     }
                 });
 
-                // Trigger stock sync to other marketplaces
+                // Trigger stock sync to ALL marketplaces (including N11 itself)
+                // If stock reached critical level, this will push stock=0 immediately
                 const affectedProductIds = Array.from(new Set(orderItems.map(item => item.productId)));
                 if (affectedProductIds.length > 0) {
-                    addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: affectedProductIds }).catch(console.error);
-                    addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds: affectedProductIds }).catch(console.error);
+                    const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
+                    handlePostOrderStockSync(affectedProductIds, "n11").catch(console.error);
                 }
 
                 // AUTOMATIC STOCK CONFIRMATION (Official: PUT /rest/order/v1/update with status 'Picking')

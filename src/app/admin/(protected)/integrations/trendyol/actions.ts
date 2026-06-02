@@ -581,11 +581,12 @@ export async function syncOrdersFromTrendyol() {
                     }
                 });
 
-                // Trigger stock sync to other marketplaces
+                // Trigger stock sync to ALL marketplaces (including Trendyol itself)
+                // If stock reached critical level, this will push stock=0 immediately (no queue delay)
                 const affectedProductIds = Array.from(new Set(resolvedItems.map(item => item.productId)));
                 if (affectedProductIds.length > 0) {
-                    addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: affectedProductIds }).catch(console.error);
-                    addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds: affectedProductIds }).catch(console.error);
+                    const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
+                    handlePostOrderStockSync(affectedProductIds, "trendyol").catch(console.error);
                 }
 
                 importedCount++;
