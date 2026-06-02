@@ -33,7 +33,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { updateOrderStatus, updateOrderTracking, bulkUpdateOrderStatus, sendOrderToYurtici, cancelYKOrder, queryYKOrder, bulkSendOrdersToYurtici, syncAllYKOrders } from "@/app/admin/(protected)/orders/actions";
+import { updateOrderStatus, updateOrderTracking, bulkUpdateOrderStatus, sendOrderToYurtici, cancelYKOrder, queryYKOrder, bulkSendOrdersToYurtici, syncAllYKOrders, markOrderAsPrinted, markOrdersAsPrinted } from "@/app/admin/(protected)/orders/actions";
 import { sendOrderInvoice } from "@/app/admin/(protected)/integrations/trendyol-efaturam/actions";
 import { getYKStatusLabel, getYKStatusColor } from "@/services/yurtici/api";
 import { toast } from "sonner";
@@ -71,6 +71,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
     const [cargoFilter, setCargoFilter] = useState(searchParams.get("cargo") || "ALL");
     const [sourceFilter, setSourceFilter] = useState(searchParams.get("source") || "ALL");
     const [invoiceFilter, setInvoiceFilter] = useState(searchParams.get("invoice") || "ALL");
+    const [printedFilter, setPrintedFilter] = useState(searchParams.get("printed") || "ALL");
     const [startDate, setStartDate] = useState(searchParams.get("startDate") || "");
     const [endDate, setEndDate] = useState(searchParams.get("endDate") || "");
 
@@ -133,6 +134,9 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
         if (invoiceFilter && invoiceFilter !== "ALL") params.set("invoice", invoiceFilter);
         else params.delete("invoice");
 
+        if (printedFilter && printedFilter !== "ALL") params.set("printed", printedFilter);
+        else params.delete("printed");
+
         if (startDate) params.set("startDate", startDate);
         else params.delete("startDate");
 
@@ -152,6 +156,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
         setCargoFilter("ALL");
         setSourceFilter("ALL");
         setInvoiceFilter("ALL");
+        setPrintedFilter("ALL");
         setStartDate("");
         setEndDate("");
         router.push("/admin/orders");
@@ -238,14 +243,42 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
         }
     };
 
-    const handleBulkPrint = () => {
+    const handleBulkPrint = async () => {
         if (selectedIds.length === 0) return;
         window.open(`/admin/orders/bulk-print?ids=${selectedIds.join(',')}`, '_blank');
+        // Yazdırılanları otomatik işaretle
+        try {
+            await markOrdersAsPrinted(selectedIds);
+            setOrders(prev => prev.map(o =>
+                selectedIds.includes(o.id) ? { ...o, isPrinted: true } : o
+            ));
+        } catch (e) {
+            console.error("Mark as printed error:", e);
+        }
     };
 
     const handleBulkShippingLabels = () => {
         if (selectedIds.length === 0) return;
         window.open(`/admin/orders/bulk-shipping-labels?ids=${selectedIds.join(',')}`, '_blank');
+    };
+
+    const handleBulkMarkPrinted = async () => {
+        if (selectedIds.length === 0) return;
+        setIsBulkLoading(true);
+        try {
+            const result = await markOrdersAsPrinted(selectedIds);
+            if (result.success) {
+                setOrders(prev => prev.map(o =>
+                    selectedIds.includes(o.id) ? { ...o, isPrinted: true } : o
+                ));
+                toast.success(`${selectedIds.length} sipariş yazdırıldı olarak işaretlendi`);
+                setSelectedIds([]);
+            }
+        } catch (e) {
+            toast.error("İşlem başarısız.");
+        } finally {
+            setIsBulkLoading(false);
+        }
     };
 
     const handleBulkSendYK = async () => {
@@ -399,6 +432,16 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                         <Button
                             variant="outline"
                             size="sm"
+                            className="bg-white dark:bg-gray-800 gap-2 border-purple-200 text-purple-700 hover:bg-purple-50"
+                            onClick={handleBulkMarkPrinted}
+                            disabled={isBulkLoading}
+                        >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Yazdırıldı İşaretle
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
                             className="bg-white dark:bg-gray-800 gap-2 border-green-200 text-green-700 hover:bg-green-50"
                             onClick={handleBulkInvoice}
                         >
@@ -497,6 +540,21 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                 <SelectItem value="SENT">✅ Kesildi</SelectItem>
                                 <SelectItem value="NONE">⏳ Kesilmedi</SelectItem>
                                 <SelectItem value="ERROR">❌ Hatalı</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Printed Filter */}
+                    <div className="w-full md:w-[140px] space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Yazdırma</label>
+                        <Select value={printedFilter} onValueChange={setPrintedFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tümü" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">Tümü</SelectItem>
+                                <SelectItem value="NO">🖨️ Yazdırılmadı</SelectItem>
+                                <SelectItem value="YES">✅ Yazdırıldı</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -613,6 +671,11 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                     </Badge>
                                                 )}
                                                 <span>#{order.orderNumber}</span>
+                                                {(order as any).isPrinted && (
+                                                    <span title="Yazdırıldı" className="text-green-500">
+                                                        <Printer className="h-3 w-3" />
+                                                    </span>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -743,7 +806,19 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                     size="icon"
                                                     title="Siparişi Yazdır"
                                                     className="h-9 w-9"
-                                                    onClick={() => window.open(`/admin/orders/${order.id}/print`, '_blank')}
+                                                    onClick={async () => {
+                                                        window.open(`/admin/orders/${order.id}/print`, '_blank');
+                                                        if (!(order as any).isPrinted) {
+                                                            try {
+                                                                await markOrderAsPrinted(order.id);
+                                                                setOrders(prev => prev.map(o =>
+                                                                    o.id === order.id ? { ...o, isPrinted: true } : o
+                                                                ));
+                                                            } catch (e) {
+                                                                console.error(e);
+                                                            }
+                                                        }
+                                                    }}
                                                 >
                                                     <FileDown className="h-5 w-5" />
                                                 </Button>

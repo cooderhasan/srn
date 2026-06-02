@@ -333,6 +333,9 @@ model Order {
   invoiceNo            String?       // Kesilen fatura numarası (örn: ABC2024000000001)
   invoiceStatus        String?       // PENDING, SENT, ERROR
   invoiceUrl           String?       // Fatura PDF linki (varsa)
+  // Yazdırma Takibi
+  isPrinted            Boolean       @default(false) // Yazdırıldı mı?
+  printedAt            DateTime?     // İlk yazdırılma zamanı
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 

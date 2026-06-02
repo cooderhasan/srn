@@ -10,6 +10,7 @@ interface OrdersPageProps {
         cargo?: string;
         source?: string;
         invoice?: string;
+        printed?: string;
         startDate?: string;
         endDate?: string;
     }>;
@@ -26,6 +27,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     const cargo = params.cargo;
     const source = params.source;
     const invoice = params.invoice;
+    const printed = params.printed;
     const startDate = params.startDate ? new Date(params.startDate) : undefined;
     const endDate = params.endDate ? new Date(params.endDate) : undefined;
 
@@ -97,6 +99,15 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
             andClauses.push({ invoiceNo: null });
         } else if (invoice === "ERROR") {
             andClauses.push({ invoiceStatus: "ERROR" });
+        }
+    }
+
+    // Printed Filtering
+    if (printed && printed !== "ALL") {
+        if (printed === "YES") {
+            andClauses.push({ isPrinted: true });
+        } else if (printed === "NO") {
+            andClauses.push({ isPrinted: false });
         }
     }
 

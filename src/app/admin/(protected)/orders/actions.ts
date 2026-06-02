@@ -97,6 +97,52 @@ export async function updateOrderStatus(
     }
 }
 
+export async function markOrderAsPrinted(orderId: string) {
+    try {
+        const session = await auth();
+        if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
+            throw new Error("Unauthorized");
+        }
+
+        await prisma.order.update({
+            where: { id: orderId },
+            data: {
+                isPrinted: true,
+                printedAt: new Date(),
+            },
+        });
+
+        revalidatePath("/admin/orders");
+        return { success: true };
+    } catch (error) {
+        console.error("Mark as printed error:", error);
+        return { success: false, error: "İşlem başarısız." };
+    }
+}
+
+export async function markOrdersAsPrinted(orderIds: string[]) {
+    try {
+        const session = await auth();
+        if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
+            throw new Error("Unauthorized");
+        }
+
+        await prisma.order.updateMany({
+            where: { id: { in: orderIds } },
+            data: {
+                isPrinted: true,
+                printedAt: new Date(),
+            },
+        });
+
+        revalidatePath("/admin/orders");
+        return { success: true };
+    } catch (error) {
+        console.error("Mark orders as printed error:", error);
+        return { success: false, error: "İşlem başarısız." };
+    }
+}
+
 export async function updateOrderTracking(orderId: string, trackingUrl: string) {
     try {
         const session = await auth();
