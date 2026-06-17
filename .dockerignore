@@ -2,7 +2,6 @@ node_modules
 .next
 .git
 *.log
-scripts/
 import_log.txt
 full_backup.json
 debug_out.json
