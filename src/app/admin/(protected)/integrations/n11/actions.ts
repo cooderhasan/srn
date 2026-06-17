@@ -219,10 +219,27 @@ export async function syncOrdersFromN11() {
             const orderItems: any[] = [];
             const lineIds: number[] = [];
             let total = 0;
+            let totalVat = 0;
+            let totalDiscount = 0;
 
             // Official Doc: Each package has 'lines'
+            // N11 API: sellerInvoiceAmount = (price * quantity) - (sellerDiscount + sellerCouponDiscount)
             for (const line of (pkg.lines || [])) {
                 lineIds.push(line.orderLineId);
+                
+                // Log incoming N11 line data for debugging
+                console.log(`📦 N11 Order Line [${pkg.orderNumber}]:`, JSON.stringify({
+                    productName: line.productName,
+                    price: line.price,
+                    quantity: line.quantity,
+                    sellerInvoiceAmount: line.sellerInvoiceAmount,
+                    totalSellerDiscountPrice: line.totalSellerDiscountPrice,
+                    sellerDiscount: line.sellerDiscount,
+                    sellerCouponDiscount: line.sellerCouponDiscount,
+                    vatRate: line.vatRate,
+                    barcode: line.barcode,
+                    stockCode: line.stockCode,
+                }));
                 
                 // Find product by barcode or stockCode
                 const searchConditions = [];
@@ -239,19 +256,40 @@ export async function syncOrdersFromN11() {
                 }
 
                 if (product) {
+                    // Use sellerInvoiceAmount for accurate per-line total (includes discounts)
+                    // Fallback: price * quantity (if sellerInvoiceAmount not available)
+                    const lineUnitPrice = Number(line.price) || 0;
+                    const lineQty = Number(line.quantity) || 1;
+                    const lineInvoiceAmount = line.sellerInvoiceAmount != null 
+                        ? Number(line.sellerInvoiceAmount) 
+                        : lineUnitPrice * lineQty;
+                    
+                    // Calculate per-line discount
+                    const lineGross = lineUnitPrice * lineQty;
+                    const lineDiscountAmount = lineGross - lineInvoiceAmount;
+                    
+                    // Calculate VAT from the invoice amount
+                    const lineVatRate = Number(line.vatRate) || 20;
+                    const lineVatAmount = lineInvoiceAmount - (lineInvoiceAmount / (1 + lineVatRate / 100));
+
                     orderItems.push({
                         productId: product.id,
-                        quantity: line.quantity,
-                        unitPrice: line.price,
+                        quantity: lineQty,
+                        unitPrice: lineUnitPrice,
                         productName: line.productName,
-                        lineTotal: line.price * line.quantity,
-                        vatRate: line.vatRate || 20,
-                        discountRate: 0
+                        lineTotal: lineInvoiceAmount,
+                        vatRate: lineVatRate,
+                        discountRate: lineGross > 0 ? Math.round((lineDiscountAmount / lineGross) * 10000) / 100 : 0
                     });
-                    total += line.price * line.quantity;
+                    total += lineInvoiceAmount;
+                    totalVat += lineVatAmount;
+                    totalDiscount += lineDiscountAmount;
                     // Stock is now decremented inside $transaction below
                 }
             }
+
+            // Log final calculated totals vs N11's totalAmount
+            console.log(`📊 N11 Order [${pkg.orderNumber}] Totals: calculated=${total}, n11TotalAmount=${pkg.totalAmount}, vatCalc=${totalVat}, discount=${totalDiscount}`);
 
             if (orderItems.length > 0) {
                 // Use $transaction to atomically create order AND decrement stock
@@ -260,11 +298,11 @@ export async function syncOrdersFromN11() {
                         data: {
                             orderNumber: pkg.orderNumber,
                             status: "CONFIRMED",
-                            total: pkg.totalAmount || total,
-                            subtotal: total,
-                            discountAmount: pkg.totalDiscountAmount || 0,
+                            total: total,
+                            subtotal: total - totalVat,
+                            discountAmount: totalDiscount,
                             appliedDiscountRate: 0,
-                            vatAmount: total * 0.2, // Default VAT
+                            vatAmount: totalVat,
                             guestEmail: pkg.customerEmail || "n11@customer.com",
                             shippingAddress: {
                                 fullName: pkg.shippingAddress?.fullName || pkg.customerfullName || "N11 Müşterisi",
