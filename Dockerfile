@@ -11,6 +11,9 @@ RUN apk add --no-cache openssl libc6-compat
 COPY package*.json ./
 COPY prisma ./prisma
 
+# Use mirror for Prisma engines to bypass network routing/Cloudflare blocks
+ENV PRISMA_ENGINES_MIRROR=https://npmmirror.com/mirrors/prisma
+
 # Install dependencies (this runs postinstall which needs prisma schema)
 RUN npm ci
 
