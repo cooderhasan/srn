@@ -90,6 +90,19 @@ export async function enqueueTrendyolSync() {
     }
 }
 
+export async function enqueueTrendyolOrderSync() {
+    try {
+        const { marketplaceSyncQueue } = await import("@/lib/queue/producer");
+        await marketplaceSyncQueue.add("trendyol-order-sync", {}, {
+            removeOnComplete: true,
+            removeOnFail: false
+        });
+        return { success: true, message: "Trendyol sipariş çekme işlemi kuyruğa alındı. Arka planda tamamlanacaktır." };
+    } catch (error: any) {
+        return { success: false, message: "Kuyruğa ekleme hatası: " + error.message };
+    }
+}
+
 export async function syncProductsToTrendyol(productIds?: string[], type: "products" | "prices" | "stocks" = "products") {
     try {
         // 1. Check Config

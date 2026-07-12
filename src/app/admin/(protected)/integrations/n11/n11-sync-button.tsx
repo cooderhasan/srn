@@ -52,7 +52,7 @@ export function N11SyncButton() {
     );
 }
 
-import { syncOrdersFromN11 } from "./actions";
+import { syncOrdersFromN11, enqueueN11OrderSync } from "./actions";
 import { Download } from "lucide-react";
 
 function N11OrderSyncButton() {
@@ -61,7 +61,7 @@ function N11OrderSyncButton() {
     const handleOrderSync = async () => {
         setLoading(true);
         try {
-            const res = await syncOrdersFromN11();
+            const res = await enqueueN11OrderSync();
             if (res.success) {
                 toast.success(res.message);
             } else {

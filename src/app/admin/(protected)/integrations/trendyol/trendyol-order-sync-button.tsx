@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Download } from "lucide-react";
-import { syncOrdersFromTrendyol } from "./actions";
+import { enqueueTrendyolOrderSync } from "./actions";
 
 export function TrendyolOrderSyncButton() {
     const [loading, setLoading] = useState(false);
@@ -13,7 +13,7 @@ export function TrendyolOrderSyncButton() {
     const handleSync = async () => {
         setLoading(true);
         try {
-            const res = await syncOrdersFromTrendyol();
+            const res = await enqueueTrendyolOrderSync();
             if (res.success) {
                 toast.success(res.message);
             } else {

@@ -90,6 +90,19 @@ export async function enqueueHepsiburadaSync() {
     }
 }
 
+export async function enqueueHepsiburadaOrderSync() {
+    try {
+        const { marketplaceSyncQueue } = await import("@/lib/queue/producer");
+        await marketplaceSyncQueue.add("hepsiburada-order-sync", {}, {
+            removeOnComplete: true,
+            removeOnFail: false
+        });
+        return { success: true, message: "Hepsiburada sipariş çekme işlemi kuyruğa alındı. Arka planda tamamlanacaktır." };
+    } catch (error: any) {
+        return { success: false, message: "Kuyruğa ekleme hatası: " + error.message };
+    }
+}
+
 export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });

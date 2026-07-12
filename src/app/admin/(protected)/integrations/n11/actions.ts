@@ -84,6 +84,19 @@ export async function enqueueN11Sync() {
     }
 }
 
+export async function enqueueN11OrderSync() {
+    try {
+        const { marketplaceSyncQueue } = await import("@/lib/queue/producer");
+        await marketplaceSyncQueue.add("n11-order-sync", {}, {
+            removeOnComplete: true,
+            removeOnFail: false
+        });
+        return { success: true, message: "N11 sipariş çekme işlemi kuyruğa alındı. Arka planda tamamlanacaktır." };
+    } catch (error: any) {
+        return { success: false, message: "Kuyruğa ekleme hatası: " + error.message };
+    }
+}
+
 export async function syncProductsToN11(productIds?: string[]) {
     try {
         const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });

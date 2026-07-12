@@ -52,7 +52,7 @@ export function HepsiburadaSyncButton() {
     );
 }
 
-import { syncOrdersFromHepsiburada } from "./actions";
+import { syncOrdersFromHepsiburada, enqueueHepsiburadaOrderSync } from "./actions";
 import { Download } from "lucide-react";
 
 function HBOrderSyncButton() {
@@ -62,7 +62,15 @@ function HBOrderSyncButton() {
     const handleOrderSync = async () => {
         setLoading(true);
         try {
-            const res = await syncOrdersFromHepsiburada(orderNumber ? orderNumber.trim() : undefined);
+            let res;
+            if (orderNumber) {
+                // Tek bir sipariş çekmek çok hızlı olduğu için bunu doğrudan çağırabiliriz
+                res = await syncOrdersFromHepsiburada(orderNumber.trim());
+            } else {
+                // Genel sipariş çekmeyi kuyruğa alıyoruz (timeout almamak için)
+                res = await enqueueHepsiburadaOrderSync();
+            }
+
             if (res.success) {
                 toast.success(res.message);
                 if (orderNumber) setOrderNumber("");
