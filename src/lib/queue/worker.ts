@@ -11,33 +11,43 @@ let workerInstance: Worker<SyncJobData> | null = null;
 export async function setupRepeatableJobs() {
     const queue = new Queue(QUEUE_NAMES.MARKETPLACE_SYNC, { connection: redisConnection });
     
-    // Her 15 dakikada bir Trendyol siparişlerini çek ve güncelle
+    // ✅ Önce TÜM eski repeatable job'ları temizle (duplicate'leri önlemek için)
+    try {
+        const existingJobs = await queue.getRepeatableJobs();
+        for (const job of existingJobs) {
+            await queue.removeRepeatableByKey(job.key);
+            console.log(`🗑️ Eski cron temizlendi: ${job.name} (${job.key})`);
+        }
+    } catch (e) {
+        console.warn("⚠️ Eski cron'lar temizlenirken hata:", e);
+    }
+    
+    // Her 60 dakikada bir Trendyol siparişlerini çek ve güncelle
     await queue.add("trendyol-order-sync", {}, {
         repeat: {
-            pattern: '*/15 * * * *' // Every 15 minutes
+            pattern: '0 * * * *' // Every 60 minutes (at minute 0)
         },
-        jobId: 'trendyol-order-sync-cron' // Unique ID to prevent duplicates
+        jobId: 'trendyol-order-sync-cron'
     });
+    console.log("⏰ Trendyol Order Sync Cron (60m) registered.");
 
-    console.log("⏰ Trendyol Order Sync Cron (15m) registered.");
-
-    // Her 15 dakikada bir Hepsiburada siparişlerini çek
+    // Her 60 dakikada bir Hepsiburada siparişlerini çek
     await queue.add("hepsiburada-order-sync", {}, {
         repeat: {
-            pattern: '*/15 * * * *' // Every 15 minutes
+            pattern: '0 * * * *' // Every 60 minutes (at minute 0)
         },
         jobId: 'hepsiburada-order-sync-cron'
     });
-    console.log("⏰ Hepsiburada Order Sync Cron (15m) registered.");
+    console.log("⏰ Hepsiburada Order Sync Cron (60m) registered.");
 
-    // Her 15 dakikada bir N11 siparişlerini çek
+    // Her 60 dakikada bir N11 siparişlerini çek
     await queue.add("n11-order-sync", {}, {
         repeat: {
-            pattern: '*/15 * * * *' // Every 15 minutes
+            pattern: '0 * * * *' // Every 60 minutes (at minute 0)
         },
         jobId: 'n11-order-sync-cron'
     });
-    console.log("⏰ N11 Order Sync Cron (15m) registered.");
+    console.log("⏰ N11 Order Sync Cron (60m) registered.");
 }
 
 export function initializeWorker() {

@@ -136,14 +136,12 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
             const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
             // HB API allows max 24 hours difference between begindate and enddate.
-            // We fetch the last 3 days by splitting them into three 24-hour windows.
+            // Sadece son 24 saati tara (cron her 60dk çalıştığı için yeterli).
             const intervals: { start: Date; end: Date }[] = [];
             const now = new Date();
-            for (let i = 0; i < 3; i++) {
-                const end = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-                const start = new Date(now.getTime() - (i + 1) * 24 * 60 * 60 * 1000);
-                intervals.push({ start, end });
-            }
+            const end = new Date(now.getTime());
+            const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            intervals.push({ start, end });
 
             // HB'nin /orders endpointi sadece ödemesi tamamlanmış (Open/Unpacked) siparişleri döner.
             // "Gönderime Hazır" (paketlenmiş) siparişler /packages endpointinden gelir.

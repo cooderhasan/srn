@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { productSchema } from "@/lib/validations";
 import { generateSlug } from "@/lib/helpers";
-import { syncProductsToTrendyol } from "../integrations/trendyol/actions";
+import { syncProductsToTrendyol, clearBarcodeCache } from "../integrations/trendyol/actions";
 import { syncProductsToN11 } from "../integrations/n11/actions";
 import { syncProductsToHepsiburada } from "../integrations/hepsiburada/actions";
 
@@ -138,6 +138,9 @@ export async function createProduct(formData: FormData) {
             newData: validatedData,
         },
     });
+
+    // ✅ Yeni ürün eklendiğinde barkod cache'ini temizle
+    clearBarcodeCache();
 
     revalidatePath("/admin/products");
     revalidatePath("/products");
@@ -297,6 +300,9 @@ export async function updateProduct(productId: string, formData: FormData) {
 
     // --- ANLIK PAZARYERİ SENKRONİZASYONU ---
     // Ürün güncellendiğinde (stok/fiyat değişmiş olabilir), anlık olarak pazaryerlerini güncelle
+    // ✅ Ürün güncellendiğinde barkod cache'ini temizle
+    clearBarcodeCache();
+
     try {
         // Doğrudan import edilen senkronizasyon fonksiyonlarını kullanıyoruz
         // Not: Bu işlemler arka planda (await edilmeden) tetikleniyor ki kullanıcıyı bekletmesin

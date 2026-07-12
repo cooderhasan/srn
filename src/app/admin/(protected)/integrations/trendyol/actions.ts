@@ -411,8 +411,27 @@ export async function getTrendyolCategories() {
     }
 }
 
+// ✅ Bulunamayan barkodları cache'le — her seferinde DB sorgusu yapmayı önler
+// Cache her 6 saatte bir veya yeni ürün eklendiğinde otomatik temizlenir
+const notFoundBarcodeCache = new Set<string>();
+let notFoundBarcodeCacheTime = Date.now();
+const BARCODE_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 saat
+
+/** Yeni ürün eklendiğinde/güncellendiğinde barkod cache'ini temizlemek için çağrılır */
+export function clearBarcodeCache() {
+    notFoundBarcodeCache.clear();
+    notFoundBarcodeCacheTime = Date.now();
+    console.log("🔄 Barkod cache temizlendi.");
+}
+
 export async function syncOrdersFromTrendyol() {
     try {
+        // Cache TTL kontrolü
+        if (Date.now() - notFoundBarcodeCacheTime > BARCODE_CACHE_TTL) {
+            notFoundBarcodeCache.clear();
+            notFoundBarcodeCacheTime = Date.now();
+        }
+
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon yok." };
 
@@ -494,6 +513,15 @@ export async function syncOrdersFromTrendyol() {
                 let productId = "";
                 let variantId: string | null = null;
 
+                // ✅ Cache kontrolü — daha önce bulunamayan barkodu tekrar DB'den arama
+                if (notFoundBarcodeCache.has(line.barcode)) {
+                    missingBarcodeForThisOrder = true;
+                    if (!skippedBarcodes.includes(line.barcode)) {
+                        skippedBarcodes.push(line.barcode);
+                    }
+                    continue;
+                }
+
                 // 1. Try to find VARIANT by barcode
                 const variant = await prisma.productVariant.findFirst({
                     where: { barcode: line.barcode },
@@ -527,6 +555,7 @@ export async function syncOrdersFromTrendyol() {
                     total += line.price * line.quantity;
                 } else {
                     missingBarcodeForThisOrder = true;
+                    notFoundBarcodeCache.add(line.barcode); // ✅ Cache'e ekle
                     if (!skippedBarcodes.includes(line.barcode)) {
                         skippedBarcodes.push(line.barcode);
                     }
