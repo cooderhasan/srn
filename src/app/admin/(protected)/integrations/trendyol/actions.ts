@@ -418,7 +418,7 @@ let notFoundBarcodeCacheTime = Date.now();
 const BARCODE_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 saat
 
 /** Yeni ürün eklendiğinde/güncellendiğinde barkod cache'ini temizlemek için çağrılır */
-export function clearBarcodeCache() {
+export async function clearBarcodeCache() {
     notFoundBarcodeCache.clear();
     notFoundBarcodeCacheTime = Date.now();
     console.log("🔄 Barkod cache temizlendi.");
