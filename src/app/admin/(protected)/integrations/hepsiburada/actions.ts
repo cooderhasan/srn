@@ -405,15 +405,26 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                         continue;
                     }
 
-                    const unitPrice = item.unitPrice?.amount || item.unitPrice || item.totalPrice?.amount || 0;
-                    const quantity = item.quantity || 1;
-                    const lineTotal = unitPrice * quantity;
+                    const qty = item.quantity || 1;
+                    let price = 0;
+                    if (item.unitPrice != null) {
+                        price = Number(item.unitPrice);
+                    } else if (item.price?.amount != null) {
+                        price = Number(item.price.amount);
+                    } else if (item.totalPrice?.amount != null) {
+                        price = Number(item.totalPrice.amount) / qty;
+                    } else {
+                        if (product) {
+                            price = Number((product as any).hepsiburadaPrice) || Number(product.listPrice) || 0;
+                        }
+                    }
+                    const lineTotal = price * qty;
                     const vatRate = item.vatRate || item.vat || 20;
 
                     orderItemsToCreate.push({
                         productId: product.id,
-                        quantity: quantity,
-                        unitPrice: unitPrice,
+                        quantity: qty,
+                        unitPrice: price,
                         productName: item.name || item.productName || "HB Ürün",
                         lineTotal: lineTotal,
                         vatRate: vatRate,
@@ -424,7 +435,7 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                     vatAmountTotal += lineTotal * (vatRate / (100 + vatRate));
                     discountTotal += item.hbDiscount?.amount || item.discountPriceToBeInvoicedHb || 0;
                     
-                    stockUpdates.push({id: product.id, qty: quantity});
+                    stockUpdates.push({id: product.id, qty: qty});
                 }
 
                 if (orderItemsToCreate.length === 0) {
