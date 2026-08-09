@@ -97,6 +97,75 @@ export async function updateOrderStatus(
     }
 }
 
+/**
+ * 30 dakikayı geçen ödemesi tamamlanmamış (WAITING_FOR_PAYMENT) taslak siparişleri iptal eder,
+ * stoklarını otomatik olarak sisteme geri yükler ve pazaryerlerine senkronize eder.
+ */
+export async function cleanupAbandonedOrders() {
+    try {
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+        
+        const expiredOrders = await prisma.order.findMany({
+            where: {
+                status: "WAITING_FOR_PAYMENT",
+                createdAt: { lt: thirtyMinutesAgo },
+            },
+            include: { items: true },
+        });
+
+        if (expiredOrders.length === 0) {
+            return { success: true, count: 0, message: "Süresi dolmuş ödenmemiş sipariş bulunamadı." };
+        }
+
+        let restoredCount = 0;
+        const allAffectedProductIds: string[] = [];
+
+        for (const order of expiredOrders) {
+            await prisma.$transaction(async (tx) => {
+                await tx.order.update({
+                    where: { id: order.id },
+                    data: {
+                        status: "CANCELLED",
+                        notes: (order.notes ? order.notes + " | " : "") + "Zaman aşımı nedeniyle otomatik iptal edildi (Ödeme alınamadı).",
+                    },
+                });
+
+                for (const item of order.items) {
+                    if (item.variantId) {
+                        await tx.productVariant.update({
+                            where: { id: item.variantId },
+                            data: { stock: { increment: item.quantity } },
+                        });
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: { stock: { increment: item.quantity } },
+                        });
+                    } else {
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: { stock: { increment: item.quantity } },
+                        });
+                    }
+                    allAffectedProductIds.push(item.productId);
+                }
+            });
+            restoredCount++;
+        }
+
+        const uniqueProductIds = Array.from(new Set(allAffectedProductIds));
+        if (uniqueProductIds.length > 0) {
+            const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
+            handlePostOrderStockSync(uniqueProductIds, "site").catch(console.error);
+        }
+
+        console.log(`🧹 [Abandoned Orders] ${restoredCount} adet ödenmemiş sipariş iptal edilip stokları geri yüklendi.`);
+        return { success: true, count: restoredCount, message: `${restoredCount} adet sipariş iptal edilip stokları restore edildi.` };
+    } catch (error: any) {
+        console.error("❌ [Abandoned Orders Cleanup Error]:", error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function markOrderAsPrinted(orderId: string) {
     try {
         const session = await auth();

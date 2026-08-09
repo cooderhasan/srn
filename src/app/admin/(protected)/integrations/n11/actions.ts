@@ -254,21 +254,32 @@ export async function syncOrdersFromN11() {
                     stockCode: line.stockCode,
                 }));
                 
-                // Find product by barcode or stockCode
+                // Find product or variant by barcode or stockCode
                 const searchConditions = [];
                 if (line.barcode) searchConditions.push({ barcode: String(line.barcode) });
                 if (line.stockCode) searchConditions.push({ sku: String(line.stockCode) });
 
-                let product = null;
+                let productId: string | null = null;
+                let variantId: string | null = null;
+
                 if (searchConditions.length > 0) {
-                    product = await prisma.product.findFirst({
-                        where: {
-                            OR: searchConditions
-                        }
+                    const variant = await prisma.productVariant.findFirst({
+                        where: { OR: searchConditions }
                     });
+                    if (variant) {
+                        productId = variant.productId;
+                        variantId = variant.id;
+                    } else {
+                        const product = await prisma.product.findFirst({
+                            where: { OR: searchConditions }
+                        });
+                        if (product) {
+                            productId = product.id;
+                        }
+                    }
                 }
 
-                if (product) {
+                if (productId) {
                     // Use sellerInvoiceAmount for accurate per-line total (includes discounts)
                     // Fallback: price * quantity (if sellerInvoiceAmount not available)
                     const lineUnitPrice = Number(line.price) || 0;
@@ -286,7 +297,8 @@ export async function syncOrdersFromN11() {
                     const lineVatAmount = lineInvoiceAmount - (lineInvoiceAmount / (1 + lineVatRate / 100));
 
                     orderItems.push({
-                        productId: product.id,
+                        productId,
+                        variantId: variantId || undefined,
                         quantity: lineQty,
                         unitPrice: lineUnitPrice,
                         productName: line.productName,
@@ -333,10 +345,21 @@ export async function syncOrdersFromN11() {
 
                     // Decrement stock atomically for each item
                     for (const item of orderItems) {
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: { stock: { decrement: item.quantity } }
-                        });
+                        if (item.variantId) {
+                            await tx.productVariant.update({
+                                where: { id: item.variantId },
+                                data: { stock: { decrement: item.quantity } }
+                            });
+                            await tx.product.update({
+                                where: { id: item.productId },
+                                data: { stock: { decrement: item.quantity } }
+                            });
+                        } else {
+                            await tx.product.update({
+                                where: { id: item.productId },
+                                data: { stock: { decrement: item.quantity } }
+                            });
+                        }
                     }
                 });
 

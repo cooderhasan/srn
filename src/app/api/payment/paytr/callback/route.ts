@@ -121,23 +121,52 @@ export async function POST(req: NextRequest) {
         } else {
             // Payment failed
             console.log(`Order ${orderId} payment failed:`, params.failed_reason_msg);
-            // Hatayı nota ekle ama statüyü değiştirme (Böylece WAITING_FOR_PAYMENT kalır ve panelde gizli kalmaya devam eder)
-            // Ayrıca 'where' sorgusunu orderNumber olarak düzeltiyoruz (id değil)
             const orderForFail = await prisma.order.findFirst({
                 where: {
                     OR: [
                         { id: orderId },
                         { orderNumber: orderId },
                     ]
-                }
+                },
+                include: { items: true }
             });
-            if (orderForFail) {
-                await prisma.order.update({
-                    where: { id: orderForFail.id },
-                    data: {
-                        notes: (orderForFail.notes ? orderForFail.notes + " | " : "") + `PayTR Hatası: ${params.failed_reason_msg}`
-                    },
+            if (orderForFail && orderForFail.status === "WAITING_FOR_PAYMENT") {
+                await prisma.$transaction(async (tx) => {
+                    await tx.order.update({
+                        where: { id: orderForFail.id },
+                        data: {
+                            status: "CANCELLED",
+                            notes: (orderForFail.notes ? orderForFail.notes + " | " : "") + `PayTR Ödeme Hatası: ${params.failed_reason_msg}`
+                        },
+                    });
+
+                    // Restore stock for each item
+                    for (const item of orderForFail.items) {
+                        if (item.variantId) {
+                            await tx.productVariant.update({
+                                where: { id: item.variantId },
+                                data: { stock: { increment: item.quantity } },
+                            });
+                            await tx.product.update({
+                                where: { id: item.productId },
+                                data: { stock: { increment: item.quantity } },
+                            });
+                        } else {
+                            await tx.product.update({
+                                where: { id: item.productId },
+                                data: { stock: { increment: item.quantity } },
+                            });
+                        }
+                    }
                 });
+
+                // Sync restored stock to all marketplaces
+                const affectedProductIds = Array.from(new Set(orderForFail.items.map(i => i.productId)));
+                if (affectedProductIds.length > 0) {
+                    import("@/lib/stock-sync").then(({ handlePostOrderStockSync }) => {
+                        handlePostOrderStockSync(affectedProductIds, "site").catch(console.error);
+                    }).catch(console.error);
+                }
             }
         }
 

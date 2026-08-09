@@ -318,6 +318,14 @@ export async function createOrder(data: CreateOrderData) {
                             },
                         },
                     });
+                    await tx.product.update({
+                        where: { id: item.productId },
+                        data: {
+                            stock: {
+                                decrement: item.quantity,
+                            },
+                        },
+                    });
                 } else {
                     await tx.product.update({
                         where: { id: item.productId },

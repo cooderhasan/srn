@@ -364,10 +364,11 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 let cargoCompany = items[0].cargoCompany || (items[0].cargoCompanyModel && items[0].cargoCompanyModel.name) || items[0].shippingCompanyName || null;
                 let packageId = String(items[0].packageNumber || items[0].id || "");
 
-                const stockUpdates: {id: string, qty: number}[] = [];
+                const stockUpdates: {id: string, variantId?: string | null, qty: number}[] = [];
 
                 for (const item of items) {
                     let product = null;
+                    let variant = null;
                     const merchantSkuVal = item.merchantSku || item.merchantSKU;
 
                     // 1. Önce HepsiburadaProduct tablosundaki özel sihirbaz eşleşmelerine bakalım
@@ -386,18 +387,33 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                         if (hbMapping && hbMapping.product) product = hbMapping.product;
                     }
 
-                    // 2. Özel eşleşme bulunamazsa, doğrudan Product tablosundaki sku ve barkod ile eşleştir
-                    if (!product) {
-                        const searchConditions: any[] = [];
-                        if (merchantSkuVal) searchConditions.push({ sku: String(merchantSkuVal) });
-                        if (item.sku) searchConditions.push({ sku: String(item.sku) });
-                        if (item.barcode) searchConditions.push({ barcode: String(item.barcode) });
+                    // 2. Özel eşleşme yoksa, önce ProductVariant araması yap
+                    const searchConditions: any[] = [];
+                    if (merchantSkuVal) {
+                        searchConditions.push({ sku: String(merchantSkuVal) });
+                        searchConditions.push({ barcode: String(merchantSkuVal) });
+                    }
+                    if (item.sku) {
+                        searchConditions.push({ sku: String(item.sku) });
+                        searchConditions.push({ barcode: String(item.sku) });
+                    }
+                    if (item.barcode) searchConditions.push({ barcode: String(item.barcode) });
 
-                        if (searchConditions.length > 0) {
-                            product = await prisma.product.findFirst({
-                                where: { OR: searchConditions }
-                            });
+                    if (!product && searchConditions.length > 0) {
+                        variant = await prisma.productVariant.findFirst({
+                            where: { OR: searchConditions },
+                            include: { product: true }
+                        });
+                        if (variant) {
+                            product = variant.product;
                         }
+                    }
+
+                    // 3. Varyant bulunamazsa, doğrudan Product tablosunda ara
+                    if (!product && searchConditions.length > 0) {
+                        product = await prisma.product.findFirst({
+                            where: { OR: searchConditions }
+                        });
                     }
 
                     if (!product) {
@@ -423,6 +439,7 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
 
                     orderItemsToCreate.push({
                         productId: product.id,
+                        variantId: variant ? variant.id : undefined,
                         quantity: qty,
                         unitPrice: price,
                         productName: item.name || item.productName || "HB Ürün",
@@ -435,7 +452,7 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                     vatAmountTotal += lineTotal * (vatRate / (100 + vatRate));
                     discountTotal += item.hbDiscount?.amount || item.discountPriceToBeInvoicedHb || 0;
                     
-                    stockUpdates.push({id: product.id, qty: qty});
+                    stockUpdates.push({id: product.id, variantId: variant ? variant.id : null, qty: qty});
                 }
 
                 if (orderItemsToCreate.length === 0) {
@@ -478,10 +495,21 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
 
                     // Decrement stock atomically for each item
                     for (const update of stockUpdates) {
-                        await tx.product.update({
-                            where: { id: update.id },
-                            data: { stock: { decrement: update.qty } }
-                        });
+                        if (update.variantId) {
+                            await tx.productVariant.update({
+                                where: { id: update.variantId },
+                                data: { stock: { decrement: update.qty } }
+                            });
+                            await tx.product.update({
+                                where: { id: update.id },
+                                data: { stock: { decrement: update.qty } }
+                            });
+                        } else {
+                            await tx.product.update({
+                                where: { id: update.id },
+                                data: { stock: { decrement: update.qty } }
+                            });
+                        }
                     }
                 });
 

@@ -37,17 +37,29 @@ export async function checkCriticalStockLevels(productIds: string[]): Promise<St
             stock: true,
             criticalStock: true,
             barcode: true,
+            variants: {
+                select: {
+                    id: true,
+                    stock: true,
+                    barcode: true,
+                    sku: true,
+                },
+            },
         },
     });
 
     return products.map((p) => {
         const criticalStock = p.criticalStock ?? defaultCritical;
+        let isCritical = p.stock <= criticalStock;
+        if (!isCritical && p.variants && p.variants.length > 0) {
+            isCritical = p.variants.some((v) => v.stock <= criticalStock);
+        }
         return {
             productId: p.id,
             productName: p.name,
             currentStock: p.stock,
             criticalStock,
-            isCritical: p.stock <= criticalStock,
+            isCritical,
         };
     });
 }
@@ -147,6 +159,9 @@ async function pushZeroStockToTrendyol(productIds: string[]): Promise<void> {
     const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
     if (!config) return;
 
+    const generalSettings = await getSiteSettings("general");
+    const defaultCritical = Number((generalSettings as any)?.defaultCriticalStock || 10);
+
     const { TrendyolClient } = await import("@/services/trendyol/api");
     const client = new TrendyolClient({
         supplierId: config.supplierId,
@@ -161,19 +176,26 @@ async function pushZeroStockToTrendyol(productIds: string[]): Promise<void> {
             isActive: true,
             isTrendyolActive: true,
         },
-        select: { id: true, barcode: true, variants: { select: { barcode: true } } },
+        select: {
+            id: true,
+            stock: true,
+            criticalStock: true,
+            barcode: true,
+            variants: { select: { id: true, stock: true, barcode: true } },
+        },
     });
 
     const items: { barcode: string; quantity: number }[] = [];
 
     for (const p of products) {
+        const criticalStock = p.criticalStock ?? defaultCritical;
         if (p.variants && p.variants.length > 0) {
             for (const v of p.variants) {
-                if (v.barcode) {
+                if (v.barcode && v.stock <= criticalStock) {
                     items.push({ barcode: v.barcode, quantity: 0 });
                 }
             }
-        } else if (p.barcode) {
+        } else if (p.barcode && p.stock <= criticalStock) {
             items.push({ barcode: p.barcode, quantity: 0 });
         }
     }
@@ -193,6 +215,9 @@ async function pushZeroStockToN11(productIds: string[]): Promise<void> {
     const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
     if (!config) return;
 
+    const generalSettings = await getSiteSettings("general");
+    const defaultCritical = Number((generalSettings as any)?.defaultCriticalStock || 10);
+
     const { N11Client } = await import("@/services/n11/api");
     const client = new N11Client({
         apiKey: config.apiKey,
@@ -205,22 +230,30 @@ async function pushZeroStockToN11(productIds: string[]): Promise<void> {
             isActive: true,
             isN11Active: true,
         },
-        select: { id: true, sku: true, barcode: true, variants: { select: { sku: true, barcode: true } } },
+        select: {
+            id: true,
+            stock: true,
+            criticalStock: true,
+            sku: true,
+            barcode: true,
+            variants: { select: { id: true, stock: true, sku: true, barcode: true } },
+        },
     });
 
     const items: { stockCode: string; quantity: number }[] = [];
 
     for (const p of products) {
+        const criticalStock = p.criticalStock ?? defaultCritical;
         if (p.variants && p.variants.length > 0) {
             for (const v of p.variants) {
                 const stockCode = v.sku || v.barcode;
-                if (stockCode) {
+                if (stockCode && v.stock <= criticalStock) {
                     items.push({ stockCode, quantity: 0 });
                 }
             }
         } else {
             const stockCode = p.sku || p.barcode;
-            if (stockCode) {
+            if (stockCode && p.stock <= criticalStock) {
                 items.push({ stockCode, quantity: 0 });
             }
         }
@@ -246,6 +279,9 @@ async function pushZeroStockToN11(productIds: string[]): Promise<void> {
 async function pushZeroStockToHepsiburada(productIds: string[]): Promise<void> {
     const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
     if (!config) return;
+
+    const generalSettings = await getSiteSettings("general");
+    const defaultCritical = Number((generalSettings as any)?.defaultCriticalStock || 10);
 
     const { HepsiburadaClient } = await import("@/services/hepsiburada/api");
     const client = new HepsiburadaClient({
@@ -292,10 +328,12 @@ async function pushZeroStockToHepsiburada(productIds: string[]): Promise<void> {
     const hbItems: any[] = [];
 
     for (const p of products) {
+        const criticalStock = p.criticalStock ?? defaultCritical;
         const hbMerchantSku = (p as any).hepsiburadaProduct?.merchantSku || p.sku || p.barcode || "";
 
         if (p.variants && p.variants.length > 0) {
             for (const v of p.variants) {
+                if (v.stock > criticalStock) continue;
                 const merchantSku = v.sku || v.barcode;
                 if (!merchantSku) continue;
                 const hepsiburadaSku = hbSkuMap[merchantSku] || hbSkuMap[hbMerchantSku] || (p as any).hepsiburadaProduct?.hbSku;
@@ -312,6 +350,7 @@ async function pushZeroStockToHepsiburada(productIds: string[]): Promise<void> {
                 });
             }
         } else {
+            if (p.stock > criticalStock) continue;
             const merchantSku = hbMerchantSku;
             const hepsiburadaSku = hbSkuMap[merchantSku] || (p as any).hepsiburadaProduct?.hbSku;
             if (!hepsiburadaSku) continue;
@@ -332,3 +371,4 @@ async function pushZeroStockToHepsiburada(productIds: string[]): Promise<void> {
 
     await client.uploadInventory(hbItems);
 }
+

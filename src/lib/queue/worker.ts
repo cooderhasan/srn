@@ -48,6 +48,15 @@ export async function setupRepeatableJobs() {
         jobId: 'n11-order-sync-cron'
     });
     console.log("⏰ N11 Order Sync Cron (60m) registered.");
+
+    // Her 15 dakikada bir ödenmemiş (WAITING_FOR_PAYMENT) taslak siparişleri temizle ve stoklarını restore et
+    await queue.add("abandoned-order-cleanup", {}, {
+        repeat: {
+            pattern: '*/15 * * * *' // Every 15 minutes
+        },
+        jobId: 'abandoned-order-cleanup-cron'
+    });
+    console.log("⏰ Abandoned Order Cleanup Cron (15m) registered.");
 }
 
 export function initializeWorker() {
@@ -82,6 +91,14 @@ export function initializeWorker() {
                     console.log("🔄 Otomatik N11 Sipariş Senkronizasyonu başlatıldı...");
                     const { syncOrdersFromN11 } = await import("@/app/admin/(protected)/integrations/n11/actions");
                     const result = await syncOrdersFromN11();
+                    console.log(`✅ Cron Sonucu: ${result.message}`);
+                    return;
+                }
+
+                if (job.name === "abandoned-order-cleanup") {
+                    console.log("🧹 Terk edilmiş ödenmemiş sipariş temizliği başlatıldı...");
+                    const { cleanupAbandonedOrders } = await import("@/app/admin/(protected)/orders/actions");
+                    const result = await cleanupAbandonedOrders();
                     console.log(`✅ Cron Sonucu: ${result.message}`);
                     return;
                 }
