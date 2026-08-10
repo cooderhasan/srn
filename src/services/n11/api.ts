@@ -274,6 +274,7 @@ export class N11Client {
                     integrator: "SRN_Entegrasyon",
                     skus: skus.map(s => ({
                         ...s,
+                        quantity: Math.max(0, Number(s.quantity) || 0),
                         salePrice: s.salePrice ? Number(s.salePrice).toFixed(2) : undefined,
                         listPrice: s.listPrice ? Number(s.listPrice).toFixed(2) : undefined
                     }))
@@ -305,7 +306,7 @@ export class N11Client {
                     salePrice: skuData.salePrice != null ? Number(skuData.salePrice).toFixed(2) : null,
                     listPrice: skuData.listPrice != null ? Number(skuData.listPrice).toFixed(2) : null,
                     vatRate: skuData.vatRate ?? 20,
-                    quantity: skuData.quantity || 0,
+                    quantity: Math.max(0, Number(skuData.quantity) || 0),
                     images: (skuData.images || []).slice(0, 8).map((url: string, index: number) => ({
                         url: url,
                         order: index + 1

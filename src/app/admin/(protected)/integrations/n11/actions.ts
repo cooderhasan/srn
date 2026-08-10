@@ -521,7 +521,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                     salePrice: Number(product.n11Price || product.listPrice) + Number(variant.priceAdjustment || 0),
                     listPrice: Math.max(Number(product.n11Price || product.listPrice) + Number(variant.priceAdjustment || 0), Number(product.listPrice) + Number(variant.priceAdjustment || 0)),
                     vatRate: 20,
-                    quantity: variant.stock || 0,
+                    quantity: Math.max(0, Number(variant.stock) || 0),
                     images: absoluteImages,
                     // Only use mapped attributes from UI (with valid IDs)
                     // Variant-specific info (color/size) goes into title, not attributes
@@ -544,7 +544,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                 salePrice: Number(product.n11Price || product.listPrice),
                 listPrice: Number(product.n11Price || product.listPrice),
                 vatRate: 20,
-                quantity: product.stock || 0,
+                quantity: Math.max(0, Number(product.stock) || 0),
                 images: absoluteImages,
                 attributes: mappedAttributes,
                 // For variant products, send all variants as separate skus
@@ -565,7 +565,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                 salePrice: Number(product.n11Price || product.listPrice),
                 listPrice: Math.max(Number(product.n11Price || product.listPrice), Number(product.listPrice)),
                 vatRate: 20,
-                quantity: product.stock || 0,
+                quantity: Math.max(0, Number(product.stock) || 0),
                 images: absoluteImages,
                 attributes: mappedAttributes,
                 ...(product.n11CatalogId && { catalogId: Number(product.n11CatalogId) })
