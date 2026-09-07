@@ -11,7 +11,8 @@ export async function GET(request: Request) {
         const headers: Record<string, string> = {
             "Authorization": `Basic ${Buffer.from(pair).toString("base64")}`,
             "User-Agent": `${config.supplierId} - SelfIntegration`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "storeFrontCode": "TR"
         };
 
         // --- YENİ EKLENEN: TEST GÖNDERİMİ ---
@@ -106,7 +107,7 @@ export async function GET(request: Request) {
                 return NextResponse.json({ error: "Barkodlu varyant veya ürün bulunamadı", testBarcode });
             }
 
-            const sendUrl = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products`;
+            const sendUrl = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/v2/products`;
             const sendRes = await fetch(sendUrl, {
                 method: "POST",
                 headers,
@@ -152,14 +153,14 @@ export async function GET(request: Request) {
             });
         } catch (e) {}
 
-        // 2. Her birinin barkodunu Trendyol'da ara
+        // 2. Her birinin barkodunu Trendyol'da ara (V2 Approved)
         const barcodeSearchResults: any = {};
         for (const sp of lastSyncedProducts) {
             const barcode = sp.barcode || sp.product?.barcode;
             if (!barcode) continue;
             
             try {
-                const url = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products?barcode=${barcode}`;
+                const url = `${gatewayUrl}/integration/product/sellers/${config.supplierId}/products/approved?barcode=${barcode}`;
                 const res = await fetch(url, { headers });
                 if (res.ok) {
                     const data = await res.json();

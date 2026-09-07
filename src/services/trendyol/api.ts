@@ -39,27 +39,28 @@ export class TrendyolClient {
         };
     }
 
-    private getHeaders(): Record<string, string> {
+    public getHeaders(): Record<string, string> {
         if (!this.creds) throw new Error("Client not initialized.");
         const pair = `${this.creds.apiKey}:${this.creds.apiSecret}`;
         return {
             "Authorization": `Basic ${Buffer.from(pair).toString("base64").trim()}`,
             "User-Agent": `${this.creds.supplierId} - SelfIntegration`,
             "Content-Type": "application/json",
-            "Accept": "application/json, application/pdf"
+            "Accept": "application/json, application/pdf",
+            "storeFrontCode": "TR"
         };
     }
 
     /**
-     * Test connection with detailed error reporting
-     * Uses the new endpoint: GET /integration/product/sellers/{sellerId}/products
+     * Test connection with detailed error reporting (Trendyol V2 Approved Products)
+     * GET /integration/product/sellers/{sellerId}/products/approved?page=0&size=1
      */
     async checkConnectionDetailed(): Promise<{ success: boolean; message: string }> {
         try {
             await this.init();
             if (!this.creds) return { success: false, message: "Ayarlar yüklenemedi." };
 
-            const response = await fetch(`${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products?size=1`, {
+            const response = await fetch(`${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products/approved?page=0&size=1`, {
                 headers: this.getHeaders()
             });
             
@@ -132,14 +133,34 @@ export class TrendyolClient {
     }
 
     /**
-     * Create Products (Bulk)
-     * POST /integration/product/sellers/{sellerId}/products
+     * Create Products (Bulk V2)
+     * POST /integration/product/sellers/{sellerId}/v2/products
      */
     async createProducts(items: any[]) {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
-        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products`;
+        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/v2/products`;
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: this.getHeaders(),
+            body: JSON.stringify({ items })
+        });
+
+        const data = await response.json();
+        return { ok: response.ok, ...data };
+    }
+
+    /**
+     * Update Approved Products Content (Bulk V2)
+     * POST /integration/product/sellers/{sellerId}/products/content-bulk-update
+     */
+    async updateProductsContent(items: any[]) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+
+        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products/content-bulk-update`;
 
         const response = await fetch(url, {
             method: "POST",
@@ -172,12 +193,25 @@ export class TrendyolClient {
     }
 
     /**
-     * Get Attributes for a Category
-     * GET /integration/product/product-categories/{categoryId}/attributes
+     * Get Attributes for a Category (V2)
+     * GET /integration/product/categories/{categoryId}/attributes
      */
     async getCategoryAttributes(categoryId: number) {
         await this.init();
-        const response = await fetch(`${this.gatewayUrl}/integration/product/product-categories/${categoryId}/attributes`, {
+        const response = await fetch(`${this.gatewayUrl}/integration/product/categories/${categoryId}/attributes`, {
+            headers: this.getHeaders()
+        });
+        if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
+        return await response.json();
+    }
+
+    /**
+     * Get Values for a Category Attribute (V2)
+     * GET /integration/product/categories/{categoryId}/attributes/{attributeId}/values?page={page}&size=1000
+     */
+    async getCategoryAttributeValues(categoryId: number, attributeId: number, page = 0, size = 1000) {
+        await this.init();
+        const response = await fetch(`${this.gatewayUrl}/integration/product/categories/${categoryId}/attributes/${attributeId}/values?page=${page}&size=${size}`, {
             headers: this.getHeaders()
         });
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
@@ -270,14 +304,14 @@ export class TrendyolClient {
         return { cargoCompanyId, shipmentAddressId, returningAddressId };
     }
     /**
-     * Get Seller's Products from Trendyol
-     * GET /integration/product/sellers/{sellerId}/products
+     * Get Seller's Approved Products from Trendyol (V2)
+     * GET /integration/product/sellers/{sellerId}/products/approved
      */
     async getSellersProducts(page = 0, size = 100) {
         await this.init();
         if (!this.creds) throw new Error("No creds");
 
-        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products?approvedPage=${page}&size=${size}`;
+        const url = `${this.gatewayUrl}/integration/product/sellers/${this.creds.supplierId}/products/approved?page=${page}&size=${size}`;
         const response = await fetch(url, {
             headers: this.getHeaders()
         });

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 
 export default async function TrendyolIntegrationPage() {
     const { data: config } = await getTrendyolConfig();
-    let options = { providers: [], addresses: [] };
+    let options: { providers: any[]; addresses: any[] } = { providers: [], addresses: [] };
     
     if (config && config.supplierId && config.apiKey && config.apiSecret) {
         const optRes = await getTrendyolCargoAndAddresses();

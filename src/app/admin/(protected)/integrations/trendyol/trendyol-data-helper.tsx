@@ -46,7 +46,7 @@ export function TrendyolDataHelper({ isEnabled }: TrendyolDataHelperProps) {
         setLoadingCategories(true);
         const res = await getTrendyolCategories();
         if (res.success) {
-            setCategories(res.data);
+            setCategories(res.data || []);
             toast.success("Kategoriler çekildi.");
         } else {
             toast.error(res.message);

@@ -119,9 +119,9 @@ export function TrendyolBatchList({ initialData }: { initialData: BatchItem[] })
                                     </span>
                                 </TableCell>
                                 <TableCell>
-                                    {item.batchStatus === "PROCESSING" && (
+                                    {(item.batchStatus === "PROCESSING" || item.batchStatus === "IN_PROGRESS") && (
                                         <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                                            <Clock className="w-3 h-3 mr-1" /> İşleniyor
+                                            <Clock className="w-3 h-3 mr-1 animate-spin" /> Kuyrukta İşleniyor
                                         </Badge>
                                     )}
                                     {item.batchStatus === "COMPLETED" && item.isSynced && (
@@ -134,7 +134,7 @@ export function TrendyolBatchList({ initialData }: { initialData: BatchItem[] })
                                             <XCircle className="w-3 h-3 mr-1" /> Hatalı
                                         </Badge>
                                     ) : null}
-                                    {!["PROCESSING", "COMPLETED", "FAILED"].includes(item.batchStatus) && (
+                                    {!["PROCESSING", "IN_PROGRESS", "COMPLETED", "FAILED"].includes(item.batchStatus) && (
                                         <Badge variant="outline">{item.batchStatus}</Badge>
                                     )}
                                 </TableCell>

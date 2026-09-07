@@ -101,7 +101,7 @@ export function TrendyolSettingsForm({ initialData, options }: { initialData: an
                                     required
                                 >
                                     <option value="" disabled>Seçiniz</option>
-                                    {options.providers.map(p => (
+                                    {options.providers.map((p: any) => (
                                         <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </select>

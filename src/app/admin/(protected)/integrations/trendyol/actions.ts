@@ -679,12 +679,9 @@ export async function getTrendyolCategoryAttributes(categoryId: number) {
         
         // Normalize attribute structure to ensure UI compatibility
         const normalizedAttrs = attrs.map(attr => {
-            // Eğer zaten beklediğimiz V1/V2 formatındaysa (içinde attribute objesi varsa)
             if (attr.attribute && attr.attribute.id !== undefined) {
                 return attr; 
-            } 
-            // Eğer Trendyol direkt { id: 1, name: "Renk", required: true } şeklinde gönderiyorsa
-            else if (attr.id !== undefined && attr.name) {
+            } else if (attr.id !== undefined && attr.name) {
                 return {
                     attribute: {
                         id: attr.id,
@@ -695,18 +692,65 @@ export async function getTrendyolCategoryAttributes(categoryId: number) {
                     attributeValues: attr.attributeValues || []
                 };
             }
-            // Anlaşılamayan format
             return attr;
         });
+
+        // Trendyol V2: Özellik değerleri artık ayrı servisten döner.
+        // Gerekli veya değer havuzu olan özelliklerin değerlerini çekelim (sayfa boyutu: 1000).
+        const populatedAttrs = await Promise.all(
+            normalizedAttrs.map(async (attr) => {
+                const attrId = attr.attribute?.id;
+                if (attrId && (!attr.attributeValues || attr.attributeValues.length === 0)) {
+                    try {
+                        const valRes = await client.getCategoryAttributeValues(categoryId, attrId, 0, 1000);
+                        const vals = valRes?.categoryAttributeValues || valRes?.content || (Array.isArray(valRes) ? valRes : []);
+                        if (vals && vals.length > 0) {
+                            return {
+                                ...attr,
+                                attributeValues: vals.map((v: any) => ({
+                                    id: v.id,
+                                    name: v.name
+                                }))
+                            };
+                        }
+                    } catch (e) {
+                        // Sessizce devam et
+                    }
+                }
+                return attr;
+            })
+        );
         
-        console.log(`[Trendyol API] Parsed ${normalizedAttrs.length} normalized attributes.`);
-        return { success: true, data: normalizedAttrs };
+        console.log(`[Trendyol API] Parsed ${populatedAttrs.length} normalized attributes with V2 values.`);
+        return { success: true, data: populatedAttrs };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
 }
 
-export async function sendProductToTrendyol(productId: string, attributeMappings: any[]) {
+export async function getTrendyolCategoryAttributeValues(categoryId: number, attributeId: number) {
+    try {
+        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const client = new TrendyolClient({
+            supplierId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+        });
+
+        const data = await client.getCategoryAttributeValues(categoryId, attributeId, 0, 1000);
+        const vals = data?.categoryAttributeValues || data?.content || (Array.isArray(data) ? data : []);
+        return { 
+            success: true, 
+            data: vals.map((v: any) => ({ id: v.id, name: v.name })) 
+        };
+    } catch (error: any) {
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+export async function sendProductToTrendyol(productId: string, attributeMappings: any[], targetCategoryId?: number) {
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -728,9 +772,22 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             apiSecret: config.apiSecret
         });
 
-        // 1. Kategori ve Marka ID kontrolü
-        const mappedCategory = (product as any).categories.find((c: any) => c.trendyolCategoryId !== null);
-        if (!mappedCategory) return { success: false, message: "Ürünün kategorisi Trendyol ile eşleşmemiş." };
+        // 1. Kategori ve Marka ID kontrolü (Çoklu kategori önceliği)
+        const matchedCategories = (product as any).categories.filter((c: any) => c.trendyolCategoryId !== null);
+        if (matchedCategories.length === 0) {
+            return { success: false, message: "Ürünün kategorisi Trendyol ile eşleşmemiş." };
+        }
+
+        let mappedCategory = targetCategoryId 
+            ? matchedCategories.find((c: any) => Number(c.trendyolCategoryId) === Number(targetCategoryId) || c.id === String(targetCategoryId))
+            : null;
+
+        if (!mappedCategory) {
+            // Spesifik olanı bul (örneğin parentId'si olan alt kategori veya sonuncu)
+            mappedCategory = matchedCategories.length > 1 
+                ? (matchedCategories.find((c: any) => c.parentId) || matchedCategories[matchedCategories.length - 1]) 
+                : matchedCategories[0];
+        }
 
         const brandId = (product as any).brand?.trendyolBrandId;
         if (!brandId) return { success: false, message: "Ürünün markası Trendyol ile eşleşmemiş." };
@@ -1070,6 +1127,7 @@ export async function syncBatchStatuses() {
                 batchRequestId: { not: null },
                 OR: [
                     { batchStatus: "PROCESSING" },
+                    { batchStatus: "IN_PROGRESS" },
                     { batchStatus: null },
                     { isSynced: false }
                 ]
