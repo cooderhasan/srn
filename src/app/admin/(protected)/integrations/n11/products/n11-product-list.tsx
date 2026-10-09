@@ -22,7 +22,7 @@ import {
     Box
 } from "lucide-react";
 import { toast } from "sonner";
-import { sendProductToN11, getN11CategoryAttributes, enqueueN11Sync } from "../actions";
+import { sendProductToN11, getN11CategoryAttributes, enqueueN11Sync, verifyN11Product } from "../actions";
 import {
     Dialog,
     DialogContent,
@@ -53,6 +53,27 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
     const [search, setSearch] = useState("");
     const [products, setProducts] = useState(initialProducts);
     const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+    const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+    const handleVerify = async (productId: string) => {
+        setVerifyingId(productId);
+        try {
+            const res = await verifyN11Product(productId);
+            if (!res.success) {
+                toast.error(res.message);
+                return;
+            }
+            if (res.synced) toast.success(res.message);
+            else toast.warning(res.message);
+            setProducts(prev => prev.map((p: any) =>
+                p.id === productId
+                    ? { ...p, n11Product: { ...(p.n11Product || {}), isSynced: res.synced, lastSyncError: res.synced ? null : res.message } }
+                    : p
+            ));
+        } finally {
+            setVerifyingId(null);
+        }
+    };
     const [syncing, setSyncing] = useState(false);
     
     const [showAttrModal, setShowAttrModal] = useState(false);
@@ -131,9 +152,10 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
             const res = await sendProductToN11(selectedProduct.id, finalAttrs);
             if (res.success) {
                 toast.success(res.message);
-                setProducts(prev => prev.map(p => 
-                    p.id === selectedProduct.id 
-                    ? { ...p, n11Product: { isSynced: true, lastSyncedAt: new Date() } }
+                // Ürün N11 kuyruğundaysa henüz onaylanmamıştır; yeşil tik sadece onaylanınca gösterilir
+                setProducts(prev => prev.map(p =>
+                    p.id === selectedProduct.id
+                    ? { ...p, n11Product: { ...(p.n11Product || {}), isSynced: !!(res as any).synced, lastSyncedAt: new Date(), lastSyncError: (res as any).synced ? null : "N11 onayı bekleniyor" } }
                     : p
                 ));
             } else {
@@ -272,7 +294,17 @@ export function N11ProductList({ initialProducts }: N11ProductListProps) {
                                         {isSynced ? (
                                             <CheckCircle2 className="w-4 h-4 text-green-500" />
                                         ) : (
-                                            <AlertCircle className="w-4 h-4 text-amber-500" />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleVerify(product.id)}
+                                                disabled={verifyingId === product.id}
+                                                className="p-1 -m-1 rounded hover:bg-amber-50"
+                                                title={`${(product as any).n11Product?.lastSyncError || "N11'de senkron değil"} — N11'de kontrol etmek için tıklayın`}
+                                            >
+                                                {verifyingId === product.id
+                                                    ? <RefreshCcw className="w-4 h-4 text-amber-500 animate-spin" />
+                                                    : <AlertCircle className="w-4 h-4 text-amber-500" />}
+                                            </button>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
