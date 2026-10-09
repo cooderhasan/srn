@@ -306,9 +306,23 @@ export async function updateProduct(productId: string, formData: FormData) {
     try {
         // Doğrudan import edilen senkronizasyon fonksiyonlarını kullanıyoruz
         // Not: Bu işlemler arka planda (await edilmeden) tetikleniyor ki kullanıcıyı bekletmesin
+        // Formda kapatılan pazaryerleri (veya ürün pasif yapıldıysa önceden açık olanlar) satıştan çekilir;
+        // normal senkronlar kapalı ürünü atladığı için bu yapılmazsa ürün pazaryerinde satışta kalıyordu.
+        const wasOpen = (flag: "isTrendyolActive" | "isN11Active" | "isHepsiburadaActive") =>
+            (oldProduct as any)?.isActive && (oldProduct as any)?.[flag];
+        const isOpen = (flag: "isTrendyolActive" | "isN11Active" | "isHepsiburadaActive") =>
+            (validatedData as any).isActive !== false && (validatedData as any)[flag];
+        const closed = (["trendyol", "n11"] as const).filter((m) =>
+            wasOpen(m === "trendyol" ? "isTrendyolActive" : "isN11Active") && !isOpen(m === "trendyol" ? "isTrendyolActive" : "isN11Active"));
+        if (closed.length > 0) {
+            const { pushZeroStockToMarketplaces } = await import("@/lib/stock-sync");
+            pushZeroStockToMarketplaces([productId], [...closed]).catch(console.error);
+        }
+        const hbClosed = wasOpen("isHepsiburadaActive") && !isOpen("isHepsiburadaActive");
+
         if (validatedData.isTrendyolActive) syncProductsToTrendyol([productId]).catch(console.error);
         if (validatedData.isN11Active) syncProductsToN11([productId]).catch(console.error);
-        if (validatedData.isHepsiburadaActive) syncProductsToHepsiburada([productId]).catch(console.error);
+        if (validatedData.isHepsiburadaActive || hbClosed) syncProductsToHepsiburada([productId]).catch(console.error);
         
         // Yedek olarak kuyruğa da ekleyebiliriz (opsiyonel)
         const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
@@ -357,6 +371,22 @@ export async function toggleProductStatus(productId: string, isActive: boolean) 
         data: { isActive },
     });
 
+    // Ürün sitede pasif yapılınca pazaryerlerinde satıştan çekilir, aktif yapılınca stoklar geri gönderilir
+    try {
+        const { addMarketplaceSyncJob } = await import("@/lib/queue/producer");
+        if (!isActive) {
+            const { pushZeroStockToMarketplaces } = await import("@/lib/stock-sync");
+            pushZeroStockToMarketplaces([productId], ["trendyol", "n11"]).catch(console.error);
+        } else {
+            await addMarketplaceSyncJob({ marketplace: "trendyol", type: "stocks", productIds: [productId] }).catch(console.error);
+            await addMarketplaceSyncJob({ marketplace: "n11", type: "stocks", productIds: [productId] }).catch(console.error);
+        }
+        // HB senkronu pasif ürüne stok 0, aktif ürüne güncel stok gönderir
+        await addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "stocks", productIds: [productId] }).catch(console.error);
+    } catch (e) {
+        console.error("Pazaryeri durum senkron hatası:", e);
+    }
+
     revalidatePath("/admin/products");
 }
 
@@ -370,6 +400,12 @@ export async function toggleTrendyolStatus(productId: string, isTrendyolActive: 
         where: { id: productId },
         data: { isTrendyolActive },
     });
+
+    // Kapatılan ürün Trendyol senkron sorgusuna girmediği için stok=0 doğrudan gönderilir
+    if (!isTrendyolActive) {
+        const { pushZeroStockToMarketplaces } = await import("@/lib/stock-sync");
+        pushZeroStockToMarketplaces([productId], ["trendyol"]).catch(console.error);
+    }
 
     // --- OTOMATİK PAZARYERİ SENKRONİZASYONU ---
     // Trendyol durumu değiştiğinde (kapatılmış olabilir), hemen kuyruğa at
@@ -394,6 +430,12 @@ export async function toggleN11Status(productId: string, isN11Active: boolean) {
         where: { id: productId },
         data: { isN11Active },
     });
+
+    // Kapatılan ürün N11 senkron sorgusuna girmediği için stok=0 doğrudan gönderilir
+    if (!isN11Active) {
+        const { pushZeroStockToMarketplaces } = await import("@/lib/stock-sync");
+        pushZeroStockToMarketplaces([productId], ["n11"]).catch(console.error);
+    }
 
     // --- OTOMATİK PAZARYERİ SENKRONİZASYONU ---
     // N11 durumu değiştiğinde (kapatılmış olabilir), hemen kuyruğa at

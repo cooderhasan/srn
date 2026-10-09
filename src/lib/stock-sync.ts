@@ -93,6 +93,21 @@ export async function pushZeroStockToAllMarketplaces(productIds: string[]): Prom
 }
 
 /**
+ * Ürün Trendyol/N11'de (veya sitede tamamen) kapatıldığında stok=0 gönderir.
+ * Kritik stok fonksiyonlarından farkı: aktiflik ve stok seviyesi şartı aranmaz; kapatma sonrası bu bayraklar zaten false olur.
+ * Hepsiburada burada yok: HB'nin normal senkronu kapalı ürüne stok 0 gönderir (syncProductsToHepsiburada).
+ */
+export async function pushZeroStockToMarketplaces(productIds: string[], marketplaces: ("trendyol" | "n11")[]): Promise<void> {
+    if (productIds.length === 0 || marketplaces.length === 0) return;
+    const pushers = { trendyol: pushZeroStockToTrendyol, n11: pushZeroStockToN11 };
+    const results = await Promise.allSettled(marketplaces.map((m) => pushers[m](productIds, true)));
+    results.forEach((r, i) => {
+        if (r.status === "rejected") console.error(`❌ [Satıştan Çekme] ${marketplaces[i]} stok=0 hatası:`, r.reason?.message || r.reason);
+        else console.log(`✅ [Satıştan Çekme] ${marketplaces[i]} stok=0 gönderildi`);
+    });
+}
+
+/**
  * Sipariş geldiğinde çağrılacak ana fonksiyon.
  * 1. Etkilenen ürünlerin stok seviyesini kontrol eder
  * 2. Kritik seviyeye ulaşmış ürünler için acil stok=0 gönderir
@@ -155,7 +170,7 @@ export async function handlePostOrderStockSync(
 /**
  * Trendyol'a doğrudan stok=0 gönderir
  */
-async function pushZeroStockToTrendyol(productIds: string[]): Promise<void> {
+async function pushZeroStockToTrendyol(productIds: string[], includeClosed = false): Promise<void> {
     const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
     if (!config) return;
 
@@ -171,11 +186,13 @@ async function pushZeroStockToTrendyol(productIds: string[]): Promise<void> {
 
     // Ürünlerin barkodlarını çek (varyantlar dahil)
     const products = await prisma.product.findMany({
-        where: {
-            id: { in: productIds },
-            isActive: true,
-            isTrendyolActive: true,
-        },
+        where: includeClosed
+            ? { id: { in: productIds } }
+            : {
+                id: { in: productIds },
+                isActive: true,
+                isTrendyolActive: true,
+            },
         select: {
             id: true,
             stock: true,
@@ -191,11 +208,11 @@ async function pushZeroStockToTrendyol(productIds: string[]): Promise<void> {
         const criticalStock = p.criticalStock ?? defaultCritical;
         if (p.variants && p.variants.length > 0) {
             for (const v of p.variants) {
-                if (v.barcode && v.stock <= criticalStock) {
+                if (v.barcode && (includeClosed || v.stock <= criticalStock)) {
                     items.push({ barcode: v.barcode, quantity: 0 });
                 }
             }
-        } else if (p.barcode && p.stock <= criticalStock) {
+        } else if (p.barcode && (includeClosed || p.stock <= criticalStock)) {
             items.push({ barcode: p.barcode, quantity: 0 });
         }
     }
@@ -211,7 +228,7 @@ async function pushZeroStockToTrendyol(productIds: string[]): Promise<void> {
 /**
  * N11'e doğrudan stok=0 gönderir
  */
-async function pushZeroStockToN11(productIds: string[]): Promise<void> {
+async function pushZeroStockToN11(productIds: string[], includeClosed = false): Promise<void> {
     const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
     if (!config) return;
 
@@ -225,11 +242,13 @@ async function pushZeroStockToN11(productIds: string[]): Promise<void> {
     });
 
     const products = await prisma.product.findMany({
-        where: {
-            id: { in: productIds },
-            isActive: true,
-            isN11Active: true,
-        },
+        where: includeClosed
+            ? { id: { in: productIds } }
+            : {
+                id: { in: productIds },
+                isActive: true,
+                isN11Active: true,
+            },
         select: {
             id: true,
             stock: true,
@@ -247,13 +266,13 @@ async function pushZeroStockToN11(productIds: string[]): Promise<void> {
         if (p.variants && p.variants.length > 0) {
             for (const v of p.variants) {
                 const stockCode = v.sku || v.barcode;
-                if (stockCode && v.stock <= criticalStock) {
+                if (stockCode && (includeClosed || v.stock <= criticalStock)) {
                     items.push({ stockCode, quantity: 0 });
                 }
             }
         } else {
             const stockCode = p.sku || p.barcode;
-            if (stockCode && p.stock <= criticalStock) {
+            if (stockCode && (includeClosed || p.stock <= criticalStock)) {
                 items.push({ stockCode, quantity: 0 });
             }
         }
