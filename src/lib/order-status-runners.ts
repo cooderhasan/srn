@@ -131,6 +131,52 @@ export async function runN11StatusCatchUp() {
 }
 
 /** Trendyol: kendi senkronu sadece son 24 saatte oluşan siparişleri tarıyor; eski takılı siparişler sipariş numarasıyla tek tek */
+/**
+ * Tek seferlik onarım: Trendyol siparişlerine sipariş tarihi olarak aktarım anı yazılıyordu. 2 Kasım'da daha önce
+ * aktarılamayan ~70 eski sipariş birden gelince "Bu Ay" Trendyol tutarı şişti. 31 Ekim'den beri oluşturulan
+ * Trendyol siparişlerinin tarihi Trendyol'dan okunup düzeltilir; bitince Redis'e işaret konur, bir daha çalışmaz.
+ */
+const DATE_FIX_KEY = "trendyol-orderdate-fix-v1";
+const DATE_FIX_FROM = new Date("2026-10-31T00:00:00+03:00");
+
+export async function repairTrendyolOrderDates() {
+    const { default: redis } = await import("@/lib/queue/redis");
+    if (await redis.get(DATE_FIX_KEY)) return { skipped: true };
+    const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+    if (!config) return { checked: 0, fixed: 0 };
+    const { TrendyolClient } = await import("@/services/trendyol/api");
+    const { parseTrendyolDate } = await import("@/lib/order-status-sync");
+    const client = new TrendyolClient({ supplierId: config.supplierId, apiKey: config.apiKey, apiSecret: config.apiSecret });
+
+    const orders = await prisma.order.findMany({
+        where: { source: "TRENDYOL", createdAt: { gte: DATE_FIX_FROM } },
+        select: { id: true, orderNumber: true, createdAt: true },
+    });
+    let checked = 0;
+    let fixed = 0;
+    let failed = 0;
+    for (const o of orders) {
+        try {
+            const pkgs = await client.getOrderPackages(o.orderNumber);
+            const mine = pkgs.find((p: any) => String(p?.orderNumber || "") === String(o.orderNumber));
+            const date = parseTrendyolDate(mine?.orderDate);
+            checked++;
+            if (date && Math.abs(o.createdAt.getTime() - date.getTime()) > 10 * 60 * 1000) {
+                await prisma.order.update({ where: { id: o.id }, data: { createdAt: date } });
+                fixed++;
+            }
+        } catch (e: any) {
+            failed++;
+            console.warn(`[trendyol-date-fix] ${o.orderNumber}:`, e?.message);
+        }
+        await new Promise((r) => setTimeout(r, 300));
+    }
+    // Hata alan sipariş varsa işaret konmaz, sonraki saatte tekrar denenir
+    if (failed === 0) await redis.set(DATE_FIX_KEY, new Date().toISOString());
+    console.log(`[trendyol-date-fix] ${orders.length} sipariş, ${checked} kontrol, ${fixed} tarih düzeltildi, ${failed} hata`);
+    return { checked, fixed, failed };
+}
+
 export async function runTrendyolStatusCatchUp() {
     const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
     if (!config) return { checked: 0, advanced: 0 };

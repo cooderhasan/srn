@@ -77,8 +77,10 @@ export function initializeWorker() {
                     const result = await syncOrdersFromTrendyol();
                     console.log(`✅ Cron Sonucu: ${result.message}`);
                     // Senkron sadece son 24 saatte oluşan siparişlere bakıyor; eski takılı siparişleri Trendyol'a sorup ileri taşı
-                    const { runTrendyolStatusCatchUp } = await import("@/lib/order-status-runners");
+                    const { runTrendyolStatusCatchUp, repairTrendyolOrderDates } = await import("@/lib/order-status-runners");
                     console.log(`✅ Trendyol durum güncelleme:`, await runTrendyolStatusCatchUp().catch((e: any) => ({ error: e.message })));
+                    // Tek seferlik: aktarım anı yazılmış sipariş tarihlerini Trendyol'daki gerçek tarihle düzelt
+                    console.log(`✅ Trendyol tarih onarımı:`, await repairTrendyolOrderDates().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 

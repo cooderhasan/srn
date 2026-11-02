@@ -483,8 +483,16 @@ export async function syncOrdersFromTrendyol() {
             if (tOrder.status === "Delivered") newStatus = "DELIVERED";
             if (tOrder.status === "Cancelled") newStatus = "CANCELLED";
 
+            // Sipariş tarihi Trendyol'daki gerçek tarih: önceden aktarım anı yazılıyordu, geç aktarılan eski siparişler
+            // (ör. barkodu bulunamadığı için atlanıp sonra "Tanımsız Ürün"le gelenler) bu aya/bugüne sayılıyordu
+            const { parseTrendyolDate } = await import("@/lib/order-status-sync");
+            const orderDate = parseTrendyolDate(tOrder.orderDate);
+
             if (existing) {
                 const updates: any = {};
+                if (orderDate && Math.abs(existing.createdAt.getTime() - orderDate.getTime()) > 10 * 60 * 1000) {
+                    updates.createdAt = orderDate;
+                }
                 if (newStatus === "CANCELLED") {
                     // Henüz kargolanmamış sipariş Trendyol'da iptal: ortak iptal (yeni siparişlerde stok geri eklenir).
                     // Önceden durum doğrudan İptal yapılıyordu, stok geri eklenmiyordu
@@ -597,7 +605,9 @@ export async function syncOrdersFromTrendyol() {
                         data: {
                             orderNumber: tOrder.orderNumber,
                             source: "TRENDYOL",
-                            status: "PENDING",
+                            // Geç aktarılan sipariş Trendyol'daki durumuyla gelir (kargolanmış/teslim edilmiş/iptal)
+                            status: ["SHIPPED", "DELIVERED", "CANCELLED"].includes(newStatus) ? newStatus : "PENDING",
+                            ...(orderDate ? { createdAt: orderDate } : {}),
                             total,
                             subtotal: total,
                             discountAmount: 0,
@@ -620,7 +630,9 @@ export async function syncOrdersFromTrendyol() {
                         }
                     });
 
-                    // 2. Stok düş: önceden sadece varyant düşüyordu, ana stok ve paket alt ürünleri değişmiyordu
+                    // 2. Stok düş: önceden sadece varyant düşüyordu, ana stok ve paket alt ürünleri değişmiyordu.
+                    // Trendyol'da zaten iptal edilmiş sipariş kayıt için aktarılır, stok düşülmez
+                    if (newStatus === "CANCELLED") return [];
                     const { decrementOrderStock } = await import("@/lib/stock-sync");
                     return decrementOrderStock(tx, resolvedItems);
                 });

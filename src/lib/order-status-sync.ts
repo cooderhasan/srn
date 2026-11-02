@@ -124,6 +124,16 @@ export function mapTrendyolPackageStatus(s: any): MarketplaceStatus | null {
     return null; // Returned, UnDelivered, UnPacked
 }
 
+/**
+ * Trendyol orderDate → gerçek sipariş anı. Trendyol tarihleri Türkiye saatini UTC gibi yazarak (GMT+3) veriyor,
+ * 3 saat düşülür. Gelecek bir an çıkarsa (saat farkı yanlış varsayıldıysa) şimdiye çekilir.
+ */
+export function parseTrendyolDate(ms: any): Date | null {
+    const n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return new Date(Math.min(n - 3 * 60 * 60 * 1000, Date.now()));
+}
+
 /** N11 shipmentPackageStatus (dokümandaki değerler; örnekte başında boşluk olabiliyor) */
 export function mapN11PackageStatus(s: any): MarketplaceStatus | null {
     const v = String(s || "").trim().toLowerCase();
