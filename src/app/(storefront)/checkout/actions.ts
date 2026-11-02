@@ -281,65 +281,12 @@ export async function createOrder(data: CreateOrderData) {
                 });
             }
 
-            // Update stock
-            for (const item of data.items) {
-                // Check if this product is a bundle
-                const productWithBundle = await tx.product.findUnique({
-                    where: { id: item.productId },
-                    select: {
-                        isBundle: true,
-                        bundleItems: {
-                            select: {
-                                childProductId: true,
-                                quantity: true,
-                            },
-                        },
-                    },
-                });
-
-                if (productWithBundle?.isBundle && productWithBundle.bundleItems.length > 0) {
-                    // Bundle product: decrement stock from each child product
-                    for (const bundleItem of productWithBundle.bundleItems) {
-                        await tx.product.update({
-                            where: { id: bundleItem.childProductId },
-                            data: {
-                                stock: {
-                                    decrement: bundleItem.quantity * item.quantity,
-                                },
-                            },
-                        });
-                    }
-                } else if (item.variantId) {
-                    await tx.productVariant.update({
-                        where: { id: item.variantId },
-                        data: {
-                            stock: {
-                                decrement: item.quantity,
-                            },
-                        },
-                    });
-                    await tx.product.update({
-                        where: { id: item.productId },
-                        data: {
-                            stock: {
-                                decrement: item.quantity,
-                            },
-                        },
-                    });
-                } else {
-                    await tx.product.update({
-                        where: { id: item.productId },
-                        data: {
-                            stock: {
-                                decrement: item.quantity,
-                            },
-                        },
-                    });
-                }
-            }
-
-            // Return the list of affected product IDs as well
-            const affectedProductIds = Array.from(new Set(data.items.map(i => i.productId)));
+            // Stok düş (paket alt ürünleri, varyant + ana stok toplamı; lib/stock-sync ortak kuralı)
+            const { decrementOrderStock } = await import("@/lib/stock-sync");
+            const affectedProductIds = await decrementOrderStock(
+                tx,
+                data.items.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity }))
+            );
 
             return { newOrder, affectedProductIds };
         });

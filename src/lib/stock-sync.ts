@@ -19,6 +19,125 @@ interface StockCheckResult {
     isCritical: boolean;
 }
 
+export interface OrderStockItem {
+    productId: string;
+    variantId?: string | null;
+    quantity: number;
+}
+
+/**
+ * Varyantlı ürünlerde stok varyantlarda tutulur; ana ürün stoğu = aktif varyant stoklarının toplamı.
+ * Önceden her yer farklı davranıyordu: site ve N11/HB siparişi varyantla birlikte ana stoğu da düşüyor, Trendyol sadece
+ * varyantı düşüyor, iptal ise ya varyantı ya ana stoğu geri ekliyordu; ana stok zamanla gerçek toplamdan sapıyordu.
+ */
+export async function recalcVariantParentStocks(db: any, productIds: string[]): Promise<void> {
+    const ids = [...new Set(productIds.filter(Boolean))];
+    if (ids.length === 0) return;
+    const variants = await db.productVariant.findMany({
+        where: { productId: { in: ids } },
+        select: { productId: true, stock: true, isActive: true },
+    });
+    const totals = new Map<string, number>();
+    for (const v of variants) {
+        totals.set(v.productId, (totals.get(v.productId) || 0) + (v.isActive ? v.stock : 0));
+    }
+    for (const [productId, total] of totals) {
+        await db.product.updateMany({ where: { id: productId, isBundle: false, NOT: { stock: total } }, data: { stock: total } });
+    }
+}
+
+/**
+ * Stoğu değişen ürünleri içeren paketlerin (ve paketin kendisinin) stoğunu alt ürünlerden yeniden hesaplar.
+ * Önceden paket stoğu sadece paket kaydedilince hesaplanıyordu; alt ürün satılınca paket eski stokla pazaryerlerine gidiyordu.
+ * Hesaplanan paket ID'lerini döner (pazaryeri senkronuna eklensin diye).
+ */
+export async function recalcBundleStocks(db: any, changedProductIds: string[]): Promise<string[]> {
+    if (changedProductIds.length === 0) return [];
+    const bundles = await db.product.findMany({
+        where: {
+            isBundle: true,
+            OR: [
+                { id: { in: changedProductIds } },
+                { bundleItems: { some: { childProductId: { in: changedProductIds } } } },
+            ],
+        },
+        select: {
+            id: true,
+            stock: true,
+            bundleItems: { select: { quantity: true, childProduct: { select: { stock: true } } } },
+        },
+    });
+    const bundleIds: string[] = [];
+    for (const b of bundles) {
+        if (!b.bundleItems || b.bundleItems.length === 0) continue;
+        const stock = Math.max(0, Math.min(...b.bundleItems.map((bi: any) => Math.floor((bi.childProduct?.stock || 0) / (bi.quantity || 1)))));
+        if (stock !== b.stock) await db.product.update({ where: { id: b.id }, data: { stock } });
+        bundleIds.push(b.id);
+    }
+    return bundleIds;
+}
+
+/**
+ * Siparişte stok düşme / iptalde iade: site, Trendyol, N11, HB ve iptallerin hepsi bunu kullanır.
+ * - Paket ürün: her alt ürünün stoğu değişir, paket stoğu alt ürünlerden yeniden hesaplanır.
+ * - Varyantlı ürün: varyant stoğu değişir, ana stok = varyant toplamı.
+ * - Normal ürün: kendi stoğu değişir.
+ * - "Tanımsız Ürün" (pazaryerinde eşleşmeyen kalem) atlanır.
+ * Etkilenen TÜM ürün ID'lerini döner (paket alt ürünleri ve paketler dahil); pazaryeri stok senkronu bunlarla tetiklenir.
+ */
+async function changeOrderStock(tx: any, items: OrderStockItem[], direction: "decrement" | "increment"): Promise<string[]> {
+    const { UNMATCHED_SLUG } = await import("@/lib/unmatched-product");
+    const affectedIds = new Set<string>();
+    const variantParents = new Set<string>();
+
+    for (const item of items) {
+        if (!item.productId || !(item.quantity > 0)) continue;
+
+        const product = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { id: true, slug: true, isBundle: true, bundleItems: { select: { childProductId: true, quantity: true } } },
+        });
+        if (!product || product.slug === UNMATCHED_SLUG) continue;
+
+        if (product.isBundle && product.bundleItems && product.bundleItems.length > 0) {
+            affectedIds.add(product.id);
+            for (const bundleItem of product.bundleItems) {
+                await tx.product.update({
+                    where: { id: bundleItem.childProductId },
+                    data: { stock: { [direction]: bundleItem.quantity * item.quantity } },
+                });
+                affectedIds.add(bundleItem.childProductId);
+            }
+        } else if (item.variantId) {
+            await tx.productVariant.update({
+                where: { id: item.variantId },
+                data: { stock: { [direction]: item.quantity } },
+            });
+            affectedIds.add(product.id);
+            variantParents.add(product.id);
+        } else {
+            await tx.product.update({
+                where: { id: item.productId },
+                data: { stock: { [direction]: item.quantity } },
+            });
+            affectedIds.add(product.id);
+        }
+    }
+
+    await recalcVariantParentStocks(tx, Array.from(variantParents));
+    for (const id of await recalcBundleStocks(tx, Array.from(affectedIds))) affectedIds.add(id);
+
+    return Array.from(affectedIds);
+}
+
+export async function decrementOrderStock(tx: any, items: OrderStockItem[]): Promise<string[]> {
+    return changeOrderStock(tx, items, "decrement");
+}
+
+export async function restoreOrderStock(tx: any, items: OrderStockItem[]): Promise<string[]> {
+    return changeOrderStock(tx, items, "increment");
+}
+
 /**
  * Verilen ürün ID'leri için stok durumunu kontrol eder.
  * Kritik seviyeye ulaşmış ürünleri döner.
@@ -37,6 +156,8 @@ export async function checkCriticalStockLevels(productIds: string[]): Promise<St
             stock: true,
             criticalStock: true,
             barcode: true,
+            isBundle: true,
+            bundleItems: { select: { quantity: true, childProduct: { select: { stock: true } } } },
             variants: {
                 select: {
                     id: true,
@@ -50,14 +171,18 @@ export async function checkCriticalStockLevels(productIds: string[]): Promise<St
 
     return products.map((p) => {
         const criticalStock = p.criticalStock ?? defaultCritical;
-        let isCritical = p.stock <= criticalStock;
+        // Paket ürünün gerçek stoğu alt ürünlerden gelir (kayıtlı stok eski kalmış olabilir)
+        const effectiveStock = p.isBundle && p.bundleItems.length > 0
+            ? Math.min(...p.bundleItems.map((bi) => Math.floor(bi.childProduct.stock / (bi.quantity || 1))))
+            : p.stock;
+        let isCritical = effectiveStock <= criticalStock;
         if (!isCritical && p.variants && p.variants.length > 0) {
             isCritical = p.variants.some((v) => v.stock <= criticalStock);
         }
         return {
             productId: p.id,
             productName: p.name,
-            currentStock: p.stock,
+            currentStock: effectiveStock,
             criticalStock,
             isCritical,
         };

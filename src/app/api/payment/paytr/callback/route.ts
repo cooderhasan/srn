@@ -131,7 +131,8 @@ export async function POST(req: NextRequest) {
                 include: { items: true }
             });
             if (orderForFail && orderForFail.status === "WAITING_FOR_PAYMENT") {
-                await prisma.$transaction(async (tx) => {
+                const { restoreOrderStock } = await import("@/lib/stock-sync");
+                const affectedProductIds: string[] = await prisma.$transaction(async (tx) => {
                     await tx.order.update({
                         where: { id: orderForFail.id },
                         data: {
@@ -140,28 +141,11 @@ export async function POST(req: NextRequest) {
                         },
                     });
 
-                    // Restore stock for each item
-                    for (const item of orderForFail.items) {
-                        if (item.variantId) {
-                            await tx.productVariant.update({
-                                where: { id: item.variantId },
-                                data: { stock: { increment: item.quantity } },
-                            });
-                            await tx.product.update({
-                                where: { id: item.productId },
-                                data: { stock: { increment: item.quantity } },
-                            });
-                        } else {
-                            await tx.product.update({
-                                where: { id: item.productId },
-                                data: { stock: { increment: item.quantity } },
-                            });
-                        }
-                    }
+                    // Stok iadesi (paket alt ürünleri, varyant + ana stok toplamı; lib/stock-sync ortak kuralı)
+                    return restoreOrderStock(tx, orderForFail.items);
                 });
 
                 // Sync restored stock to all marketplaces
-                const affectedProductIds = Array.from(new Set(orderForFail.items.map(i => i.productId)));
                 if (affectedProductIds.length > 0) {
                     import("@/lib/stock-sync").then(({ handlePostOrderStockSync }) => {
                         handlePostOrderStockSync(affectedProductIds, "site").catch(console.error);

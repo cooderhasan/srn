@@ -169,29 +169,15 @@ export async function cancelOrderFromMarketplace(orderId: string, marketplace: M
     const today = new Date().toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" });
     const note = `Pazaryerinde iptal edildi (${today}); ${restore ? "stok geri eklendi" : "eski sipariş, stok değiştirilmedi"}`;
 
-    // Stok iadesi admin panelindeki iptal ile aynı: varyantlıda varyant, değilse ürün stoğu artar
-    await prisma.$transaction(async (tx) => {
+    const { restoreOrderStock, handlePostOrderStockSync } = await import("@/lib/stock-sync");
+    const affected: string[] = await prisma.$transaction(async (tx) => {
         await tx.order.update({
             where: { id: order.id },
             data: { status: "CANCELLED" as OrderStatus, notes: [order.notes, note].filter(Boolean).join(" | ") },
         });
-        if (!restore) return;
-        for (const item of order.items) {
-            if (item.variantId) {
-                await tx.productVariant.update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } });
-            } else {
-                await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
-            }
-        }
+        return restore ? restoreOrderStock(tx, order.items) : [];
     });
-
-    if (restore) {
-        const affected = Array.from(new Set(order.items.map((i) => i.productId)));
-        if (affected.length > 0) {
-            const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
-            handlePostOrderStockSync(affected, marketplace).catch(console.error);
-        }
-    }
+    if (affected.length > 0) handlePostOrderStockSync(affected, marketplace).catch(console.error);
     console.log(`[status-sync] ${marketplace} ${order.orderNumber}: pazaryerinde iptal → sitede iptal${restore ? " + stok iade" : ""}`);
     return true;
 }

@@ -30,31 +30,17 @@ export async function updateOrderStatus(
 
         // If transitioning TO CANCELLED, restore stock for all order items
         if (status === "CANCELLED" && order?.status !== "CANCELLED") {
-            await prisma.$transaction(async (tx) => {
-                // Update order status
+            // Stok iadesi: varyantlıda ana stok da düzelir, paket alt ürünleri iade edilir (önceden sadece varyant iade ediliyordu)
+            const { restoreOrderStock } = await import("@/lib/stock-sync");
+            const affectedProductIds: string[] = await prisma.$transaction(async (tx) => {
                 await tx.order.update({
                     where: { id: orderId },
                     data: { status },
                 });
-
-                // Restore stock for each item
-                for (const item of (order?.items || [])) {
-                    if (item.variantId) {
-                        await tx.productVariant.update({
-                            where: { id: item.variantId },
-                            data: { stock: { increment: item.quantity } },
-                        });
-                    } else {
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: { stock: { increment: item.quantity } },
-                        });
-                    }
-                }
+                return restoreOrderStock(tx, order?.items || []);
             });
 
             // Sync restored stock to all marketplaces
-            const affectedProductIds = Array.from(new Set((order?.items || []).map(i => i.productId)));
             if (affectedProductIds.length > 0) {
                 import("@/lib/stock-sync").then(({ handlePostOrderStockSync }) => {
                     handlePostOrderStockSync(affectedProductIds, "site").catch(console.error);
@@ -130,24 +116,8 @@ export async function cleanupAbandonedOrders() {
                     },
                 });
 
-                for (const item of order.items) {
-                    if (item.variantId) {
-                        await tx.productVariant.update({
-                            where: { id: item.variantId },
-                            data: { stock: { increment: item.quantity } },
-                        });
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: { stock: { increment: item.quantity } },
-                        });
-                    } else {
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: { stock: { increment: item.quantity } },
-                        });
-                    }
-                    allAffectedProductIds.push(item.productId);
-                }
+                const { restoreOrderStock } = await import("@/lib/stock-sync");
+                allAffectedProductIds.push(...(await restoreOrderStock(tx, order.items)));
             });
             restoredCount++;
         }
@@ -279,13 +249,31 @@ export async function bulkUpdateOrderStatus(
             throw new Error("Unauthorized");
         }
 
-        // Update all selected orders
-        await prisma.order.updateMany({
-            where: {
-                id: { in: orderIds },
-            },
-            data: { status },
-        });
+        if (status === "CANCELLED") {
+            // Toplu iptalde de stok iade edilir (önceden sadece durum değişiyordu, stok geri eklenmiyordu).
+            // Zaten iptal olan siparişlere dokunulmaz (stok iki kez eklenmesin).
+            const { restoreOrderStock, handlePostOrderStockSync } = await import("@/lib/stock-sync");
+            const toCancel = await prisma.order.findMany({
+                where: { id: { in: orderIds }, NOT: { status: "CANCELLED" } },
+                select: { id: true, items: { select: { productId: true, variantId: true, quantity: true } } },
+            });
+            const affected = new Set<string>();
+            for (const o of toCancel) {
+                const ids: string[] = await prisma.$transaction(async (tx) => {
+                    await tx.order.update({ where: { id: o.id }, data: { status } });
+                    return restoreOrderStock(tx, o.items);
+                });
+                ids.forEach((id) => affected.add(id));
+            }
+            if (affected.size > 0) handlePostOrderStockSync(Array.from(affected), "site").catch(console.error);
+        } else {
+            await prisma.order.updateMany({
+                where: {
+                    id: { in: orderIds },
+                },
+                data: { status },
+            });
+        }
 
         // Log the bulk action (simplified log)
         await prisma.adminLog.create({

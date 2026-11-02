@@ -532,37 +532,45 @@ export async function syncOrdersFromTrendyol() {
             }> = [];
             let total = 0;
             let missingBarcodeForThisOrder = false;
+            // Sitede bulunamayan kalemler "Tanımsız Ürün"e bağlanır, stoğu düşülmez; önceden bu kalemler siparişten düşüyor,
+            // hiçbiri eşleşmezse sipariş hiç aktarılmıyordu
+            const unmatchedNames: string[] = [];
 
             for (const line of tOrder.lines) {
                 let productId = "";
                 let variantId: string | null = null;
 
                 // ✅ Cache kontrolü — daha önce bulunamayan barkodu tekrar DB'den arama
-                if (notFoundBarcodeCache.has(line.barcode)) {
+                if (!notFoundBarcodeCache.has(line.barcode)) {
+                    // 1. Try to find VARIANT by barcode
+                    const variant = await prisma.productVariant.findFirst({
+                        where: { barcode: line.barcode },
+                        include: { product: true }
+                    });
+
+                    if (variant) {
+                        productId = variant.productId;
+                        variantId = variant.id;
+                    } else {
+                        // 2. Try to find PRODUCT by barcode
+                        const product = await prisma.product.findFirst({
+                            where: { barcode: line.barcode }
+                        });
+                        if (product) {
+                            productId = product.id;
+                        }
+                    }
+                }
+
+                if (!productId) {
                     missingBarcodeForThisOrder = true;
+                    notFoundBarcodeCache.add(line.barcode); // ✅ Cache'e ekle
                     if (!skippedBarcodes.includes(line.barcode)) {
                         skippedBarcodes.push(line.barcode);
                     }
-                    continue;
-                }
-
-                // 1. Try to find VARIANT by barcode
-                const variant = await prisma.productVariant.findFirst({
-                    where: { barcode: line.barcode },
-                    include: { product: true }
-                });
-
-                if (variant) {
-                    productId = variant.productId;
-                    variantId = variant.id;
-                } else {
-                    // 2. Try to find PRODUCT by barcode
-                    const product = await prisma.product.findFirst({
-                        where: { barcode: line.barcode }
-                    });
-                    if (product) {
-                        productId = product.id;
-                    }
+                    const fallback = await (await import("@/lib/unmatched-product")).getUnmatchedProduct();
+                    productId = fallback.id;
+                    unmatchedNames.push(`${line.productName} (barkod: ${line.barcode})`);
                 }
 
                 if (productId) {
@@ -577,18 +585,13 @@ export async function syncOrdersFromTrendyol() {
                         lineTotal: line.price * line.quantity
                     });
                     total += line.price * line.quantity;
-                } else {
-                    missingBarcodeForThisOrder = true;
-                    notFoundBarcodeCache.add(line.barcode); // ✅ Cache'e ekle
-                    if (!skippedBarcodes.includes(line.barcode)) {
-                        skippedBarcodes.push(line.barcode);
-                    }
                 }
             }
 
             if (resolvedItems.length > 0) {
                 // Use $transaction to atomically create the order AND decrement stock
-                await prisma.$transaction(async (tx) => {
+                // Transaction stok düşülen ürün ID'lerini döner (paket alt ürünleri dahil); diğer pazaryerleri bunlarla güncellenir
+                const affectedProductIds: string[] = await prisma.$transaction(async (tx) => {
                     // 1. Create the order
                     await tx.order.create({
                         data: {
@@ -604,6 +607,7 @@ export async function syncOrdersFromTrendyol() {
                             cargoCompany: tOrder.cargoProviderName,
                             cargoTrackingNumber: tOrder.cargoTrackingNumber?.toString(),
                             shipmentPackageId: tOrder.id?.toString(),
+                            notes: unmatchedNames.length ? `DİKKAT: Sitede bulunamayan ürün, stok düşülmedi: ${unmatchedNames.join("; ")}` : undefined,
                             shippingAddress: {
                                 fullName: tOrder.shipmentAddress?.fullName ?? tOrder.customerFirstName + " " + tOrder.customerLastName,
                                 address: tOrder.shipmentAddress?.fullAddress ?? "",
@@ -616,43 +620,26 @@ export async function syncOrdersFromTrendyol() {
                         }
                     });
 
-                    // 2. Decrement stock atomically for each item
-                    for (const item of resolvedItems) {
-                        if (item.variantId) {
-                            // Variant stock decrement
-                            await tx.productVariant.update({
-                                where: { id: item.variantId },
-                                data: { stock: { decrement: item.quantity } }
-                            });
-                        } else {
-                            // Product stock decrement
-                            await tx.product.update({
-                                where: { id: item.productId },
-                                data: { stock: { decrement: item.quantity } }
-                            });
-                        }
-                    }
+                    // 2. Stok düş: önceden sadece varyant düşüyordu, ana stok ve paket alt ürünleri değişmiyordu
+                    const { decrementOrderStock } = await import("@/lib/stock-sync");
+                    return decrementOrderStock(tx, resolvedItems);
                 });
 
                 // Trigger stock sync to ALL marketplaces (including Trendyol itself)
                 // If stock reached critical level, this will push stock=0 immediately (no queue delay)
-                const affectedProductIds = Array.from(new Set(resolvedItems.map(item => item.productId)));
                 if (affectedProductIds.length > 0) {
                     const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
                     handlePostOrderStockSync(affectedProductIds, "trendyol").catch(console.error);
                 }
 
                 importedCount++;
-            } else {
-                if (missingBarcodeForThisOrder) {
-                    skippedCount++;
-                }
+                if (missingBarcodeForThisOrder) skippedCount++;
             }
         }
 
         let finalMessage = `${importedCount} yeni sipariş aktarıldı, ${updatedCount} sipariş güncellendi.`;
         if (skippedCount > 0) {
-            finalMessage += ` Ancak ${skippedCount} sipariş, içindeki barkodlar sitede bulunamadığı için atlandı. (Bulunamayan Barkodlar: ${skippedBarcodes.join(", ")})`;
+            finalMessage += ` Ancak ${skippedCount} siparişte sitede bulunamayan ürün var; "Tanımsız Ürün" olarak aktarıldı, stoğu düşülmedi. (Bulunamayan Barkodlar: ${skippedBarcodes.join(", ")})`;
         }
 
         return { success: true, message: finalMessage };

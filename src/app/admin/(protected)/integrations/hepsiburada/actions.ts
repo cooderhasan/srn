@@ -464,6 +464,7 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 const taxOffice = invoiceInfo.taxOffice || "";
 
                 // Use $transaction to atomically create order AND decrement stock
+                let hbAffectedIds: string[] = [];
                 await prisma.$transaction(async (tx) => {
                     await tx.order.create({
                         data: {
@@ -493,32 +494,19 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                         }
                     });
 
-                    // Decrement stock atomically for each item
-                    for (const update of stockUpdates) {
-                        if (update.variantId) {
-                            await tx.productVariant.update({
-                                where: { id: update.variantId },
-                                data: { stock: { decrement: update.qty } }
-                            });
-                            await tx.product.update({
-                                where: { id: update.id },
-                                data: { stock: { decrement: update.qty } }
-                            });
-                        } else {
-                            await tx.product.update({
-                                where: { id: update.id },
-                                data: { stock: { decrement: update.qty } }
-                            });
-                        }
-                    }
+                    // Stok düş (paket alt ürünleri, varyant + ana stok toplamı; lib/stock-sync ortak kuralı)
+                    const { decrementOrderStock } = await import("@/lib/stock-sync");
+                    hbAffectedIds = await decrementOrderStock(
+                        tx,
+                        stockUpdates.map((u) => ({ productId: u.id, variantId: u.variantId, quantity: u.qty }))
+                    );
                 });
 
                 // Trigger stock sync to ALL marketplaces (including HB itself)
                 // If stock reached critical level, this will push stock=0 immediately
-                const affectedProductIds = Array.from(new Set(orderItemsToCreate.map(item => item.productId)));
-                if (affectedProductIds.length > 0) {
+                if (hbAffectedIds.length > 0) {
                     const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
-                    handlePostOrderStockSync(affectedProductIds, "hepsiburada").catch(console.error);
+                    handlePostOrderStockSync(hbAffectedIds, "hepsiburada").catch(console.error);
                 }
 
                 importedCount++;

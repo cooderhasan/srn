@@ -111,10 +111,10 @@ export async function syncProductsToN11(productIds?: string[]) {
             whereClause.id = { in: productIds };
         }
 
-        // Fetch products with variants
+        // Fetch products with variants and n11Product (N11'den aktarılan üründe satıcı kodu SKU'dan farklı olabilir)
         const products = await prisma.product.findMany({
             where: whereClause,
-            include: { variants: true, categories: true }
+            include: { variants: true, categories: true, n11Product: true }
         });
 
         if (products.length === 0) return { success: false, message: "Ürün bulunamadı." };
@@ -137,6 +137,8 @@ export async function syncProductsToN11(productIds?: string[]) {
         for (const p of products) {
             const basePrice = Number((p as any).n11Price) || Number(p.listPrice);
             const criticalStock = p.criticalStock ?? defaultCritical;
+            // N11'e gönderilirken kaydedilen satıcı kodu esas; önceden barkodu olmayan ürün hiç güncellenmiyordu
+            const matchedSellerCode = (p as any).n11Product?.sellerCode || p.sku || p.barcode;
 
             if ((p as any).variants?.length > 0) {
                 for (const v of (p as any).variants) {
@@ -147,7 +149,7 @@ export async function syncProductsToN11(productIds?: string[]) {
                         const finalListPrice = Math.max(finalSalePrice, Number(p.listPrice) + Number(v.priceAdjustment || 0));
 
                         allItemsToSync.push({
-                            stockCode: v.sku || v.barcode,
+                            stockCode: v.sku || v.barcode || matchedSellerCode,
                             quantity: availableStock,
                             salePrice: finalSalePrice,
                             listPrice: finalListPrice,
@@ -155,13 +157,13 @@ export async function syncProductsToN11(productIds?: string[]) {
                         });
                     }
                 }
-            } else if ((p as any).barcode) {
+            } else if (matchedSellerCode) {
                 const availableStock = Math.max(0, p.stock - criticalStock);
                 const finalSalePrice = Number(p.n11Price || p.listPrice);
                 const finalListPrice = Math.max(finalSalePrice, Number(p.listPrice));
 
                 allItemsToSync.push({
-                    stockCode: p.sku || p.barcode,
+                    stockCode: matchedSellerCode,
                     quantity: availableStock,
                     salePrice: finalSalePrice,
                     listPrice: finalListPrice,
@@ -186,6 +188,10 @@ export async function syncProductsToN11(productIds?: string[]) {
             }
         }
 
+        // Önceden hata olsa da "Tamamlandı" yazıyordu
+        if (failCount > 0) {
+            return { success: false, message: `N11 fiyat/stok güncellemesi: ${successCount} başarılı, ${failCount} hatalı.` };
+        }
         return { success: true, message: `N11 Senkronizasyonu Tamamlandı. ${successCount} varyant/ürün güncellendi.` };
 
     } catch (error: any) {
@@ -231,6 +237,7 @@ export async function syncOrdersFromN11() {
 
             const orderItems: any[] = [];
             const lineIds: number[] = [];
+            const unmatchedNames: string[] = [];
             let total = 0;
             let totalVat = 0;
             let totalDiscount = 0;
@@ -254,29 +261,77 @@ export async function syncOrdersFromN11() {
                     stockCode: line.stockCode,
                 }));
                 
-                // Find product or variant by barcode or stockCode
-                const searchConditions = [];
-                if (line.barcode) searchConditions.push({ barcode: String(line.barcode) });
-                if (line.stockCode) searchConditions.push({ sku: String(line.stockCode) });
+                // Satırdaki tüm olası kodlar (barkod, stok kodu, satıcı kodu). Önceden sadece barkod ve stok kodu
+                // büyük/küçük harf birebir aranıyordu; kod farklı yazıldıysa sipariş kalemi düşüyordu.
+                const searchCodes = Array.from(
+                    new Set(
+                        [line.barcode, line.stockCode, line.sellerCode, line.productSellerCode]
+                            .filter(Boolean)
+                            .map((s) => String(s).trim())
+                    )
+                );
 
                 let productId: string | null = null;
                 let variantId: string | null = null;
 
-                if (searchConditions.length > 0) {
+                // 1) Önce VARYANT: N11'e her varyant kendi stok koduyla (sku, yoksa barkod) gidiyor; stok varyanttan düşmeli
+                if (searchCodes.length > 0) {
                     const variant = await prisma.productVariant.findFirst({
-                        where: { OR: searchConditions }
+                        where: {
+                            OR: searchCodes.flatMap((code) => [
+                                { barcode: code },
+                                { sku: { equals: code, mode: "insensitive" as const } },
+                            ]),
+                        },
                     });
                     if (variant) {
                         productId = variant.productId;
                         variantId = variant.id;
-                    } else {
-                        const product = await prisma.product.findFirst({
-                            where: { OR: searchConditions }
-                        });
-                        if (product) {
-                            productId = product.id;
-                        }
                     }
+                }
+
+                // 2) N11 eşleme kaydı (N11'den aktarılan ürünlerde satıcı kodu sitedeki SKU'dan farklı olabilir)
+                if (!productId && searchCodes.length > 0) {
+                    const n11Map = await (prisma as any).n11Product.findFirst({
+                        where: {
+                            OR: searchCodes.flatMap((code) => [
+                                { sellerCode: { equals: code, mode: "insensitive" } },
+                                { n11Id: code },
+                            ]),
+                        },
+                        select: { productId: true },
+                    });
+                    if (n11Map?.productId) productId = n11Map.productId;
+                }
+
+                // 3) Ürün: barkod veya SKU (büyük/küçük harf duyarsız)
+                if (!productId && searchCodes.length > 0) {
+                    const product = await prisma.product.findFirst({
+                        where: {
+                            OR: searchCodes.flatMap((code) => [
+                                { barcode: { equals: code, mode: "insensitive" as const } },
+                                { sku: { equals: code, mode: "insensitive" as const } },
+                            ]),
+                        },
+                        select: { id: true },
+                    });
+                    if (product) productId = product.id;
+                }
+
+                // 4) Birebir aynı ürün adı (tek eşleşme varsa; ortak başlangıçlı adlarda yanlış ürün seçilmesin)
+                if (!productId && line.productName) {
+                    const sameName = await prisma.product.findMany({
+                        where: { name: { equals: String(line.productName).trim(), mode: "insensitive" } },
+                        select: { id: true },
+                        take: 2,
+                    });
+                    if (sameName.length === 1) productId = sameName[0].id;
+                }
+
+                // 5) Sipariş kaybolmasın diye "Tanımsız Ürün"e bağlanır, stoğu DÜŞÜLMEZ (önceden kalem siparişten düşüyordu)
+                if (!productId) {
+                    productId = (await (await import("@/lib/unmatched-product")).getUnmatchedProduct()).id;
+                    unmatchedNames.push(`${line.productName || "-"} (kod: ${searchCodes.join(", ") || "-"})`);
                 }
 
                 if (productId) {
@@ -317,11 +372,21 @@ export async function syncOrdersFromN11() {
             console.log(`📊 N11 Order [${pkg.orderNumber}] Totals: calculated=${total}, n11TotalAmount=${pkg.totalAmount}, vatCalc=${totalVat}, discount=${totalDiscount}`);
 
             if (orderItems.length > 0) {
+                // Siparişin N11'deki gerçek oluşma zamanı (paket geçmişindeki "Created"). Önceden aktarım anı kaydediliyordu:
+                // geç aktarılan siparişler yanlış güne yazılıyor, durum takibi N11'in tarih aralığında onları bulamıyordu
+                const createdHist = Array.isArray(pkg.packageHistories)
+                    ? pkg.packageHistories.find((h: any) => String(h?.status || "").trim().toLowerCase() === "created")
+                    : null;
+                const n11CreatedMs = Number(createdHist?.createdDate || pkg.createdDate || 0);
+                const n11CreatedAt = n11CreatedMs > 1_600_000_000_000 && n11CreatedMs <= Date.now() + 60_000 ? new Date(n11CreatedMs) : undefined;
+
                 // Use $transaction to atomically create order AND decrement stock
-                await prisma.$transaction(async (tx) => {
+                const affectedProductIds: string[] = await prisma.$transaction(async (tx) => {
                     await tx.order.create({
                         data: {
                             orderNumber: pkg.orderNumber,
+                            ...(n11CreatedAt ? { createdAt: n11CreatedAt } : {}),
+                            notes: unmatchedNames.length ? `DİKKAT: Sitede bulunamayan ürün, stok düşülmedi: ${unmatchedNames.join("; ")}` : undefined,
                             status: "CONFIRMED",
                             total: total,
                             subtotal: total - totalVat,
@@ -343,29 +408,13 @@ export async function syncOrdersFromN11() {
                         }
                     });
 
-                    // Decrement stock atomically for each item
-                    for (const item of orderItems) {
-                        if (item.variantId) {
-                            await tx.productVariant.update({
-                                where: { id: item.variantId },
-                                data: { stock: { decrement: item.quantity } }
-                            });
-                            await tx.product.update({
-                                where: { id: item.productId },
-                                data: { stock: { decrement: item.quantity } }
-                            });
-                        } else {
-                            await tx.product.update({
-                                where: { id: item.productId },
-                                data: { stock: { decrement: item.quantity } }
-                            });
-                        }
-                    }
+                    // Stok düş (paket alt ürünleri, varyant + ana stok toplamı; "Tanımsız Ürün" atlanır)
+                    const { decrementOrderStock } = await import("@/lib/stock-sync");
+                    return decrementOrderStock(tx, orderItems);
                 });
 
                 // Trigger stock sync to ALL marketplaces (including N11 itself)
                 // If stock reached critical level, this will push stock=0 immediately
-                const affectedProductIds = Array.from(new Set(orderItems.map(item => item.productId)));
                 if (affectedProductIds.length > 0) {
                     const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
                     handlePostOrderStockSync(affectedProductIds, "n11").catch(console.error);
@@ -496,6 +545,10 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
             return `${baseUrl}${cleanUrl}`;
         });
 
+        if (absoluteImages.length === 0) {
+            return { success: false, message: "N11'e ürün yüklemek için en az 1 ürün görseli bulunmalıdır." };
+        }
+
         // productMainId is required and must be same for all variants
         const productMainId = product.sku || product.id;
 
@@ -504,7 +557,12 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
         if (hasVariants) {
             // Variant product: each variant becomes a separate SKU with same productMainId
             // N11 groups variants by productMainId - each variant is a separate SKU
-            const skus = (product as any).variants.map((variant: any, index: number) => {
+            // Pasif varyant gönderilmez; stoktan kritik stok düşülür (sonraki otomatik stok senkronuyla aynı kural;
+            // önceden ilk gönderimde tam stok gidiyordu, kritik stok da satışa açılıyordu)
+            const generalSettings = await getSiteSettings("general");
+            const variantCriticalStock = (product as any).criticalStock ?? Number((generalSettings as any)?.defaultCriticalStock || 10);
+            const activeVariants = (product as any).variants.filter((v: any) => v.isActive !== false);
+            const skus = activeVariants.map((variant: any, index: number) => {
                 // Variant title includes color/size for distinction
                 const variantTitle = `${product.name} ${variant.color || ''} ${variant.size || ''}`.trim();
                 
@@ -521,7 +579,7 @@ export async function sendProductToN11(productId: string, attributes: any[]) {
                     salePrice: Number(product.n11Price || product.listPrice) + Number(variant.priceAdjustment || 0),
                     listPrice: Math.max(Number(product.n11Price || product.listPrice) + Number(variant.priceAdjustment || 0), Number(product.listPrice) + Number(variant.priceAdjustment || 0)),
                     vatRate: 20,
-                    quantity: Math.max(0, Number(variant.stock) || 0),
+                    quantity: Math.max(0, (Number(variant.stock) || 0) - variantCriticalStock),
                     images: absoluteImages,
                     // Only use mapped attributes from UI (with valid IDs)
                     // Variant-specific info (color/size) goes into title, not attributes
