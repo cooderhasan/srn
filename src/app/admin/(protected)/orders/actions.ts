@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
 import { sendShippingNotificationEmail } from "@/lib/email";
 import {
     createYKShipment,
@@ -52,6 +52,12 @@ export async function updateOrderStatus(
                 where: { id: orderId },
                 data: { status },
             });
+        }
+
+        // Kargolandı/teslim edildi: N11/HB siparişinin e-faturası sıraya girer (uygunluk kuyrukta kontrol edilir)
+        if (status === "SHIPPED" || status === "DELIVERED") {
+            const { enqueueAutoInvoices } = await import("@/lib/queue/invoice-queue");
+            await enqueueAutoInvoices([orderId]);
         }
 
         // If Trendyol Order and Status is PROCESSING, update Trendyol to Picking
@@ -273,6 +279,11 @@ export async function bulkUpdateOrderStatus(
                 },
                 data: { status },
             });
+            // Toplu kargolandı: uygun N11/HB siparişleri fatura kuyruğuna (sırayla, 7 sn arayla kesilir)
+            if (status === "SHIPPED" || status === "DELIVERED") {
+                const { enqueueAutoInvoices } = await import("@/lib/queue/invoice-queue");
+                await enqueueAutoInvoices(orderIds);
+            }
         }
 
         // Log the bulk action (simplified log)
@@ -524,6 +535,11 @@ export async function queryYKOrder(orderId: string) {
                 ...(newOrderStatus ? { status: newOrderStatus } : {}),
             },
         });
+        // Kargolandı/teslim edildi: N11/HB siparişinin e-faturası sıraya girer (uygunluk kuyrukta kontrol edilir)
+        if (newOrderStatus === "SHIPPED" || newOrderStatus === "DELIVERED") {
+            const { enqueueAutoInvoices } = await import("@/lib/queue/invoice-queue");
+            await enqueueAutoInvoices([orderId]);
+        }
 
         revalidatePath("/admin/orders");
         return {
@@ -620,6 +636,10 @@ export async function syncAllYKOrders() {
                             ...(newOrderStatus ? { status: newOrderStatus } : {}),
                         }
                     });
+                    if (newOrderStatus === "SHIPPED" || newOrderStatus === "DELIVERED") {
+                        const { enqueueAutoInvoices } = await import("@/lib/queue/invoice-queue");
+                        await enqueueAutoInvoices([order.id]);
+                    }
                     updatedCount++;
                 } else {
                     errorCount++;

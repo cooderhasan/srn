@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
 import { redirect } from "next/navigation";
 import { productSchema } from "@/lib/validations";
 import { generateSlug } from "@/lib/helpers";

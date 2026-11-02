@@ -166,4 +166,7 @@ export function initializeWorker() {
     
     // Setup crons
     setupRepeatableJobs().catch(console.error);
+
+    // N11/HB siparişi kargolanınca e-Faturam'a sırayla fatura gönderen kuyruk
+    import("./invoice-queue").then(({ initializeInvoiceWorker }) => initializeInvoiceWorker()).catch((e) => console.error("Fatura kuyruğu başlatılamadı:", e));
 }

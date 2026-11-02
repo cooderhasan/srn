@@ -41,6 +41,11 @@ export async function advanceOrderStatus(order: { id: string; status: OrderStatu
     if (cur === undefined) return false; // CANCELLED / WAITING_FOR_PAYMENT
     if (RANK[next] <= cur) return false;
     await prisma.order.update({ where: { id: order.id }, data: { status: next as OrderStatus } });
+    // Kargolandı/teslim edildi: N11/HB siparişinin e-faturası sıraya girer (uygunluk kuyrukta kontrol edilir)
+    if (next === "SHIPPED" || next === "DELIVERED") {
+        const { enqueueAutoInvoices } = await import("@/lib/queue/invoice-queue");
+        await enqueueAutoInvoices([order.id]);
+    }
     return true;
 }
 
