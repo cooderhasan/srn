@@ -502,6 +502,67 @@ export class HepsiburadaClient {
     }
 
     /**
+     * Paket İçin Kargo Bilgilerini Listeleme
+     * GET /packages/merchantid/{merchantId}/packagenumber/{packageNumber}
+     * status: Intransit / Delivered
+     */
+    async getPackageCargoInfo(packageNumber: string): Promise<{ barcode?: string; trackingInfoCode?: string; cargoCompany?: string; status?: string } | null> {
+        await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
+        const url = `${this.orderBaseUrl}/packages/merchantid/${this.creds.merchantId}/packagenumber/${encodeURIComponent(packageNumber)}`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error(`HB paket kargo bilgisi alınamadı: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}`);
+        const data = await response.json();
+        const pkg = Array.isArray(data) ? data[0] : data;
+        if (!pkg) return null;
+        return {
+            barcode: pkg.barcode ? String(pkg.barcode) : undefined,
+            trackingInfoCode: pkg.trackingInfoCode ? String(pkg.trackingInfoCode) : undefined,
+            cargoCompany: pkg.cargoCompany || undefined,
+            status: pkg.status ? String(pkg.status) : undefined,
+        };
+    }
+
+    /**
+     * İptal edilen sipariş kalemleri (son 1 ay). Doküman: limit max 50.
+     * GET /orders/merchantid/{merchantId}/cancelled  — alanlar: orderNumber, lineItemId, quantity, cancelDate, cancelledBy
+     */
+    async getCancelledOrderLines(offset = 0, limit = 50): Promise<any[]> {
+        await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
+        const url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}/cancelled?offset=${offset}&limit=${limit}`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HB iptal listesi alınamadı: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}`);
+        const data = await response.json();
+        if (Array.isArray(data)) return data;
+        for (const k of ["items", "content", "data", "results", "orders"]) {
+            if (Array.isArray(data?.[k])) return data[k];
+        }
+        return [];
+    }
+
+    /**
+     * Kargoya verilen / teslim edilen paketler (son 1 ay). Doküman: limit max 50, limit-offset ile sayfalama.
+     * GET /packages/merchantid/{merchantId}/shipped  |  /delivered
+     */
+    async getPackagesByState(state: "shipped" | "delivered", offset = 0, limit = 50): Promise<any[]> {
+        await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
+        const url = `${this.orderBaseUrl}/packages/merchantid/${this.creds.merchantId}/${state}?offset=${offset}&limit=${limit}`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HB ${state} listesi alınamadı: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}`);
+        const data = await response.json();
+        if (Array.isArray(data)) return data;
+        for (const k of ["items", "content", "data", "results", "packages"]) {
+            if (Array.isArray(data?.[k])) return data[k];
+        }
+        return [];
+    }
+
+    /**
      * Upload Invoice Link
      * POST /orders/merchantid/{merchantId}/packages/{packageId}/invoice-links
      */

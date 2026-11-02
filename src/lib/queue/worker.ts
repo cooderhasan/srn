@@ -76,6 +76,9 @@ export function initializeWorker() {
                     console.log("🔄 Otomatik Trendyol Sipariş Senkronizasyonu başlatıldı...");
                     const result = await syncOrdersFromTrendyol();
                     console.log(`✅ Cron Sonucu: ${result.message}`);
+                    // Senkron sadece son 24 saatte oluşan siparişlere bakıyor; eski takılı siparişleri Trendyol'a sorup ileri taşı
+                    const { runTrendyolStatusCatchUp } = await import("@/lib/order-status-runners");
+                    console.log(`✅ Trendyol durum güncelleme:`, await runTrendyolStatusCatchUp().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 
@@ -84,6 +87,9 @@ export function initializeWorker() {
                     const { syncOrdersFromHepsiburada } = await import("@/app/admin/(protected)/integrations/hepsiburada/actions");
                     const result = await syncOrdersFromHepsiburada();
                     console.log(`✅ Cron Sonucu: ${result.message}`);
+                    // Durumu takılı kalan siparişleri HB'ye sorup ileri taşı (sadece ileri)
+                    const { runHepsiburadaStatusCatchUp } = await import("@/lib/order-status-runners");
+                    console.log(`✅ HB durum güncelleme:`, await runHepsiburadaStatusCatchUp().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 
@@ -95,6 +101,9 @@ export function initializeWorker() {
                     // Kuyrukta kalan ürün gönderimlerinin sonucunu al (sarı ünlem kalmasın)
                     const taskResult = await resolvePendingN11Tasks().catch((e) => ({ checked: 0, error: e.message }));
                     console.log(`✅ N11 bekleyen görev kontrolü:`, taskResult);
+                    // Import mevcut siparişlere dokunmuyor; durumu takılı kalanları N11'e sorup ileri taşı
+                    const { runN11StatusCatchUp } = await import("@/lib/order-status-runners");
+                    console.log(`✅ N11 durum güncelleme:`, await runN11StatusCatchUp().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 
