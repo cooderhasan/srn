@@ -31,6 +31,11 @@ npx prisma db push
 
 Bu komut veritabanı tablolarını oluşturacak.
 
+> **Not:** Konteyner artık her başlangıçta bu eşitlemeyi kendisi yapıyor (`scripts/start.sh`); yeni alan/tablo eklenen
+> güncellemelerde elle komut çalıştırmaya gerek yok. Sadece ekleme yapar: bir sütun/tablo silmeyi gerektiren değişiklikte
+> hiçbir şey yapmaz, logda `[db] UYARI` yazar ve site yine açılır (o durumda ne yapılacağına elle karar verilir).
+> Otomatik eşitlemeyi kapatmak için ortam değişkeni: `SKIP_DB_PUSH=1`.
+
 ---
 
 ## 3. Admin Kullanıcı Oluşturma

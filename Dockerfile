@@ -45,6 +45,12 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/scripts ./scripts
 
+# Prisma CLI + şema motoru: başlangıçta veritabanı yapısını şemayla eşitlemek için (scripts/start.sh)
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Windows'ta düzenlenmiş olsa da sh çalıştırabilsin (CRLF -> LF)
+RUN sed -i 's/\r$//' ./scripts/start.sh && chmod +x ./scripts/start.sh
+
 
 # Create farmework specific directories
 RUN mkdir -p /app/public/uploads /app/public/img && chmod -R 777 /app/public/uploads /app/public/img
@@ -59,4 +65,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["sh", "./scripts/start.sh"]
