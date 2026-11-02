@@ -120,6 +120,7 @@ export function ProductDetail({
     const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const addItem = useCartStore((state) => state.addItem);
+    const openAddedToCartModal = useCartStore((state) => state.openAddedToCartModal);
 
     // Get unique colors and sizes from variants
     const variants = product.variants || [];
@@ -225,7 +226,7 @@ export function ProductDetail({
             ? ((product.listPrice - product.salePrice) / product.listPrice) * 100
             : 0;
 
-        addItem({
+        const cartItem = {
             productId: product.id,
             name: product.name,
             slug: product.slug,
@@ -240,8 +241,10 @@ export function ProductDetail({
             desi: effectiveDesi,
             variantId: selectedVariant?.id,
             variantInfo: variantInfo,
-        });
-        toast.success("Ürün sepete eklendi!");
+        };
+        addItem(cartItem);
+        // Ürün kartındaki gibi "Sepetinize eklendi" penceresi (telefonda alttan açılır); önceden sadece küçük bildirim çıkıyordu
+        openAddedToCartModal(cartItem);
     };
 
     // Helper to build category breadcrumbs

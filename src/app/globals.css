@@ -208,3 +208,9 @@ html:has(.admin-shell) body[data-scroll-locked] {
   scrollbar-width: thin;
   scrollbar-color: rgb(209 213 219 / 0.8) transparent;
 }
+
+/* Açılır pencere varken (Sepetinize eklendi, menü, filtre...) WhatsApp düğmesi gizlenir; telefonda alttan açılan
+   "Sepetinize eklendi" panelinde "Sepete Git"in üstüne biniyordu. Radix pencereleri açıkken body'ye data-scroll-locked ekliyor. */
+body[data-scroll-locked] .wa-float {
+  display: none !important;
+}
