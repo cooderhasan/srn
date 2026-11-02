@@ -15,7 +15,7 @@ const reports = [
         description: "Günlük, haftalık ve aylık satış analizi",
         href: "/admin/reports/sales",
         icon: TrendingUp,
-        color: "bg-blue-100 text-blue-600",
+        color: "bg-blue-100 text-primary",
     },
     {
         title: "En Çok Satan Ürünler",
@@ -51,8 +51,8 @@ export default function ReportsPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <BarChart3 className="h-6 w-6 text-blue-600" />
+                <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+                    <BarChart3 className="h-6 w-6 text-primary" />
                     Raporlar
                 </h2>
                 <p className="text-gray-500 dark:text-gray-400">
@@ -60,7 +60,7 @@ export default function ReportsPage() {
                 </p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {reports.map((report) => (
                     <Link key={report.href} href={report.href}>
                         <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">

@@ -21,11 +21,11 @@ export default async function TrendyolIntegrationPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-3xl font-bold tracking-tight">Trendyol Entegrasyonu</h1>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                     <TrendyolSettingsForm initialData={config} options={options} />
                 </div>

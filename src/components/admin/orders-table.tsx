@@ -61,6 +61,13 @@ const orderStatuses = [
     { value: "CANCELLED", label: "İptal Edildi" },
 ];
 
+// Yalnızca filtrede: Onaylandı + Hazırlanıyor birlikte (Genel Bakış'taki "Kargolanacak" kutuları bu filtreyle açar)
+const filterStatuses = [
+    orderStatuses[0],
+    { value: "TO_SHIP", label: "Kargolanacaklar" },
+    ...orderStatuses.slice(1),
+];
+
 export function OrdersTable({ orders: initialOrders, pagination }: OrdersTableProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -377,20 +384,141 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
         }
     };
 
+    // Masaüstü tablo ve mobil kart aynı parçaları kullanır
+    const renderSourceBadge = (order: OrderWithItems) => (
+        <>
+            {order.source === "TRENDYOL" && (
+                <Badge className="bg-[#f27a1a] hover:bg-[#ef6c00] text-white border-none px-1.5 py-0 text-[10px] font-bold">
+                    TRENDYOL
+                </Badge>
+            )}
+            {order.source === "N11" && (
+                <Badge className="bg-[#5c3dbc] hover:bg-[#4a2fac] text-white border-none px-1.5 py-0 text-[10px] font-bold">
+                    N11
+                </Badge>
+            )}
+            {order.source === "HEPSIBURADA" && (
+                <Badge className="bg-[#ff6000] hover:bg-[#e05300] text-white border-none px-1.5 py-0 text-[10px] font-bold">
+                    HEPSİBURADA
+                </Badge>
+            )}
+            {(order.source === "WEB" || !order.source) && (
+                <Badge variant="outline" className="text-gray-500 border-gray-200 px-1.5 py-0.5 text-[10px] font-bold uppercase">
+                    WEB
+                </Badge>
+            )}
+        </>
+    );
+
+    const renderStatusSelect = (order: OrderWithItems) => (
+        <Select
+            value={order.status}
+            onValueChange={(value) => handleStatusChange(order.id, value)}
+            disabled={loadingId === order.id}
+        >
+            <SelectTrigger className={`h-8 border-transparent bg-transparent hover:opacity-90 focus:ring-0 ${getOrderStatusColor(order.status)} border shadow-sm [&_svg]:text-white [&_svg]:opacity-100 transition-none`}>
+                <SelectValue>
+                    {getOrderStatusLabel(order.status, order.payment?.method)}
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+                {orderStatuses.filter(s => s.value !== 'ALL').map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                        {status.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+
+    const renderOrderActions = (order: OrderWithItems) => (
+        <>
+            <div className="flex gap-1">
+                {(order.source === "TRENDYOL" || order.source === "N11" || order.source === "HEPSIBURADA") && (
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="border-blue-200 text-blue-600 hover:bg-blue-50 h-9 w-9"
+                        title="Sistem Barkodu (Hızlı)"
+                        onClick={() => window.open(`/admin/orders/bulk-shipping-labels?ids=${order.id}`, '_blank')}
+                    >
+                        <Barcode className="h-4 w-4" />
+                    </Button>
+                )}
+                {!(order as any).invoiceNo ? (
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="border-orange-200 text-orange-600 hover:bg-orange-50 h-9 w-9"
+                        title="E-Fatura Gönder"
+                        disabled={loadingId === order.id}
+                        onClick={() => handleSendInvoice(order.id)}
+                    >
+                        <ReceiptText className="h-5 w-5" />
+                    </Button>
+                ) : (order.source === "HEPSIBURADA" || order.source === "N11") && (
+                     <Button
+                         variant="outline"
+                         size="icon"
+                         className="border-orange-300 bg-orange-50/50 text-orange-600 hover:bg-orange-100 h-9 w-9"
+                         title="Pazaryeri Faturasını Güncelle / Yeniden Gönder"
+                         disabled={loadingId === order.id}
+                         onClick={() => handleSendInvoice(order.id)}
+                     >
+                         <RefreshCw className={`h-4 w-4 text-orange-600 ${loadingId === order.id ? 'animate-spin' : ''}`} />
+                     </Button>
+                 )}
+            </div>
+            <Button
+                variant="ghost"
+                size="icon"
+                title="Siparişi Yazdır"
+                className="h-9 w-9"
+                onClick={async () => {
+                    window.open(`/admin/orders/${order.id}/print`, '_blank');
+                    if (!(order as any).isPrinted) {
+                        try {
+                            await markOrderAsPrinted(order.id);
+                            setOrders(prev => prev.map(o =>
+                                o.id === order.id ? { ...o, isPrinted: true } : o
+                            ));
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+                }}
+            >
+                <FileDown className="h-5 w-5" />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedOrder(order);
+                    setIsOpen(true);
+                }}
+            >
+                <Eye className="h-4 w-4" />
+            </Button>
+        </>
+    );
+
     return (
         <div className="space-y-4">
             {/* Bulk Actions Bar */}
             {selectedIds.length > 0 && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3 rounded-lg flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3 rounded-lg flex flex-col lg:flex-row lg:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
                     <div className="flex items-center gap-3">
                         <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                         <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
                             {selectedIds.length} sipariş seçildi
                         </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Select onValueChange={handleBulkStatusUpdate} disabled={isBulkLoading}>
-                            <SelectTrigger className="w-[200px] h-9 bg-white dark:bg-gray-800">
+                            <SelectTrigger className="w-full sm:w-[200px] h-9 bg-white dark:bg-gray-800">
                                 <SelectValue placeholder="Durumu Güncelle" />
                             </SelectTrigger>
                             <SelectContent>
@@ -461,10 +589,10 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
             )}
 
             {/* Filter Bar */}
-            <div className="bg-white dark:bg-gray-900 p-4 rounded-lg shadow border border-gray-100 dark:border-gray-800">
-                <div className="flex flex-col md:flex-row md:items-end gap-4">
+            <div className="bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-lg shadow border border-gray-100 dark:border-gray-800">
+                <div className="grid grid-cols-2 gap-3 md:flex md:flex-row md:flex-wrap md:items-end md:gap-4">
                     {/* Search */}
-                    <div className="flex-1 min-w-[200px] space-y-2">
+                    <div className="col-span-2 flex-1 md:min-w-[200px] space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Arama</label>
                         <div className="relative">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
@@ -479,14 +607,14 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Status */}
-                    <div className="w-full md:w-[160px] space-y-2">
+                    <div className="min-w-0 md:w-[160px] space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Durum</label>
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Tümü" />
                             </SelectTrigger>
                             <SelectContent>
-                                {orderStatuses.map((status) => (
+                                {filterStatuses.map((status) => (
                                     <SelectItem key={status.value} value={status.value}>
                                         {status.label}
                                     </SelectItem>
@@ -496,10 +624,10 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Cargo Filter */}
-                    <div className="w-full md:w-[140px] space-y-2">
+                    <div className="min-w-0 md:w-[140px] space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Kargo</label>
                         <Select value={cargoFilter} onValueChange={setCargoFilter}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Tümü" />
                             </SelectTrigger>
                             <SelectContent>
@@ -512,10 +640,10 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Source Filter */}
-                    <div className="w-full md:w-[140px] space-y-2">
+                    <div className="min-w-0 md:w-[140px] space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Kaynak</label>
                         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Tümü" />
                             </SelectTrigger>
                             <SelectContent>
@@ -529,10 +657,10 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Invoice Filter */}
-                    <div className="w-full md:w-[140px] space-y-2">
+                    <div className="min-w-0 md:w-[140px] space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Fatura</label>
                         <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Tümü" />
                             </SelectTrigger>
                             <SelectContent>
@@ -545,10 +673,10 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Printed Filter */}
-                    <div className="w-full md:w-[140px] space-y-2">
+                    <div className="min-w-0 md:w-[140px] space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Yazdırma</label>
                         <Select value={printedFilter} onValueChange={setPrintedFilter}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Tümü" />
                             </SelectTrigger>
                             <SelectContent>
@@ -560,20 +688,22 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Date Range */}
-                    <div className="flex items-center gap-2 w-full md:w-auto">
-                        <div className="space-y-2 flex-1 md:w-[140px]">
+                    <div className="contents md:flex md:items-center md:gap-2 md:w-auto">
+                        <div className="space-y-2 min-w-0 md:w-[140px]">
                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Başlangıç</label>
                             <Input
                                 type="date"
+                                className="w-full min-w-0"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
                             />
                         </div>
-                        <div className="pt-8 text-gray-400">-</div>
-                        <div className="space-y-2 flex-1 md:w-[140px]">
+                        <div className="hidden md:block pt-8 text-gray-400">-</div>
+                        <div className="space-y-2 min-w-0 md:w-[140px]">
                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Bitiş</label>
                             <Input
                                 type="date"
+                                className="w-full min-w-0"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
                             />
@@ -581,21 +711,22 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-end gap-2 md:ml-auto w-full md:w-auto pt-2 md:pt-0">
-                        <Button 
-                            onClick={handleYKSync} 
+                    <div className="contents md:flex md:items-end md:gap-2 md:ml-auto md:w-auto">
+                        <Button
+                            onClick={handleYKSync}
                             disabled={isSyncingYK}
-                            variant="outline" 
-                            className="text-blue-600 border-blue-200 hover:bg-blue-50 gap-2 shrink-0"
+                            variant="outline"
+                            className="self-end w-full md:w-auto px-2 md:px-4 text-xs md:text-sm text-blue-600 border-blue-200 hover:bg-blue-50 gap-1.5 md:gap-2 shrink-0"
                             title="Yolda olan Yurtiçi Kargo durumlarını son 14 güne göre güncelle"
                         >
                             <RefreshCw className={`h-4 w-4 ${isSyncingYK ? "animate-spin" : ""}`} />
-                            <span className="hidden sm:inline">Kargoları Güncelle</span>
+                            <span className="md:hidden">Kargo Güncelle</span>
+                            <span className="hidden md:inline">Kargoları Güncelle</span>
                         </Button>
-                        <Button onClick={resetFilters} variant="ghost" className="text-gray-500 hover:text-gray-700">
+                        <Button onClick={resetFilters} variant="outline" className="w-full md:w-auto md:border-0 md:shadow-none text-gray-500 hover:text-gray-700">
                             Temizle
                         </Button>
-                        <Button onClick={applyFilters} className="min-w-[100px]">
+                        <Button onClick={applyFilters} className="col-span-2 w-full md:w-auto md:min-w-[100px]">
                             Filtrele
                         </Button>
                     </div>
@@ -604,7 +735,101 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
 
             {/* Table */}
             <div className="bg-white dark:bg-gray-900 rounded-lg shadow">
-                <div className="overflow-x-auto">
+                {/* Mobil: kart listesi */}
+                <div className="md:hidden">
+                    {orders.length > 0 && (
+                        <label className="flex items-center gap-2 px-3 py-2 border-b text-xs text-gray-500">
+                            <Checkbox
+                                checked={selectedIds.length === orders.length && orders.length > 0}
+                                onCheckedChange={toggleSelectAll}
+                                aria-label="Tümünü Seç"
+                            />
+                            Tümünü seç
+                        </label>
+                    )}
+                    {orders.length === 0 ? (
+                        <p className="text-center py-8 text-gray-500">Sipariş bulunamadı.</p>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {orders.map((order) => {
+                                const customerName = order.shippingAddress?.fullName || (order.shippingAddress as any)?.name || (order.user as any)?.name || order.user?.companyName || order.user?.email || order.guestEmail || "Misafir";
+                                return (
+                                    <div
+                                        key={order.id}
+                                        className={`p-3 space-y-2.5 ${selectedIds.includes(order.id) ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}`}
+                                        onClick={() => {
+                                            setSelectedOrder(order);
+                                            setIsOpen(true);
+                                        }}
+                                    >
+                                        <div className="flex items-start gap-2.5">
+                                            <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+                                                <Checkbox
+                                                    checked={selectedIds.includes(order.id)}
+                                                    onCheckedChange={() => toggleSelect(order.id)}
+                                                    aria-label={`${order.orderNumber} nolu siparişi seç`}
+                                                />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap text-sm font-medium">
+                                                    {renderSourceBadge(order)}
+                                                    <span className="break-all">#{order.orderNumber}</span>
+                                                    {(order as any).isPrinted && (
+                                                        <span title="Yazdırıldı" className="text-green-500">
+                                                            <Printer className="h-3 w-3" />
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm text-gray-700 dark:text-gray-300 truncate mt-0.5">{customerName}</p>
+                                                <p className="text-[11px] text-gray-500" suppressHydrationWarning>{formatDate(order.createdAt)}</p>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="font-semibold text-sm whitespace-nowrap">{formatPrice(Number(order.total))}</p>
+                                                {order.payment && order.payment.method !== "BANK_TRANSFER" && order.payment.amount > 0 && Math.abs(order.payment.amount - Number(order.total)) > 0.5 && (
+                                                    <p className="text-[10px] text-blue-600 font-bold whitespace-nowrap">
+                                                        Net: {formatPrice(order.payment.amount)}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {(order.cargoCompany || order.cargoTrackingNumber || (order as any).invoiceNo) && (
+                                            <div className="flex flex-wrap items-center gap-1.5 pl-7 text-[11px]">
+                                                {order.cargoCompany && (
+                                                    <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase font-bold">
+                                                        <Truck className="h-2.5 w-2.5" />
+                                                        {order.cargoCompany}
+                                                    </span>
+                                                )}
+                                                {order.cargoTrackingNumber && (
+                                                    <span className="font-mono bg-gray-50 dark:bg-gray-800/50 px-1 rounded break-all" onClick={(e) => e.stopPropagation()}>
+                                                        Takip: {order.cargoTrackingNumber}
+                                                    </span>
+                                                )}
+                                                {(order as any).invoiceNo && (
+                                                    <span className="font-mono bg-orange-50 dark:bg-orange-900/20 text-orange-700 px-1 rounded break-all">
+                                                        Fatura: {(order as any).invoiceNo}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex flex-col gap-1 min-w-0 flex-1 max-w-[180px] [&_button]:w-full">
+                                                {renderStatusSelect(order)}
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                {renderOrderActions(order)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -650,26 +875,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                         </TableCell>
                                         <TableCell className="font-medium">
                                             <div className="flex items-center gap-2">
-                                                {order.source === "TRENDYOL" && (
-                                                    <Badge className="bg-[#f27a1a] hover:bg-[#ef6c00] text-white border-none px-1.5 py-0 text-[10px] font-bold">
-                                                        TRENDYOL
-                                                    </Badge>
-                                                )}
-                                                {order.source === "N11" && (
-                                                    <Badge className="bg-[#5c3dbc] hover:bg-[#4a2fac] text-white border-none px-1.5 py-0 text-[10px] font-bold">
-                                                        N11
-                                                    </Badge>
-                                                )}
-                                                {order.source === "HEPSIBURADA" && (
-                                                    <Badge className="bg-[#ff6000] hover:bg-[#e05300] text-white border-none px-1.5 py-0 text-[10px] font-bold">
-                                                        HEPSİBURADA
-                                                    </Badge>
-                                                )}
-                                                {(order.source === "WEB" || !order.source) && (
-                                                    <Badge variant="outline" className="text-gray-500 border-gray-200 px-1.5 py-0.5 text-[10px] font-bold uppercase">
-                                                        WEB
-                                                    </Badge>
-                                                )}
+                                                {renderSourceBadge(order)}
                                                 <span>#{order.orderNumber}</span>
                                                 {(order as any).isPrinted && (
                                                     <span title="Yazdırıldı" className="text-green-500">
@@ -743,97 +949,12 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                         </TableCell>
                                         <TableCell onClick={(e) => e.stopPropagation()}>
                                             <div className="w-[180px] flex flex-col gap-1">
-                                                <Select
-                                                    value={order.status}
-                                                    onValueChange={(value) => handleStatusChange(order.id, value)}
-                                                    disabled={loadingId === order.id}
-                                                >
-                                                    <SelectTrigger className={`h-8 border-transparent bg-transparent hover:opacity-90 focus:ring-0 ${getOrderStatusColor(order.status)} border shadow-sm [&_svg]:text-white [&_svg]:opacity-100 transition-none`}>
-                                                        <SelectValue>
-                                                            {getOrderStatusLabel(order.status, order.payment?.method)}
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {orderStatuses.filter(s => s.value !== 'ALL').map((status) => (
-                                                            <SelectItem key={status.value} value={status.value}>
-                                                                {status.label}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                {renderStatusSelect(order)}
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end gap-2">
-                                                <div className="flex gap-1">
-                                                    {(order.source === "TRENDYOL" || order.source === "N11" || order.source === "HEPSIBURADA") && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="border-blue-200 text-blue-600 hover:bg-blue-50 h-9 w-9"
-                                                            title="Sistem Barkodu (Hızlı)"
-                                                            onClick={() => window.open(`/admin/orders/bulk-shipping-labels?ids=${order.id}`, '_blank')}
-                                                        >
-                                                            <Barcode className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                    {!(order as any).invoiceNo ? (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="border-orange-200 text-orange-600 hover:bg-orange-50 h-9 w-9"
-                                                            title="E-Fatura Gönder"
-                                                            disabled={loadingId === order.id}
-                                                            onClick={() => handleSendInvoice(order.id)}
-                                                        >
-                                                            <ReceiptText className="h-5 w-5" />
-                                                        </Button>
-                                                    ) : (order.source === "HEPSIBURADA" || order.source === "N11") && (
-                                                         <Button
-                                                             variant="outline"
-                                                             size="icon"
-                                                             className="border-orange-300 bg-orange-50/50 text-orange-600 hover:bg-orange-100 h-9 w-9"
-                                                             title="Pazaryeri Faturasını Güncelle / Yeniden Gönder"
-                                                             disabled={loadingId === order.id}
-                                                             onClick={() => handleSendInvoice(order.id)}
-                                                         >
-                                                             <RefreshCw className={`h-4 w-4 text-orange-600 ${loadingId === order.id ? 'animate-spin' : ''}`} />
-                                                         </Button>
-                                                     )}
-                                                </div>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    title="Siparişi Yazdır"
-                                                    className="h-9 w-9"
-                                                    onClick={async () => {
-                                                        window.open(`/admin/orders/${order.id}/print`, '_blank');
-                                                        if (!(order as any).isPrinted) {
-                                                            try {
-                                                                await markOrderAsPrinted(order.id);
-                                                                setOrders(prev => prev.map(o =>
-                                                                    o.id === order.id ? { ...o, isPrinted: true } : o
-                                                                ));
-                                                            } catch (e) {
-                                                                console.error(e);
-                                                            }
-                                                        }
-                                                    }}
-                                                >
-                                                    <FileDown className="h-5 w-5" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-9 w-9"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedOrder(order);
-                                                        setIsOpen(true);
-                                                    }}
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </Button>
+                                                {renderOrderActions(order)}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -845,7 +966,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
 
                 {/* Pagination Controls */}
                 {pagination && pagination.totalPages > 1 && (
-                    <div className="flex items-center justify-between p-4 border-t">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 sm:p-4 border-t">
                         <div className="text-sm text-gray-500">
                             Toplam {pagination.totalCount} sipariş, Sayfa {pagination.currentPage} / {pagination.totalPages}
                         </div>
@@ -874,9 +995,9 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
             {/* Order Detail Dialog */}
             <Dialog open={isOpen} onOpenChange={handleOpenChange}>
                 <DialogContent className="!max-w-none w-[95vw] sm:w-[90vw] xl:!w-[1250px] max-h-[92vh] overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800 scrollbar-track-transparent p-0">
-                    <DialogHeader className="px-10 pt-10 border-b pb-6 mb-6">
+                    <DialogHeader className="px-4 pt-6 pb-4 mb-4 sm:px-10 sm:pt-10 sm:pb-6 sm:mb-6 border-b text-left">
                         <div className="flex flex-row items-center justify-between">
-                            <DialogTitle className="text-xl flex items-center gap-4">
+                            <DialogTitle className="text-base sm:text-xl flex flex-wrap items-center gap-2 sm:gap-4 min-w-0 break-all">
                                 Sipariş Detayı - {selectedOrder?.orderNumber}
                                 {selectedOrder && (
                                     <Button
@@ -895,7 +1016,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="md:hidden gap-2 shrink-0 border-orange-200 text-orange-700 mr-8"
+                                    className="md:hidden gap-2 shrink-0 border-orange-200 text-orange-700 mr-12"
                                     onClick={() => window.open(`/admin/orders/${selectedOrder.id}/print`, '_blank')}
                                 >
                                     <Printer className="h-4 w-4" />
@@ -904,7 +1025,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                         </div>
                     </DialogHeader>
                     {selectedOrder && (
-                        <div className="space-y-6 pl-10 pr-12 pb-10">
+                        <div className="space-y-6 px-4 pb-6 sm:pl-10 sm:pr-12 sm:pb-10">
                             {/* Top Grid: Customer, Address, Cargo/Status - 3 Columns */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {/* Column 1: Customer Info */}
@@ -1089,7 +1210,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                 <TableHead className="py-2 h-9 w-14">Görsel</TableHead>
                                                 <TableHead className="py-2 h-9">Ürün</TableHead>
                                                 <TableHead className="py-2 h-9 text-center w-20">Adet</TableHead>
-                                                <TableHead className="py-2 h-9 text-right w-32">Birim Fiyat</TableHead>
+                                                <TableHead className="py-2 h-9 text-right w-32 hidden sm:table-cell">Birim Fiyat</TableHead>
                                                 <TableHead className="py-2 h-9 text-right w-32">Toplam</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -1145,7 +1266,7 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                                     <TableCell className="py-2 text-center font-medium">
                                                         {item.quantity}
                                                     </TableCell>
-                                                    <TableCell className="py-2 text-right text-gray-600">
+                                                    <TableCell className="py-2 text-right text-gray-600 hidden sm:table-cell">
                                                         {formatPrice(Number(item.unitPrice))}
                                                     </TableCell>
                                                     <TableCell className="py-2 text-right font-medium">

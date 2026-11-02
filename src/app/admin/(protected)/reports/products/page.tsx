@@ -52,9 +52,9 @@ export default async function TopProductsReportPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
                         <Package className="h-6 w-6 text-green-600" />
                         En Çok Satan Ürünler
                     </h2>
@@ -71,7 +71,7 @@ export default async function TopProductsReportPage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-gray-500">
@@ -148,7 +148,7 @@ export default async function TopProductsReportPage() {
                                         <TableCell>
                                             <Link
                                                 href={`/admin/products/${product.productId}`}
-                                                className="font-medium hover:text-blue-600 transition-colors"
+                                                className="font-medium hover:text-primary transition-colors"
                                             >
                                                 {product.productName}
                                             </Link>

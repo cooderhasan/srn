@@ -66,7 +66,7 @@ export default function StockAlertsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <AlertTriangle className="h-6 w-6 text-orange-500" />
@@ -83,7 +83,7 @@ export default function StockAlertsPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-red-700 dark:text-red-300">
