@@ -15,7 +15,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ShoppingCart, User, Menu, LogOut, Package, Settings, LayoutDashboard, X, Phone, Zap, ChevronDown, Home, Car, Truck, Building2, Mail, Info, Cog, Plus, Minus, ChevronRight } from "lucide-react";
+import { ShoppingCart, ShoppingBag, User, Menu, LogOut, Package, Settings, LayoutDashboard, X, Phone, Zap, ChevronDown, Home, Car, Truck, Building2, Mail, Info, Cog, Plus, Minus, ChevronRight } from "lucide-react";
 
 
 
@@ -55,6 +55,14 @@ interface StorefrontHeaderProps {
     twitterUrl?: string;
     linkedinUrl?: string;
     sidebarCategories?: Category[];
+}
+
+/** Telefonu okunur yaz: +905353783949 / 05353783949 → 0535 378 39 49 (başka biçimler olduğu gibi) */
+function displayPhone(phone: string) {
+    let d = phone.replace(/\D/g, "");
+    if (d.length === 12 && d.startsWith("90")) d = "0" + d.slice(2);
+    if (d.length === 11 && d.startsWith("0")) return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7, 9)} ${d.slice(9)}`;
+    return phone;
 }
 
 export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sidebarCategories = [], phone, facebookUrl, instagramUrl, twitterUrl, linkedinUrl }: StorefrontHeaderProps) {
@@ -158,14 +166,14 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                             {phone && (
                                 <a
                                     href={`tel:${phone.replace(/\s/g, '')}`}
-                                    className="hidden lg:flex items-center gap-2 text-gray-600 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 border-l border-gray-200 ml-2 pl-4"
+                                    className="group/phone hidden lg:flex items-center gap-3 ml-2 xl:ml-4 shrink-0"
                                 >
-                                    <div className="w-8 h-8 bg-[#009AD0]/10 rounded-full flex items-center justify-center">
-                                        <Phone className="h-4 w-4 text-[#0081AF]" />
+                                    <div className="w-11 h-11 bg-[#009AD0] rounded-full flex items-center justify-center shrink-0 shadow-md shadow-[#009AD0]/25 transition-transform duration-200 group-hover/phone:scale-105">
+                                        <Phone className="h-5 w-5 text-white" />
                                     </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] text-gray-500 font-medium">Çağrı Merkezi</span>
-                                        <span className="text-sm font-bold text-gray-900">{phone}</span>
+                                    <div className="flex flex-col leading-tight">
+                                        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Çağrı Merkezi</span>
+                                        <span className="text-[17px] font-extrabold tracking-tight text-[#0081AF] dark:text-white whitespace-nowrap group-hover/phone:underline">{displayPhone(phone)}</span>
                                     </div>
                                 </a>
                             )}
@@ -177,7 +185,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                         </div>
 
                         {/* Right Actions */}
-                        <div className="flex items-center gap-4 md:gap-6 shrink-0">
+                        <div className="flex items-center gap-1 md:gap-2 lg:gap-3 shrink-0">
 
                             {/* User Panel */}
                             <div
@@ -186,28 +194,22 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                 className="relative"
                             >
                                 {!mounted ? (
-                                    <button className="flex items-center gap-3 text-gray-700 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100">
+                                    <button aria-label="Giriş Yap" className="group/user flex items-center gap-1 md:gap-2.5 text-gray-700 hover:text-[#0081AF] transition-colors px-1.5 md:px-3 py-1.5 md:py-2 rounded-lg hover:bg-gray-100">
                                         <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                                            <User className="h-5 w-5" />
+                                            <User className="h-5 w-5 text-[#0081AF]" strokeWidth={1.6} />
                                         </div>
-                                        <div className="hidden sm:flex flex-col items-start">
-                                            <span className="text-[10px] text-gray-500">Kullanıcı</span>
-                                            <span className="text-sm font-semibold">Giriş Yap</span>
-                                        </div>
+                                        <span className="hidden sm:inline text-sm font-semibold whitespace-nowrap">Giriş Yap</span>
                                     </button>
                                 ) : (
                                     <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen} modal={false}>
                                         <DropdownMenuTrigger asChild>
-                                            <button className="flex items-center gap-3 text-gray-700 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 outline-none">
-                                                <div className={`w-10 h-10 ${user ? 'bg-[#009AD0]/10' : 'bg-gray-100'} rounded-full flex items-center justify-center`}>
-                                                    <User className={`h-5 w-5 ${user ? 'text-[#009AD0]' : ''}`} />
+                                            <button aria-label={user ? "Hesabım" : "Giriş Yap"} className="group/user flex items-center gap-1 md:gap-2.5 text-gray-700 hover:text-[#0081AF] transition-colors px-1.5 md:px-3 py-1.5 md:py-2 rounded-lg hover:bg-gray-100 outline-none">
+                                                <div className={`w-10 h-10 ${user ? 'bg-[#009AD0]/10' : 'bg-gray-100 group-hover/user:bg-[#009AD0]/10'} rounded-full flex items-center justify-center transition-colors`}>
+                                                    <User className="h-5 w-5 text-[#0081AF]" strokeWidth={1.6} />
                                                 </div>
-                                                <div className="hidden sm:flex flex-col items-start">
-                                                    <span className="text-[10px] text-gray-500">Kullanıcı</span>
-                                                    <span className="text-sm font-semibold">
-                                                        {user ? "Hesabım" : "Giriş Yap"}
-                                                    </span>
-                                                </div>
+                                                <span className="hidden sm:inline text-sm font-semibold whitespace-nowrap">
+                                                    {user ? "Hesabım" : "Giriş Yap"}
+                                                </span>
                                             </button>
                                         </DropdownMenuTrigger>
 
@@ -283,25 +285,25 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                 )}
                             </div>
 
-                            {/* Cart - Visible for everyone */}
-                            <Link href="/cart" className={cn(
-                                "flex items-center gap-3 text-gray-700 hover:text-[#0081AF] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 pl-4",
-                                user && "border-l"
-                            )}>
+                            {/* Sepet: çizgi (outline) çanta ikonu; boşken sayı balonu ve "₺0" yerine sadece "Sepetim" */}
+                            <Link href="/cart" aria-label="Alışveriş Sepetim" className="group/cart flex items-center gap-1 md:gap-2.5 text-gray-700 hover:text-[#0081AF] transition-colors px-1.5 md:px-3 py-1.5 md:py-2 rounded-lg hover:bg-gray-100">
                                 <div className="relative">
-                                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                                        <ShoppingCart className="h-5 w-5 text-orange-600" />
+                                    <div className="w-10 h-10 rounded-full bg-gray-100 group-hover/cart:bg-[#009AD0]/10 flex items-center justify-center transition-colors">
+                                        <ShoppingBag className="h-[21px] w-[21px] text-[#0081AF]" strokeWidth={1.6} />
                                     </div>
-                                    <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white border-2 border-white">
-                                        {mounted ? itemCount : 0}
-                                    </span>
+                                    {mounted && itemCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white border-2 border-white">
+                                            {itemCount > 99 ? "99+" : itemCount}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="hidden sm:flex flex-col items-start">
-                                    <span className="text-[10px] text-gray-500">Sepetim</span>
-                                    <span className="text-sm font-bold text-orange-600">
+                                {mounted && itemCount > 0 ? (
+                                    <span className="hidden sm:inline text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap">
                                         <CartTotalDisplay />
                                     </span>
-                                </div>
+                                ) : (
+                                    <span className="hidden sm:inline text-sm font-semibold whitespace-nowrap">Sepetim</span>
+                                )}
                             </Link>
 
                             {/* Mobile Menu Toggle */}
