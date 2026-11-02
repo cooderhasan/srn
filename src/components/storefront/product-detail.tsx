@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ProductCardV2 } from "./product-card-v2";
+import { ProductCardModern } from "./product-card-modern";
 import { formatPrice, calculatePrice, validateMinQuantity } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
@@ -792,11 +792,12 @@ export function ProductDetail({
                             </Link>
                         </div>
 
-                        <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+                        {/* Telefonda 2, tablette 3, geniş ekranda 6 sütun */}
+                        <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
                             {relatedProducts.map((p) => (
-                                <ProductCardV2
+                                <ProductCardModern
                                     key={p.id}
-                                    product={p}
+                                    product={p as any}
                                     discountRate={discountRate}
                                     isDealer={isDealer}
                                 />

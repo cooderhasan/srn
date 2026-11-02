@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ProductCardModern } from "./product-card-modern";
-import { ArrowRight, ChevronRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 interface Product {
     id: string;
@@ -41,38 +41,63 @@ export function FeaturedProducts({
     discountRate,
     isDealer,
     badge,
+    variant = "default",
 }: FeaturedProductsProps) {
     if (products.length === 0) return null;
 
+    // Başlığın üstündeki küçük etiket
+    const eyebrow = {
+        new: "Yeni Gelenler",
+        featured: "Sizin İçin Seçtik",
+        bestseller: "En Çok Tercih Edilenler",
+        default: "",
+    }[variant];
+    // Öne Çıkanlar ve Çok Satanlar hafif mavi zeminli bir bant içinde, aradaki Yeni Ürünler zeminsiz:
+    // bölümler alt alta aynı görünmesin, nerede başlayıp bittiği belli olsun
+    const banded = variant === "featured" || variant === "bestseller";
+
     return (
-        <section className="container mx-auto px-4">
+        // Sayfa zaten container + px-4 içinde; burada tekrar container/px-4 vardı, telefonda kenar boşluğu ikiye katlanıyordu
+        <section className={banded ? "rounded-3xl bg-[#009AD0]/[0.06] dark:bg-sky-950/20 ring-1 ring-[#009AD0]/10 px-3 py-6 sm:px-6 md:px-8 md:py-10" : ""}>
             {/* Section Header */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
-                <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white pl-3 border-l-4 border-[#009AD0]">
-                    {title}
-                </h2>
+            <div className="flex items-end justify-between gap-4 mb-5 md:mb-7">
+                <div className="min-w-0">
+                    {eyebrow && (
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <span className="h-px w-6 bg-[#009AD0]" />
+                            <span className="text-[10px] md:text-[11px] font-bold uppercase tracking-[0.18em] text-[#007EA8] dark:text-sky-400">
+                                {eyebrow}
+                            </span>
+                        </div>
+                    )}
+                    <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                        {title}
+                    </h2>
+                </div>
                 <Link
-                    href="/products"
-                    className="flex items-center gap-1 text-sm font-medium text-[#009AD0] hover:text-[#007EA8] transition-colors"
+                    href={variant === "new" ? "/products?sort=newest" : "/products"}
+                    className="group/all shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[#009AD0]/30 bg-white dark:bg-gray-900 dark:border-gray-700 px-3.5 py-2 text-xs md:text-sm font-semibold text-[#007EA8] dark:text-sky-300 hover:bg-[#009AD0] hover:text-white hover:border-[#009AD0] transition-colors"
                 >
                     Tümünü Gör
-                    <ChevronRight className="h-4 w-4" />
+                    <ArrowRight className="h-3.5 w-3.5 md:h-4 md:w-4 transition-transform group-hover/all:translate-x-0.5" />
                 </Link>
             </div>
 
             {/* Products Grid */}
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 2xl:grid-cols-4">
-                {products.map((product) => (
-                    <ProductCardModern
-                        key={product.id}
-                        product={{
-                            ...product,
-                            listPrice: product.listPrice,
-                        }}
-                        discountRate={discountRate}
-                        isDealer={isDealer}
-                        badge={badge}
-                    />
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                {products.map((product, i) => (
+                    // Tek satırlık (4 ürünlü) bölümde tablette 3 sütun var: 4. ürün alt satırda yalnız kalmasın
+                    <div key={product.id} className={products.length === 4 && i === 3 ? "md:hidden lg:block" : undefined}>
+                        <ProductCardModern
+                            product={{
+                                ...product,
+                                listPrice: product.listPrice,
+                            }}
+                            discountRate={discountRate}
+                            isDealer={isDealer}
+                            badge={badge}
+                        />
+                    </div>
                 ))}
             </div>
         </section>
