@@ -130,8 +130,8 @@ export default async function HomePage() {
                     {/* Features - Modern Frameless Design */}
                     <section className="grid gap-2 grid-cols-3 py-4 border-y border-gray-100 dark:border-gray-800">
                         <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3 group text-center md:text-left">
-                            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0">
-                                <Truck className="h-5 w-5 text-blue-600" />
+                            <div className="w-10 h-10 bg-[#009AD0]/10 dark:bg-sky-900/20 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0">
+                                <Truck className="h-5 w-5 text-[#0081AF]" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-gray-900 dark:text-white text-[10px] md:text-sm leading-tight">
@@ -142,8 +142,8 @@ export default async function HomePage() {
                         </div>
 
                         <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3 group text-center md:text-left">
-                            <div className="w-10 h-10 bg-green-50 dark:bg-green-900/20 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3 shrink-0">
-                                <Shield className="h-5 w-5 text-green-600" />
+                            <div className="w-10 h-10 bg-[#009AD0]/10 dark:bg-sky-900/20 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3 shrink-0">
+                                <Shield className="h-5 w-5 text-[#0081AF]" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-gray-900 dark:text-white text-[10px] md:text-sm leading-tight">
@@ -154,8 +154,8 @@ export default async function HomePage() {
                         </div>
 
                         <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3 group text-center md:text-left">
-                            <div className="w-10 h-10 bg-purple-50 dark:bg-purple-900/20 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0">
-                                <HeadphonesIcon className="h-5 w-5 text-purple-600" />
+                            <div className="w-10 h-10 bg-[#009AD0]/10 dark:bg-sky-900/20 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0">
+                                <HeadphonesIcon className="h-5 w-5 text-[#0081AF]" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-gray-900 dark:text-white text-[10px] md:text-sm leading-tight">

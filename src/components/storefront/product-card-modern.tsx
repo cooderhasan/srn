@@ -118,7 +118,7 @@ export function ProductCardModern({
 
     return (
         <Link href={`/products/${product.slug}`} className="group block h-full">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden transition-all duration-300 ring-1 ring-gray-200/60 dark:ring-gray-700 hover:ring-gray-200 hover:shadow-[0_12px_32px_-8px_rgba(37,99,235,0.18)] md:hover:-translate-y-1 h-full flex flex-col relative group/card">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden transition-all duration-300 ring-1 ring-gray-200/60 dark:ring-gray-700 hover:ring-gray-200 hover:shadow-[0_12px_32px_-8px_rgba(0,154,208,0.2)] md:hover:-translate-y-1 h-full flex flex-col relative group/card">
 
                 {/* Görsel alanı: açık gri zemin. Ürün fotoğrafları çoğunlukla beyaz zeminli; mix-blend-multiply ile beyaz,
                     zemin rengine karışır ve ürün "kutu içinde beyaz dikdörtgen" gibi değil, zeminde duruyormuş gibi görünür */}
@@ -134,7 +134,7 @@ export function ProductCardModern({
                     {/* Sağ üst: Yeni / Popüler vb. etiket */}
                     {badge && (
                         <div className="absolute top-2.5 right-2.5 z-10">
-                            <div className="bg-blue-500 text-white text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md whitespace-nowrap">
+                            <div className="bg-[#009AD0] text-white text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md whitespace-nowrap">
                                 {badge}
                             </div>
                         </div>
@@ -174,13 +174,13 @@ export function ProductCardModern({
                 <div className="px-3 pb-3 pt-1 md:px-4 md:pb-4 flex-1 flex flex-col">
                     {/* Marka */}
                     {product.brand && (
-                        <span className="truncate mb-1 md:mb-1.5 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400" title={product.brand.name}>
+                        <span className="truncate mb-1 md:mb-1.5 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-[#0081AF] dark:text-sky-400" title={product.brand.name}>
                             {product.brand.name}
                         </span>
                     )}
 
                     {/* Product Name */}
-                    <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-[13px] md:text-sm leading-snug line-clamp-2 min-h-[2.5rem] mb-2 md:mb-3 group-hover:text-blue-600 transition-colors">
+                    <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-[13px] md:text-sm leading-snug line-clamp-2 min-h-[2.5rem] mb-2 md:mb-3 group-hover:text-[#0081AF] transition-colors">
                         {product.name}
                     </h3>
 
@@ -201,14 +201,14 @@ export function ProductCardModern({
                             <button
                                 type="button"
                                 onClick={handleAddToCart}
-                                className="w-full h-10 md:h-11 flex items-center justify-center gap-2 md:gap-2.5 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-white text-[13px] md:text-[15px] font-bold tracking-wide shadow-md shadow-blue-600/25 ring-1 ring-inset ring-white/10 hover:from-blue-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-600/35 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 whitespace-nowrap"
+                                className="w-full h-10 md:h-11 flex items-center justify-center gap-2 md:gap-2.5 rounded-xl bg-gradient-to-b from-[#00A5DE] to-[#009AD0] text-white text-[13px] md:text-[15px] font-bold tracking-wide shadow-md shadow-[#009AD0]/25 ring-1 ring-inset ring-white/10 hover:from-[#009AD0] hover:to-[#0081AF] hover:shadow-lg hover:shadow-[#009AD0]/35 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 whitespace-nowrap"
                             >
                                 <ShoppingCart className="w-4 h-4 md:w-5 md:h-5" strokeWidth={2} />
                                 Sepete Ekle
                             </button>
                         ) : hasVariants && product.stock > 0 ? (
                             // Kartın kendisi ürün sayfasına gider; seçim orada yapılır
-                            <span className="w-full h-10 md:h-11 flex items-center justify-center gap-2 rounded-xl border border-blue-600/30 dark:border-blue-400/40 text-blue-600 dark:text-blue-300 text-[13px] md:text-[15px] font-bold group-hover/card:bg-blue-600 group-hover/card:text-white group-hover/card:border-blue-600 transition-all duration-200 whitespace-nowrap">
+                            <span className="w-full h-10 md:h-11 flex items-center justify-center gap-2 rounded-xl border border-[#009AD0]/40 dark:border-sky-400/40 text-[#0081AF] dark:text-sky-300 text-[13px] md:text-[15px] font-bold group-hover/card:bg-[#009AD0] group-hover/card:text-white group-hover/card:border-[#009AD0] transition-all duration-200 whitespace-nowrap">
                                 Seçenekleri Gör
                             </span>
                         ) : (

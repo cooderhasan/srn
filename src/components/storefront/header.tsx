@@ -160,8 +160,8 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                                     href={`tel:${phone.replace(/\s/g, '')}`}
                                     className="hidden lg:flex items-center gap-2 text-gray-600 hover:text-[#009AD0] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 border-l border-gray-200 ml-2 pl-4"
                                 >
-                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                        <Phone className="h-4 w-4 text-green-600" />
+                                    <div className="w-8 h-8 bg-[#009AD0]/10 rounded-full flex items-center justify-center">
+                                        <Phone className="h-4 w-4 text-[#0081AF]" />
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-gray-500 font-medium">Çağrı Merkezi</span>
@@ -285,7 +285,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
 
                             {/* Cart - Visible for everyone */}
                             <Link href="/cart" className={cn(
-                                "flex items-center gap-3 text-gray-700 hover:text-blue-600 transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 pl-4",
+                                "flex items-center gap-3 text-gray-700 hover:text-[#0081AF] transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 pl-4",
                                 user && "border-l"
                             )}>
                                 <div className="relative">
@@ -457,7 +457,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                             </Link>
                             <Link
                                 href={user ? "/account" : "/login"}
-                                className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-blue-50 text-blue-700 font-bold text-sm"
+                                className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-[#009AD0]/10 text-[#0081AF] font-bold text-sm"
                                 onClick={() => setIsMobileMenuOpen(false)}
                             >
                                 <User className="h-4 w-4" />
@@ -470,7 +470,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                             <p className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2">Menü</p>
                             <Link
                                 href="/"
-                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-[#009AD0] hover:bg-blue-50 rounded-lg transition-colors"
+                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-[#009AD0] hover:bg-[#009AD0]/10 rounded-lg transition-colors"
                                 onClick={() => setIsMobileMenuOpen(false)}
                             >
                                 <Home className="w-4 h-4" />
@@ -478,7 +478,7 @@ export function StorefrontHeader({ user, logoUrl, siteName, categories = [], sid
                             </Link>
                             <Link
                                 href="/products"
-                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-[#009AD0] hover:bg-blue-50 rounded-lg transition-colors"
+                                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-[#009AD0] hover:bg-[#009AD0]/10 rounded-lg transition-colors"
                                 onClick={() => setIsMobileMenuOpen(false)}
                             >
                                 <span className="w-1.5 h-1.5 rounded-full bg-[#009AD0]" />
@@ -527,7 +527,7 @@ function MobileCategoryItem({ category, hasChildren, onClose }: { category: Cate
     return (
         <div className={cn(
             "rounded-lg border border-gray-100 dark:border-gray-800 transition-all duration-200",
-            isOpen && "shadow-sm ring-1 ring-blue-500/20"
+            isOpen && "shadow-sm ring-1 ring-[#009AD0]/20"
         )}>
             <div className="flex items-center">
                 <Link
@@ -541,7 +541,7 @@ function MobileCategoryItem({ category, hasChildren, onClose }: { category: Cate
                 {hasChildren && (
                     <button
                         onClick={() => setIsOpen(!isOpen)}
-                        className="p-2.5 mr-1 rounded-lg text-gray-400 hover:text-[#009AD0] hover:bg-blue-50 transition-all"
+                        className="p-2.5 mr-1 rounded-lg text-gray-400 hover:text-[#009AD0] hover:bg-[#009AD0]/10 transition-all"
                     >
                         {isOpen ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                     </button>
