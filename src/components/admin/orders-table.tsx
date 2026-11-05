@@ -926,26 +926,31 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            {order.cargoTrackingNumber ? (
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="text-[10px] text-gray-400 uppercase font-bold">TAKİP NO</span>
-                                                    <span className="text-xs font-mono select-all bg-gray-50 dark:bg-gray-800/50 px-1 rounded">{order.cargoTrackingNumber}</span>
-                                                </div>
-                                            ) : (order as any).invoiceNo ? (
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="text-[10px] text-orange-400 uppercase font-bold">FATURA NO</span>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-xs font-mono select-all bg-orange-50 dark:bg-orange-900/20 px-1 rounded">{(order as any).invoiceNo}</span>
-                                                        {(order as any).invoiceUrl && (
-                                                            <a href={(order as any).invoiceUrl} target="_blank" rel="noopener noreferrer">
-                                                                <ExternalLink className="h-3 w-3 text-orange-500" />
-                                                            </a>
-                                                        )}
+                                            {/* Takip no ve fatura no birlikte gösterilir: önceden takip no varsa fatura no görünmüyordu (N11) */}
+                                            <div className="flex flex-col gap-1.5">
+                                                {order.cargoTrackingNumber && (
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">TAKİP NO</span>
+                                                        <span className="text-xs font-mono select-all bg-gray-50 dark:bg-gray-800/50 px-1 rounded">{order.cargoTrackingNumber}</span>
                                                     </div>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-400">-</span>
-                                            )}
+                                                )}
+                                                {(order as any).invoiceNo && (
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-[10px] text-orange-400 uppercase font-bold">FATURA NO</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-xs font-mono select-all bg-orange-50 dark:bg-orange-900/20 px-1 rounded">{(order as any).invoiceNo}</span>
+                                                            {(order as any).invoiceUrl && (
+                                                                <a href={(order as any).invoiceUrl} target="_blank" rel="noopener noreferrer">
+                                                                    <ExternalLink className="h-3 w-3 text-orange-500" />
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {!order.cargoTrackingNumber && !(order as any).invoiceNo && (
+                                                    <span className="text-gray-400">-</span>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell onClick={(e) => e.stopPropagation()}>
                                             <div className="w-[180px] flex flex-col gap-1">
