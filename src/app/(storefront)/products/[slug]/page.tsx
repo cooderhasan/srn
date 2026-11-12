@@ -225,6 +225,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <>
             <JsonLd data={schema} />
             <ProductDetail
+                paytrInstallment={{ merchantId: process.env.PAYTR_MERCHANT_ID, token: process.env.PAYTR_INSTALLMENT_TOKEN }}
                 product={serializedProduct}
                 relatedProducts={relatedProducts.map(p => ({
                     ...p,

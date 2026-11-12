@@ -4,12 +4,29 @@ import { useEffect, useRef } from "react";
 
 interface InstallmentTableProps {
     price: number;
+    /** PayTR Mağaza No (sunucudaki PAYTR_MERCHANT_ID) */
+    merchantId?: string;
+    /** PayTR panelindeki taksit tablosu kodunun token'ı (PAYTR_INSTALLMENT_TOKEN) */
+    token?: string;
 }
 
-const PAYTR_TOKEN = "9b1ae477fc7a222ba4e52328780a106f96b0ecfeab47494afbd0e8c74107645c";
-const PAYTR_MERCHANT_ID = "278525";
+/**
+ * PayTR taksit tablosu: oranlar mağazaya özel, PayTR'den mağaza no + taksit tablosu token'ı ile çekilir.
+ * Önceden koda Bardakçı'nın mağaza bilgileri sabit yazılıydı; Serin'de Bardakçı'nın oranları görünüyordu.
+ * Bilgiler tanımlı değilse tablo yerine bilgi notu gösterilir.
+ */
+export function InstallmentTable({ price, merchantId, token }: InstallmentTableProps) {
+    if (!merchantId || !token) {
+        return (
+            <p className="text-sm text-gray-500 text-center py-4">
+                Taksit seçenekleri ödeme adımında kartınıza göre gösterilir.
+            </p>
+        );
+    }
+    return <PayTRInstallmentTable price={price} merchantId={merchantId} token={token} />;
+}
 
-export function InstallmentTable({ price }: InstallmentTableProps) {
+function PayTRInstallmentTable({ price, merchantId, token }: { price: number; merchantId: string; token: string }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const scriptRef = useRef<HTMLScriptElement | null>(null);
 
@@ -31,7 +48,7 @@ export function InstallmentTable({ price }: InstallmentTableProps) {
 
         // Yeni script ekle
         const script = document.createElement("script");
-        script.src = `https://www.paytr.com/odeme/taksit-tablosu/v2?token=${PAYTR_TOKEN}&merchant_id=${PAYTR_MERCHANT_ID}&amount=${formattedPrice}&taksit=0&tumu=0`;
+        script.src = `https://www.paytr.com/odeme/taksit-tablosu/v2?token=${encodeURIComponent(token)}&merchant_id=${encodeURIComponent(merchantId)}&amount=${formattedPrice}&taksit=0&tumu=0`;
         script.async = true;
         document.body.appendChild(script);
         scriptRef.current = script;
@@ -42,7 +59,7 @@ export function InstallmentTable({ price }: InstallmentTableProps) {
                 scriptRef.current = null;
             }
         };
-    }, [formattedPrice]);
+    }, [formattedPrice, merchantId, token]);
 
     return (
         <>

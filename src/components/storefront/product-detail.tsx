@@ -103,6 +103,8 @@ interface ProductDetailProps {
         averageRating: number;
         totalReviews: number;
     };
+    /** PayTR taksit tablosu için mağaza no ve token (sunucudan; tanımlı değilse tablo yerine not) */
+    paytrInstallment?: { merchantId?: string; token?: string };
 }
 
 export function ProductDetail({
@@ -114,6 +116,7 @@ export function ProductDetail({
     whatsappNumber,
     reviews,
     reviewStats,
+    paytrInstallment,
 }: ProductDetailProps) {
     const [quantity, setQuantity] = useState(product.minQuantity);
     const [inputValue, setInputValue] = useState(product.minQuantity.toString());
@@ -721,7 +724,11 @@ export function ProductDetail({
                                 </div>
                                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                                     <div className="min-w-[500px] sm:min-w-0 px-4 sm:px-0">
-                                        <InstallmentTable price={displayFinalPrice} />
+                                        <InstallmentTable
+                                            price={displayFinalPrice}
+                                            merchantId={paytrInstallment?.merchantId}
+                                            token={paytrInstallment?.token}
+                                        />
                                     </div>
                                 </div>
                                 <p className="mt-6 text-[11px] text-gray-400 italic text-center">
