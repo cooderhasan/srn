@@ -31,6 +31,8 @@ interface AdminNewOrderEmailProps {
     companyName: string;
     totalAmount: number;
     items: OrderItem[];
+    paidAmount?: number;
+    installmentCount?: number;
 }
 
 export const AdminNewOrderEmail = ({
@@ -40,8 +42,13 @@ export const AdminNewOrderEmail = ({
     companyName,
     totalAmount,
     items,
+    paidAmount,
+    installmentCount,
 }: AdminNewOrderEmailProps) => {
     const previewText = `Yeni Sipariş: #${orderNumber} - ${companyName}`;
+    // Taksitli ödemede çekilen tutar sipariş toplamından yüksek (vade farkı)
+    const installmentExtra = Math.max(0, Number(paidAmount || 0) - totalAmount);
+    const formatTry = (n: number) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(n);
 
     return (
         <Html>
@@ -66,10 +73,15 @@ export const AdminNewOrderEmail = ({
                                 <Column align="right">
                                     <Text className="text-gray-500 text-xs uppercase font-bold m-0">Toplam Tutar</Text>
                                     <Text className="text-lg font-bold m-0 text-green-600">
-                                        {new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(totalAmount)}
+                                        {formatTry(totalAmount)}
                                     </Text>
                                 </Column>
                             </Row>
+                            {installmentExtra > 0.01 && (
+                                <Text className="text-xs text-gray-600 m-0 mt-2">
+                                    Kredi Kartı{Number(installmentCount) > 1 ? ` - ${installmentCount} Taksit` : ""} · Vade farkı {formatTry(installmentExtra)} · Çekilen toplam {formatTry(totalAmount + installmentExtra)}
+                                </Text>
+                            )}
                         </Section>
 
                         <Text className="text-black text-[14px] font-bold mt-4 mb-2">Sipariş Edilen Ürünler:</Text>

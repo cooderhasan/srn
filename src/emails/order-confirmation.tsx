@@ -36,7 +36,11 @@ interface OrderConfirmationEmailProps {
         iban: string;
         accountHolder: string;
     };
+    paidAmount?: number;
+    installmentCount?: number;
 }
+
+const formatTry = (n: number) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(n);
 
 export const OrderConfirmationEmail = ({
     orderNumber,
@@ -45,8 +49,13 @@ export const OrderConfirmationEmail = ({
     totalAmount,
     paymentMethod,
     bankInfo,
+    paidAmount,
+    installmentCount,
 }: OrderConfirmationEmailProps) => {
     const previewText = `Siparişiniz Alındı - #${orderNumber}`;
+    // Taksitli ödemede vade farkı siparişe yazılmaz, sadece PayTR'ın bildirdiği çekilen tutarda görünür
+    const installmentExtra = Math.max(0, Number(paidAmount || 0) - totalAmount);
+    const hasExtra = installmentExtra > 0.01;
 
     return (
         <Html>
@@ -90,16 +99,41 @@ export const OrderConfirmationEmail = ({
                         <Hr className="border border-solid border-[#eaeaea] my-[26px] mx-0 w-full" />
 
                         <Section>
+                            {hasExtra && (
+                                <>
+                                    <Row>
+                                        <Column>
+                                            <Text className="text-[14px] m-0">Sipariş Toplamı:</Text>
+                                        </Column>
+                                        <Column align="right">
+                                            <Text className="text-[14px] m-0">{formatTry(totalAmount)}</Text>
+                                        </Column>
+                                    </Row>
+                                    <Row>
+                                        <Column>
+                                            <Text className="text-[14px] m-0">
+                                                {Number(installmentCount) > 1 ? `Vade Farkı (${installmentCount} Taksit):` : "Vade Farkı:"}
+                                            </Text>
+                                        </Column>
+                                        <Column align="right">
+                                            <Text className="text-[14px] m-0">{formatTry(installmentExtra)}</Text>
+                                        </Column>
+                                    </Row>
+                                </>
+                            )}
                             <Row>
                                 <Column>
-                                    <Text className="text-[16px] font-bold m-0">Toplam Tutar:</Text>
+                                    <Text className="text-[16px] font-bold m-0">{hasExtra ? "Ödenen Toplam:" : "Toplam Tutar:"}</Text>
                                 </Column>
                                 <Column align="right">
                                     <Text className="text-[20px] font-bold m-0 text-green-600">
-                                        {new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(totalAmount)}
+                                        {formatTry(hasExtra ? totalAmount + installmentExtra : totalAmount)}
                                     </Text>
                                 </Column>
                             </Row>
+                            {paymentMethod === "CREDIT_CARD" && Number(installmentCount) > 1 && (
+                                <Text className="text-[12px] text-gray-500 m-0 mt-1 text-right">Kredi Kartı - {installmentCount} Taksit</Text>
+                            )}
                         </Section>
 
                         <Hr className="border border-solid border-[#eaeaea] my-[26px] mx-0 w-full" />

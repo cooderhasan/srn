@@ -45,11 +45,34 @@ export async function POST(req: NextRequest) {
                 return new NextResponse("OK");
             }
 
+            // PayTR aynı bildirimi tekrar gönderebilir: ödeme zaten işlendiyse sipariş ve mailler tekrarlanmaz
+            if (order.payment?.status === "COMPLETED" && order.status !== "CANCELLED") {
+                console.log(`Order ${order.orderNumber}: PayTR bildirimi zaten işlenmiş, atlandı.`);
+                return new NextResponse("OK");
+            }
+
             // Ödeme Başarılı
-            await prisma.order.update({
-                where: { id: order.id },
-                data: { status: "CONFIRMED" },
-            });
+            // Sipariş zaman aşımıyla iptal edilip stoğu iade edildiyse (lib/abandoned-payments) stok yeniden düşülür
+            if (order.status === "CANCELLED") {
+                const { decrementOrderStock, handlePostOrderStockSync } = await import("@/lib/stock-sync");
+                const affected = await prisma.$transaction(async (tx) => {
+                    await tx.order.update({
+                        where: { id: order.id },
+                        data: {
+                            status: "CONFIRMED",
+                            notes: (order.notes ? order.notes + " | " : "") + "Ödeme iptalden sonra geldi; sipariş yeniden onaylandı, stok düşüldü.",
+                        },
+                    });
+                    return decrementOrderStock(tx, order.items);
+                });
+                if (affected.length > 0) handlePostOrderStockSync(affected, "site").catch(console.error);
+                console.warn(`Order ${order.orderNumber}: iptal edilmiş siparişe başarılı ödeme geldi, yeniden onaylandı.`);
+            } else {
+                await prisma.order.update({
+                    where: { id: order.id },
+                    data: { status: "CONFIRMED" },
+                });
+            }
 
             await prisma.payment.upsert({
                 where: { orderId: order.id },
@@ -74,6 +97,9 @@ export async function POST(req: NextRequest) {
             try {
                 const shippingAddress = order.shippingAddress as any; // Cast JSON to any
                 const emailTo = order.user?.email || order.guestEmail;
+                // Taksitte müşteriden çekilen tutar siparişten yüksektir (vade farkı); mailde gerçek tutar görünsün
+                const paidAmount = Number(total_amount) / 100;
+                const installmentCount = Number(params.installment_count) || undefined;
                 const emailItems = order.items.map((item) => ({
                     productName: item.productName,
                     quantity: item.quantity,
@@ -99,6 +125,8 @@ export async function POST(req: NextRequest) {
                         cargoCompany: order.cargoCompany || undefined,
                         shippingCost: Number(order.shippingCost || 0),
                         source: order.source,
+                        paidAmount,
+                        installmentCount,
                     });
                 }
 
@@ -111,6 +139,8 @@ export async function POST(req: NextRequest) {
                     orderId: order.id,
                     cargoCompany: order.cargoCompany || undefined,
                     items: emailItems,
+                    paidAmount,
+                    installmentCount,
                 });
 
                 console.log(`Emails sent for Order ${orderId}`);

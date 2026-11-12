@@ -37,6 +37,9 @@ interface SendOrderConfirmationProps {
     cargoCompany?: string;
     shippingCost?: number;
     source?: string;
+    // Kart ödemesinde PayTR'ın bildirdiği çekilen tutar ve taksit sayısı (taksitte vade farkı dahil)
+    paidAmount?: number;
+    installmentCount?: number;
 }
 
 interface SendAdminNewOrderProps {
@@ -46,6 +49,8 @@ interface SendAdminNewOrderProps {
     totalAmount: number;
     orderId: string;
     cargoCompany?: string;
+    paidAmount?: number;
+    installmentCount?: number;
     items: {
         productName: string;
         quantity: number;
@@ -112,6 +117,8 @@ export async function sendOrderConfirmationEmail(props: SendOrderConfirmationPro
                 totalAmount: props.totalAmount,
                 paymentMethod: props.paymentMethod,
                 bankInfo: props.bankInfo,
+                paidAmount: props.paidAmount,
+                installmentCount: props.installmentCount,
             }),
             attachments: attachments && attachments.length > 0 ? attachments : undefined,
         });
@@ -151,6 +158,8 @@ export async function sendAdminNewOrderEmail(props: SendAdminNewOrderProps) {
                 companyName: props.companyName,
                 totalAmount: props.totalAmount,
                 items: props.items,
+                paidAmount: props.paidAmount,
+                installmentCount: props.installmentCount,
             }),
         });
 

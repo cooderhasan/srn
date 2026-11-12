@@ -49,7 +49,7 @@ export async function setupRepeatableJobs() {
     });
     console.log("⏰ N11 Order Sync Cron (60m) registered.");
 
-    // Her 15 dakikada bir ödenmemiş (WAITING_FOR_PAYMENT) taslak siparişleri temizle ve stoklarını restore et
+    // Her 15 dakikada bir yarım kalan kart siparişlerini (WAITING_FOR_PAYMENT, 90 dk) iptal et ve stoklarını iade et
     await queue.add("abandoned-order-cleanup", {}, {
         repeat: {
             pattern: '*/15 * * * *' // Every 15 minutes
@@ -111,9 +111,10 @@ export function initializeWorker() {
 
                 if (job.name === "abandoned-order-cleanup") {
                     console.log("🧹 Terk edilmiş ödenmemiş sipariş temizliği başlatıldı...");
-                    const { cleanupAbandonedOrders } = await import("@/app/admin/(protected)/orders/actions");
-                    const result = await cleanupAbandonedOrders();
-                    console.log(`✅ Cron Sonucu: ${result.message}`);
+                    // Yarım kalan kart siparişleri 90 dk sonra iptal + stok iadesi (lib/abandoned-payments)
+                    const { cancelAbandonedCardOrders } = await import("@/lib/abandoned-payments");
+                    const result = await cancelAbandonedCardOrders();
+                    if (result.cancelled > 0) console.log(`✅ ${result.message}`);
                     return;
                 }
 
