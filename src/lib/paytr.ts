@@ -29,9 +29,21 @@ export interface PayTRTokenData {
     user_phone: string;
 }
 
-export async function getPayTRToken(data: PayTRTokenData) {
-    const merchant_ok_url = `${config.appUrl}/payment/success`;
-    const merchant_fail_url = `${config.appUrl}/payment/fail`;
+/**
+ * Ödeme sonrası dönülecek adres: müşteri siteye hangi adresten girdiyse (www'lu / www'suz) o. Site iki adreste de
+ * açılıyor; sabit adrese dönünce tarayıcı başka site saydığı için sepet boşalmıyor, oturum görünmüyordu.
+ * Sadece sitenin kendi adresleri kabul edilir (Host başlığıyla başka siteye yönlendirilemesin), yoksa NEXT_PUBLIC_APP_URL.
+ */
+export function resolvePayTRReturnBase(host: string | null | undefined): string {
+    const h = String(host || "").split(",")[0].trim().toLowerCase();
+    if (h === "serinmotor.com" || h === "www.serinmotor.com") return `https://${h}`;
+    return config.appUrl;
+}
+
+export async function getPayTRToken(data: PayTRTokenData, returnBaseUrl?: string) {
+    const base = returnBaseUrl || config.appUrl;
+    const merchant_ok_url = `${base}/payment/success`;
+    const merchant_fail_url = `${base}/payment/fail`;
 
     // Amount is in kuruş (cents) * 100
     const payment_amount = Math.round(data.payment_amount * 100);

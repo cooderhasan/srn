@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getPayTRToken } from "@/lib/paytr";
+import { getPayTRToken, resolvePayTRReturnBase } from "@/lib/paytr";
 
 export async function POST(req: NextRequest) {
     try {
@@ -59,7 +59,9 @@ export async function POST(req: NextRequest) {
             user_phone: shippingAddress?.phone || "05000000000",
         };
 
-        const result = await getPayTRToken(tokenData);
+        // Ödeme sonrası müşteri girdiği adrese (www'lu / www'suz) döner
+        const returnBase = resolvePayTRReturnBase(req.headers.get("x-forwarded-host") || req.headers.get("host"));
+        const result = await getPayTRToken(tokenData, returnBase);
 
         if (result.success) {
             return NextResponse.json({ token: result.token });
