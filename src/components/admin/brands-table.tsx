@@ -25,7 +25,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, Search, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { createBrand, updateBrand, deleteBrand } from "@/app/admin/(protected)/brands/actions";
+import { createBrand, updateBrand, deleteBrand, saveOperatorFirm } from "@/app/admin/(protected)/brands/actions";
 import { getTrendyolBrands } from "@/app/admin/(protected)/integrations/trendyol/actions";
 
 // --- Trendyol Brand Search Component ---
@@ -139,6 +139,8 @@ interface Brand {
     trendyolBrandId?: number | null;
     n11BrandId?: number | null;
     hbBrandId?: string | null;
+    manufacturerFirmId?: string | null;
+    importerFirmId?: string | null;
     createdAt: Date;
     _count: {
         products: number;
@@ -147,9 +149,36 @@ interface Brand {
 
 interface BrandsTableProps {
     brands: Brand[];
+    firms?: { id: string; name: string }[];
 }
 
-export function BrandsTable({ brands }: BrandsTableProps) {
+export function BrandsTable({ brands, firms: firmsProp = [] }: BrandsTableProps) {
+    // Pencereden yeni eklenen firmalar sayfa yenilenene kadar listede görünsün
+    const [addedFirms, setAddedFirms] = useState<{ id: string; name: string }[]>([]);
+    const firms = [...firmsProp, ...addedFirms.filter((a) => !firmsProp.some((f) => f.id === a.id))].sort((a, b) => a.name.localeCompare(b.name, "tr"));
+    const firmName = (id?: string | null) => (id ? firms.find((f) => f.id === id)?.name : undefined);
+    const [newFirmRole, setNewFirmRole] = useState<"manufacturer" | "importer" | null>(null);
+    const [newFirm, setNewFirm] = useState({ name: "", address: "", email: "" });
+    const [savingFirm, setSavingFirm] = useState(false);
+    const saveNewFirm = async () => {
+        if (!newFirmRole) return;
+        setSavingFirm(true);
+        try {
+            const res = await saveOperatorFirm(null, newFirm);
+            if (!res.success || !res.firm) {
+                toast.error(res.message || "Firma kaydedilemedi.");
+                return;
+            }
+            setAddedFirms((prev) => [...prev, { id: res.firm.id, name: res.firm.name }]);
+            if (newFirmRole === "manufacturer") setManufacturerFirmId(res.firm.id);
+            else setImporterFirmId(res.firm.id);
+            toast.success(`${res.firm.name} eklendi ve ${newFirmRole === "manufacturer" ? "imalatçı" : "ithalatçı"} olarak seçildi.`);
+            setNewFirmRole(null);
+            setNewFirm({ name: "", address: "", email: "" });
+        } finally {
+            setSavingFirm(false);
+        }
+    };
     const [isOpen, setIsOpen] = useState(false);
     const [editBrand, setEditBrand] = useState<Brand | null>(null);
     const [loading, setLoading] = useState(false);
@@ -158,6 +187,8 @@ export function BrandsTable({ brands }: BrandsTableProps) {
     const [trendyolBrandId, setTrendyolBrandId] = useState<number | undefined>(undefined);
     const [n11BrandId, setN11BrandId] = useState<number | undefined>(undefined);
     const [hbBrandId, setHbBrandId] = useState<string | undefined>(undefined);
+    const [manufacturerFirmId, setManufacturerFirmId] = useState("");
+    const [importerFirmId, setImporterFirmId] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -165,10 +196,10 @@ export function BrandsTable({ brands }: BrandsTableProps) {
 
         try {
             if (editBrand) {
-                await updateBrand(editBrand.id, { name, logoUrl: logoUrl || undefined, trendyolBrandId, n11BrandId, hbBrandId });
+                await updateBrand(editBrand.id, { name, logoUrl: logoUrl || undefined, trendyolBrandId, n11BrandId, hbBrandId, manufacturerFirmId: manufacturerFirmId || null, importerFirmId: importerFirmId || null });
                 toast.success("Marka güncellendi.");
             } else {
-                await createBrand({ name, logoUrl: logoUrl || undefined, trendyolBrandId, n11BrandId, hbBrandId });
+                await createBrand({ name, logoUrl: logoUrl || undefined, trendyolBrandId, n11BrandId, hbBrandId, manufacturerFirmId: manufacturerFirmId || null, importerFirmId: importerFirmId || null });
                 toast.success("Marka oluşturuldu.");
             }
             setIsOpen(false);
@@ -188,6 +219,9 @@ export function BrandsTable({ brands }: BrandsTableProps) {
         setTrendyolBrandId(undefined);
         setN11BrandId(undefined);
         setHbBrandId(undefined);
+        setManufacturerFirmId("");
+        setImporterFirmId("");
+        setNewFirmRole(null);
         setEditBrand(null);
     };
 
@@ -198,6 +232,9 @@ export function BrandsTable({ brands }: BrandsTableProps) {
         setTrendyolBrandId(brand.trendyolBrandId ?? undefined);
         setN11BrandId(brand.n11BrandId ?? undefined);
         setHbBrandId(brand.hbBrandId ?? undefined);
+        setManufacturerFirmId(brand.manufacturerFirmId || "");
+        setImporterFirmId(brand.importerFirmId || "");
+        setNewFirmRole(null);
         setIsOpen(true);
     };
 
@@ -295,6 +332,49 @@ export function BrandsTable({ brands }: BrandsTableProps) {
                                         className="border-amber-200 dark:border-amber-700"
                                     />
                                 </div>
+                                <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <Label className="text-blue-800 dark:text-blue-300 font-semibold text-xs uppercase tracking-wide">İmalatçı / İthalatçı (Ürün Güvenliği)</Label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <span className="text-[11px] text-gray-600">İmalatçı</span>
+                                            <select className="w-full h-10 px-3 rounded-md border border-blue-300 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={manufacturerFirmId} onChange={(e) => setManufacturerFirmId(e.target.value)}>
+                                                <option value="">— Seçilmedi —</option>
+                                                {firms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[11px] text-gray-600">İthalatçı (yerli üretimde boş)</span>
+                                            <select className="w-full h-10 px-3 rounded-md border border-blue-300 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={importerFirmId} onChange={(e) => setImporterFirmId(e.target.value)}>
+                                                <option value="">— Yok —</option>
+                                                {firms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-blue-700">
+                                        Pazaryerine yeni ürün gönderirken üretici / ithalatçı alanları bu firmalardan dolar. Firmaları düzenlemek için: sayfanın üstündeki "İmalatçı / İthalatçı Firmaları" bölümü.
+                                    </p>
+                                    {newFirmRole ? (
+                                        <div className="space-y-2 rounded-md border border-blue-300 bg-white p-2 dark:bg-gray-800">
+                                            <div className="text-xs font-semibold">Yeni firma ({newFirmRole === "manufacturer" ? "imalatçı" : "ithalatçı"} olarak seçilecek)</div>
+                                            <Input value={newFirm.name} onChange={(e) => setNewFirm({ ...newFirm, name: e.target.value })} placeholder="Ünvan" className="h-9 text-sm" />
+                                            <Input value={newFirm.address} onChange={(e) => setNewFirm({ ...newFirm, address: e.target.value })} placeholder="Açık adres" className="h-9 text-sm" />
+                                            <Input value={newFirm.email} onChange={(e) => setNewFirm({ ...newFirm, email: e.target.value })} placeholder="E-posta" type="email" className="h-9 text-sm" />
+                                            <div className="flex justify-end gap-2">
+                                                <Button size="sm" type="button" variant="outline" onClick={() => setNewFirmRole(null)}>Vazgeç</Button>
+                                                <Button size="sm" type="button" onClick={saveNewFirm} disabled={savingFirm}>{savingFirm ? "Kaydediliyor..." : "Firmayı Kaydet"}</Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button size="sm" type="button" variant="outline" className="h-7 text-xs" onClick={() => setNewFirmRole("manufacturer")}>
+                                                <Plus className="h-3 w-3 mr-1" /> Yeni imalatçı firma
+                                            </Button>
+                                            <Button size="sm" type="button" variant="outline" className="h-7 text-xs" onClick={() => setNewFirmRole("importer")}>
+                                                <Plus className="h-3 w-3 mr-1" /> Yeni ithalatçı firma
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
@@ -343,7 +423,16 @@ export function BrandsTable({ brands }: BrandsTableProps) {
                                             </div>
                                         )}
                                     </TableCell>
-                                    <TableCell className="font-medium">{brand.name}</TableCell>
+                                    <TableCell className="font-medium">
+                                        {brand.name}
+                                        {(brand.manufacturerFirmId || brand.importerFirmId) && (
+                                            <div className="text-[10px] font-normal text-blue-600">
+                                                {firmName(brand.manufacturerFirmId) && `İmalatçı: ${firmName(brand.manufacturerFirmId)}`}
+                                                {firmName(brand.manufacturerFirmId) && firmName(brand.importerFirmId) && " · "}
+                                                {firmName(brand.importerFirmId) && `İthalatçı: ${firmName(brand.importerFirmId)}`}
+                                            </div>
+                                        )}
+                                    </TableCell>
                                     <TableCell>
                                         <Badge variant="secondary">
                                             {brand._count.products} ürün

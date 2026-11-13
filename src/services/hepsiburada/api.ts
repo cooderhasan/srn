@@ -32,7 +32,12 @@ export class HepsiburadaClient {
 
     constructor(creds?: HepsiburadaCreds) {
         if (creds) {
-            this.creds = creds;
+            this.creds = {
+                username: creds.username,
+                password: creds.password,
+                merchantId: creds.merchantId || creds.username,
+                isTestMode: creds.isTestMode
+            };
             this.isTestMode = creds.isTestMode ?? false;
         }
         
@@ -74,7 +79,7 @@ export class HepsiburadaClient {
             "Authorization": this.getAuthHeader(),
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "serinmotor_dev",
+            "User-Agent": this.userAgent,
             ...extraHeaders,
         };
     }
@@ -423,6 +428,33 @@ export class HepsiburadaClient {
      * SIT: POST https://mpop-sit.hepsiburada.com/product/api/products/import
      * PROD: POST https://mpop.hepsiburada.com/product/api/products/import
      */
+    async getProductStatus(trackingId: string) {
+        await this.init();
+
+        const sitSuffix = this.isTestMode ? "-sit" : "";
+        const url = `https://mpop${sitSuffix}.hepsiburada.com/product/api/products/status/${trackingId}`;
+        const response = await fetch(url, {
+            headers: {
+                "Authorization": this.getAuthHeader(),
+                "User-Agent": this.userAgent,
+                "Accept": "application/json",
+            },
+        });
+
+        const responseText = await response.text();
+        console.log(`📊 HB Product Status (${response.status}):`, responseText.substring(0, 500));
+
+        if (!response.ok) {
+            throw new Error(`HB Product Status Error (${response.status}): ${responseText.substring(0, 200)}`);
+        }
+
+        try {
+            return JSON.parse(responseText);
+        } catch {
+            return { raw: responseText };
+        }
+    }
+
     async createProduct(items: any[]) {
         await this.init();
         
@@ -504,7 +536,7 @@ export class HepsiburadaClient {
     /**
      * Paket İçin Kargo Bilgilerini Listeleme
      * GET /packages/merchantid/{merchantId}/packagenumber/{packageNumber}
-     * status: Intransit / Delivered
+     * barcode: paketin kargo barkodu (HB etiketindeki barkod), trackingInfoCode: kargo takip no
      */
     async getPackageCargoInfo(packageNumber: string): Promise<{ barcode?: string; trackingInfoCode?: string; cargoCompany?: string; status?: string } | null> {
         await this.init();
@@ -520,8 +552,32 @@ export class HepsiburadaClient {
             barcode: pkg.barcode ? String(pkg.barcode) : undefined,
             trackingInfoCode: pkg.trackingInfoCode ? String(pkg.trackingInfoCode) : undefined,
             cargoCompany: pkg.cargoCompany || undefined,
-            status: pkg.status ? String(pkg.status) : undefined,
+            status: pkg.status ? String(pkg.status) : undefined, // Intransit / Delivered
         };
+    }
+
+    /**
+     * Kargoya verilen / teslim edilen paketler (son 1 ay). Doküman: limit max 50, limit-offset ile sayfalama.
+     * GET /packages/merchantid/{merchantId}/shipped  |  /delivered
+     * Alanlar: orderNumber, PackageNumber, Barcode, ShippedDate / DeliveredDate (büyük/küçük harf değişebiliyor)
+     */
+    /**
+     * İptal edilen sipariş kalemleri (son 1 ay). Doküman: limit max 50.
+     * GET /orders/merchantid/{merchantId}/cancelled  — alanlar: orderNumber, lineItemId, quantity, cancelDate, cancelledBy
+     */
+    async getCancelledOrderLines(offset = 0, limit = 50): Promise<any[]> {
+        await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
+        const url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}/cancelled?offset=${offset}&limit=${limit}`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HB iptal listesi alınamadı: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}`);
+        const data = await response.json();
+        if (Array.isArray(data)) return data;
+        for (const k of ["items", "content", "data", "results", "orders"]) {
+            if (Array.isArray(data?.[k])) return data[k];
+        }
+        return [];
     }
 
     /**
@@ -548,29 +604,6 @@ export class HepsiburadaClient {
         return [];
     }
 
-    /**
-     * İptal edilen sipariş kalemleri (son 1 ay). Doküman: limit max 50.
-     * GET /orders/merchantid/{merchantId}/cancelled  — alanlar: orderNumber, lineItemId, quantity, cancelDate, cancelledBy
-     */
-    async getCancelledOrderLines(offset = 0, limit = 50): Promise<any[]> {
-        await this.init();
-        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
-        const url = `${this.orderBaseUrl}/orders/merchantid/${this.creds.merchantId}/cancelled?offset=${offset}&limit=${limit}`;
-        const response = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
-        if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HB iptal listesi alınamadı: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}`);
-        const data = await response.json();
-        if (Array.isArray(data)) return data;
-        for (const k of ["items", "content", "data", "results", "orders"]) {
-            if (Array.isArray(data?.[k])) return data[k];
-        }
-        return [];
-    }
-
-    /**
-     * Kargoya verilen / teslim edilen paketler (son 1 ay). Doküman: limit max 50, limit-offset ile sayfalama.
-     * GET /packages/merchantid/{merchantId}/shipped  |  /delivered
-     */
     async getPackagesByState(state: "shipped" | "delivered", offset = 0, limit = 50): Promise<any[]> {
         await this.init();
         if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
@@ -603,14 +636,14 @@ export class HepsiburadaClient {
             invoiceLink: finalUrl,
             contentType: "pdf",
             arrangementDate: new Date().toISOString(),
-            serialNumber: "SRN",
+            serialNumber: "BRD",
             rowNumber: "1",
             invoices: [{
                 invoiceLink: finalUrl,
                 contentType: "pdf",
                 orderNumber: orderNumber,
                 arrangementDate: new Date().toISOString(),
-                serialNumber: "SRN",
+                serialNumber: "BRD",
                 rowNumber: "1"
             }]
         };

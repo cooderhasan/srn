@@ -1,11 +1,12 @@
 
 import { getTrendyolConfig, getTrendyolCargoAndAddresses } from "./actions";
+import Link from "next/link";
 import { TrendyolSettingsForm } from "./trendyol-settings-form";
 import { TrendyolSyncButton } from "./trendyol-sync-button";
 import { TrendyolOrderSyncButton } from "./trendyol-order-sync-button";
 import { TrendyolDataHelper } from "./trendyol-data-helper";
 import { TrendyolImportWizard } from "./trendyol-import-wizard";
-import { Box, MessageSquare } from "lucide-react";
+import { Box, MessageSquare, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default async function TrendyolIntegrationPage() {
@@ -22,7 +23,7 @@ export default async function TrendyolIntegrationPage() {
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-3xl font-bold tracking-tight">Trendyol Entegrasyonu</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Trendyol Entegrasyonu</h1>
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -43,24 +44,30 @@ export default async function TrendyolIntegrationPage() {
                         </ul>
 
                         <div className="flex flex-col gap-3">
-                            <a href="/admin/integrations/trendyol/products">
+                            <Link href="/admin/integrations/trendyol/products">
                                 <Button className="w-full bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-500/20">
                                     <Box className="w-4 h-4" />
                                     Trendyol Ürünlerini Yönet
                                 </Button>
-                            </a>
-                            <a href="/admin/integrations/trendyol/questions">
+                            </Link>
+                            <Link href="/admin/integrations/trendyol/questions">
                                 <Button variant="outline" className="w-full gap-2 border-orange-200 text-orange-700 hover:bg-orange-50">
                                     <MessageSquare className="w-4 h-4" />
                                     Müşteri Sorularını Yönet
                                 </Button>
-                            </a>
-                            <a href="/admin/integrations/trendyol/batches">
+                            </Link>
+                            <Link href="/admin/integrations/trendyol/operator-info">
+                                <Button variant="outline" className="w-full gap-2 border-orange-200 text-orange-700 hover:bg-orange-50">
+                                    <ShieldCheck className="w-4 h-4" />
+                                    Üretici / İthalatçı Bilgisi Raporu
+                                </Button>
+                            </Link>
+                            <Link href="/admin/integrations/trendyol/batches">
                                 <Button variant="outline" className="w-full gap-2 border-orange-200 text-orange-700 hover:bg-orange-50">
                                     <Box className="w-4 h-4" />
                                     İşlem (Batch) Geçmişini İzle
                                 </Button>
-                            </a>
+                            </Link>
                         </div>
                     </div>
 

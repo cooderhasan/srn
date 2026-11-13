@@ -1,7 +1,9 @@
+
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
+import { MarketplaceCategoryPicker } from "@/components/admin/marketplace-category-picker";
+import { useRouter } from "next/navigation";
 import { 
     Table, 
     TableBody, 
@@ -19,13 +21,30 @@ import {
     RefreshCcw, 
     AlertCircle, 
     CheckCircle2, 
+    ExternalLink,
     Box,
     History,
-    Layers,
-    FileText
+    Tag,
+    Edit3,
+    Save,
+    X,
+    Plus
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { sendProductToTrendyol, getTrendyolCategoryAttributes, enqueueTrendyolSync } from "../actions";
+import { pickVariantValue } from "@/lib/variant-value-match";
+import { getProductOperators } from "@/app/admin/(protected)/brands/actions";
+import { operatorValueFor } from "@/lib/operator-fields";
+import { Checkbox } from "@/components/ui/checkbox";
+import { 
+    sendProductToTrendyol, 
+    getTrendyolCategoryAttributes, 
+    enqueueTrendyolSync,
+    setTrendyolProductCategory,
+    setBulkTrendyolProductCategory,
+    verifyTrendyolProduct,
+    matchTrendyolProductsByBarcode
+} from "../actions";
 import {
     Dialog,
     DialogContent,
@@ -36,22 +55,100 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
+import { MarketplacePagination } from "@/components/admin/marketplace-pagination";
 import { AttributeSearchableSelect } from "./attribute-searchable-select";
 
 interface TrendyolProductListProps {
     initialProducts: any[];
+    pagination?: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+    };
 }
 
-export function TrendyolProductList({ initialProducts }: TrendyolProductListProps) {
+// --- Varyantlı ürün: Trendyol'da her varyant kendi renk (slicer) / beden (varianter) değeriyle gider ---
+const trNorm = (x: any) => String(x ?? "").toLocaleLowerCase("tr-TR").trim();
+
+/** Varyant bazında sorulacak özellikler: slicer (renk vb.), varianter (beden vb.) ve renk varyantı varsa Web Color */
+function getVariantAttrs(attrs: any[], hasColor: boolean) {
+    return attrs.filter((a: any) => a.slicer || a.varianter || (hasColor && trNorm(a.attribute?.name) === "web color"));
+}
+
+/** Sitedeki renk / beden yazısını Trendyol değerine eşleştirir (listede yoksa ve serbest metne izin varsa yazının kendisi) */
+function guessVariantValue(attr: any, v: any) {
+    const n = trNorm(attr.attribute?.name);
+    const isColor = n.includes("renk") || n.includes("color");
+    const isSize = !isColor && (attr.varianter || /beden|boyut|numara|ebat|size/.test(n));
+    const src = isColor ? v.color : isSize ? v.size : null;
+    if (!src) return undefined;
+    const values = attr.attributeValues || [];
+    const hit = pickVariantValue<any>(values, src, (x) => x.name);
+    if (hit) {
+        const num = Number(hit.id);
+        return isNaN(num) ? String(hit.name) : num;
+    }
+    return attr.allowCustom ? String(src) : undefined;
+}
+
+const variantLabel = (v: any) => [v.color, v.size].filter(Boolean).join(" / ") || v.barcode;
+
+/**
+ * Kategoride beden (varianter) özelliği yoksa (ör. Trendyol "Bisiklet Eldiveni") aynı rengin bedenleri ayırt edilemez;
+ * Trendyol "Aynı model kodu altında (Renk) değeri zaten mevcut" diye reddeder. Bu durumda beden renk alanına yazılır:
+ * "Siyah / Mavi - M". Her renk+beden ayrı kart olur, aynı model koduyla bağlı kalır.
+ */
+function sizeGoesIntoColor(vAttrs: any[], vRows: any[]) {
+    return !vAttrs.some((a: any) => a.varianter) && vRows.some((v: any) => v.size);
+}
+function isCustomColorSlicer(a: any) {
+    const n = trNorm(a.attribute?.name);
+    return a.slicer && a.allowCustom && (n.includes("renk") || n.includes("color"));
+}
+const colorWithSize = (v: any) => [v.color, v.size].filter(Boolean).join(" - ").slice(0, 50);
+
+export function TrendyolProductList({ initialProducts, pagination }: TrendyolProductListProps) {
     const [search, setSearch] = useState("");
     const [products, setProducts] = useState(initialProducts);
+
+    useEffect(() => {
+        setProducts(initialProducts);
+    }, [initialProducts]);
     const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+    const router = useRouter();
+    const [verifyingId, setVerifyingId] = useState<string | null>(null);
+    const [matching, setMatching] = useState(false);
+
+    // "Gönderilmedi" görünen ürünü barkoduyla Trendyol'da sorgular (Entegra vb. ile gönderilmiş olabilir)
+    const handleVerify = async (productId: string) => {
+        setVerifyingId(productId);
+        try {
+            const res = await verifyTrendyolProduct(productId);
+            if (!res.success) { toast.error(res.message); return; }
+            if (res.synced) toast.success(res.message);
+            else toast.warning(res.message);
+            if (res.synced) {
+                setProducts((prev: any[]) => prev.map((p: any) =>
+                    p.id === productId ? { ...p, trendyolProduct: { ...(p.trendyolProduct || {}), isSynced: true, lastSyncedAt: new Date() } } : p
+                ));
+            }
+        } finally {
+            setVerifyingId(null);
+        }
+    };
+
+    const handleMatchAll = async () => {
+        if (!confirm("Trendyol'daki tüm onaylı ürünler çekilip barkodu eşleşen ürünler 'Senkronize' işaretlenecek. Bu işlem 1-2 dakika sürebilir. Devam edilsin mi?")) return;
+        setMatching(true);
+        try {
+            const res = await matchTrendyolProductsByBarcode();
+            if (res.success) { toast.success(res.message, { duration: 60000 }); router.refresh(); }
+            else toast.error(res.message);
+        } finally {
+            setMatching(false);
+        }
+    };
     const [syncing, setSyncing] = useState(false);
     
     // Attribute Modal State
@@ -60,6 +157,8 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [categoryAttrs, setCategoryAttrs] = useState<any[]>([]);
     const [attrMappings, setAttrMappings] = useState<any>({});
+    // Varyant ID -> { özellik ID -> değer }
+    const [variantMappings, setVariantMappings] = useState<Record<string, Record<number, any>>>({});
     const [attrLoading, setAttrLoading] = useState(false);
 
     const handleBulkSync = async () => {
@@ -81,60 +180,172 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
         }
     };
 
-    const handleOpenWizard = async (product: any) => {
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [editingCatId, setEditingCatId] = useState<string | null>(null);
+    const [editCatValue, setEditCatValue] = useState("");
+    const [bulkCatModalOpen, setBulkCatModalOpen] = useState(false);
+    const [bulkCatValue, setBulkCatValue] = useState("");
+    const [savingCat, setSavingCat] = useState(false);
+
+    const handleSaveCatId = async (productId: string, valToSave?: string) => {
+        setSavingCat(true);
+        const targetVal = valToSave !== undefined ? valToSave : editCatValue;
+        const catNum = targetVal.trim() ? parseInt(targetVal.trim(), 10) : null;
+        if (targetVal.trim() && isNaN(catNum!)) {
+            toast.error("Geçerli bir sayısal Trendyol Kategori ID girin.");
+            setSavingCat(false);
+            return;
+        }
+        const res = await setTrendyolProductCategory(productId, catNum);
+        setSavingCat(false);
+        if (res.success) {
+            toast.success(res.message);
+            setProducts((prev) =>
+                prev.map((p) =>
+                    p.id === productId
+                        ? {
+                              ...p,
+                              trendyolProduct: {
+                                  ...(p.trendyolProduct || {}),
+                                  trendyolCategoryId: catNum,
+                              },
+                          }
+                        : p
+                )
+            );
+            setEditingCatId(null);
+            setEditCatValue("");
+        } else {
+            toast.error(res.message || "İşlem başarısız.");
+        }
+    };
+
+    const handleBulkCatAssign = async () => {
+        if (selectedIds.length === 0) {
+            toast.warning("Lütfen en az bir ürün seçin.");
+            return;
+        }
+        const catNum = parseInt(bulkCatValue.trim(), 10);
+        if (isNaN(catNum) || catNum <= 0) {
+            toast.warning("Lütfen geçerli bir Trendyol Kategori ID girin.");
+            return;
+        }
+        setSavingCat(true);
+        const res = await setBulkTrendyolProductCategory(selectedIds, catNum);
+        setSavingCat(false);
+        if (res.success) {
+            toast.success(res.message);
+            setProducts((prev) =>
+                prev.map((p) =>
+                    selectedIds.includes(p.id)
+                        ? {
+                              ...p,
+                              trendyolProduct: {
+                                  ...(p.trendyolProduct || {}),
+                                  trendyolCategoryId: catNum,
+                              },
+                          }
+                        : p
+                )
+            );
+            setBulkCatModalOpen(false);
+            setBulkCatValue("");
+            setSelectedIds([]);
+        } else {
+            toast.error(res.message || "İşlem başarısız.");
+        }
+    };
+
+    const handleOpenWizard = async (product: any, overrideCatId?: number) => {
+        const productOverrideCatId = product.trendyolProduct?.trendyolCategoryId;
         const mappedCats = product.categories.filter((c: any) => c.trendyolCategoryId !== null);
-        if (mappedCats.length === 0) {
-            toast.error("Önce kategoriyi Trendyol ile eşleştirmelisiniz.");
+
+        let catId: number | null = null;
+        if (overrideCatId) {
+            catId = overrideCatId;
+        } else if (productOverrideCatId) {
+            catId = productOverrideCatId;
+        } else if (mappedCats.length > 0) {
+            // Birden fazla eşleşmiş kategoride daha spesifik olan (alt kategori, yoksa sonuncu); sunucudaki kuralla aynı
+            const activeCat = mappedCats.length > 1
+                ? (mappedCats.find((c: any) => c.parentId) || mappedCats[mappedCats.length - 1])
+                : mappedCats[0];
+            catId = activeCat.trendyolCategoryId;
+        }
+
+        if (!catId) {
+            toast.error("Önce kategoriyi Trendyol ile eşleştirmelisiniz veya ürüne özel Trendyol Kategori ID girmelisiniz.");
             return;
         }
 
-        // Akıllı kategori seçimi: Birden fazla kategori varsa parentId'si olan (alt) kategoriyi önceliklendir
-        const defaultCat = mappedCats.length > 1
-            ? (mappedCats.find((c: any) => c.parentId) || mappedCats[mappedCats.length - 1])
-            : mappedCats[0];
-
-        const targetCatId = Number(defaultCat.trendyolCategoryId);
         setSelectedProduct(product);
-        setSelectedCategoryId(targetCatId);
+        setSelectedCategoryId(catId);
         setShowAttrModal(true);
         setAttrLoading(true);
-
-        // Otomatik varsayılan zorunlu alanlar
-        const initialMappings: any = {
-            1216: "Serin Motor", // Birincil İthalatçı Adı
-            1116: "Ustanıza danışınız." // Kullanım Talimatı
-        };
+        setAttrMappings({});
+        setVariantMappings({});
 
         try {
-            const res = await getTrendyolCategoryAttributes(targetCatId);
+            // Markaya tanımlı imalatçı / ithalatçı (ürün güvenliği alanları için); alınamazsa form yine açılır
+            const [res, ops] = await Promise.all([
+                getTrendyolCategoryAttributes(catId),
+                getProductOperators(product.id).catch(() => null),
+            ]);
             if (res.success) {
                 const attrs = res.data || [];
                 setCategoryAttrs(attrs);
 
-                // Zorunlu alanları otomatik akıllı doldur (Menşei, Beden, vb.)
-                attrs.forEach((attr: any) => {
-                    const attrId = attr.attribute?.id;
-                    const attrName = (attr.attribute?.name || "").toLowerCase();
-                    const vals = attr.attributeValues || [];
-
-                    if (attrId === 1192 || attrName.includes("menşei") || attrName.includes("mensei")) {
-                        const cnVal = vals.find((v: any) => v.name === "CN" || v.id === 10617300);
-                        const trVal = vals.find((v: any) => v.name === "TR");
-                        if (cnVal) initialMappings[attrId] = cnVal.id;
-                        else if (trVal) initialMappings[attrId] = trVal.id;
-                    } else if (attrId === 338 || attrName.includes("beden")) {
-                        const tekEbat = vals.find((v: any) => v.name.toLowerCase().includes("tek ebat") || v.id === 6821);
-                        if (tekEbat) initialMappings[attrId] = tekEbat.id;
-                    } else if (attrId === 1201 || attrName.includes("tamir")) {
-                        const tamirEdilmez = vals.find((v: any) => v.name.toLowerCase().includes("tamir edilmez") || v.id === 10621829);
-                        if (tamirEdilmez) initialMappings[attrId] = tamirEdilmez.id;
-                    } else if (attrId === 1209 || attrName.includes("ece")) {
-                        const gorselYok = vals.find((v: any) => v.name.toLowerCase().includes("görselinde bulunmuyor") || v.id === 10621791);
-                        if (gorselYok) initialMappings[attrId] = gorselYok.id;
+                // Smart pre-fill for known required attributes
+                const initialMap: any = {};
+                for (const a of attrs) {
+                    const attrId = a.attribute.id;
+                    if (a.attributeValues && a.attributeValues.length > 0) {
+                        // Tek Ebat (Beden - 338)
+                        if (attrId === 338) {
+                            const tekEbat = a.attributeValues.find((v: any) => v.name?.toLowerCase().includes("tek ebat"));
+                            if (tekEbat) initialMap[338] = tekEbat.id;
+                        }
+                        // Menşei (1192) - TR veya CN
+                        if (attrId === 1192) {
+                            const tr = a.attributeValues.find((v: any) => v.name === "TR" || v.name === "Türkiye");
+                            const cn = a.attributeValues.find((v: any) => v.name === "CN" || v.name === "Çin");
+                            if (tr) initialMap[1192] = tr.id;
+                            else if (cn) initialMap[1192] = cn.id;
+                        }
+                        // Web Color (348) - Siyah
+                        if (attrId === 348) {
+                            const siyah = a.attributeValues.find((v: any) => v.name?.toLowerCase() === "siyah");
+                            if (siyah) initialMap[348] = siyah.id;
+                        }
+                        // Renk (47)
+                        if (attrId === 47) {
+                            const siyah = a.attributeValues.find((v: any) => v.name?.toLowerCase() === "siyah");
+                            if (siyah) initialMap[47] = siyah.id;
+                        }
+                    } else if (attrId === 47) {
+                        // Renk (47)
+                        initialMap[47] = "Siyah";
+                    } else {
+                        // Üretici Adı / Adres / Mail, Birincil İthalatçı Adı / Adres / Mail: markadaki firmalardan
+                        const opVal = operatorValueFor(a.attribute?.name || "", ops);
+                        if (opVal) initialMap[attrId] = opVal;
                     }
-                });
+                }
+                setAttrMappings(initialMap);
 
-                setAttrMappings(initialMappings);
+                // Varyantlar: renk / beden değerleri sitedeki yazıdan otomatik eşleştirilir
+                const vRows = (product.variants || []).filter((v: any) => v.barcode);
+                const vAttrs = getVariantAttrs(attrs, vRows.some((v: any) => v.color));
+                const vMap: Record<string, Record<number, any>> = {};
+                const sizeInColor = sizeGoesIntoColor(vAttrs, vRows);
+                for (const v of vRows) {
+                    vMap[v.id] = {};
+                    for (const a of vAttrs) {
+                        const g = sizeInColor && isCustomColorSlicer(a) ? colorWithSize(v) : guessVariantValue(a, v);
+                        if (g !== undefined && g !== "") vMap[v.id][a.attribute.id] = g;
+                    }
+                }
+                setVariantMappings(vMap);
             } else {
                 toast.error(res.message);
                 setShowAttrModal(false);
@@ -147,60 +358,69 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
         }
     };
 
-    const handleCategoryChange = async (catId: number) => {
-        setSelectedCategoryId(catId);
-        setAttrLoading(true);
-        try {
-            const res = await getTrendyolCategoryAttributes(catId);
-            if (res.success) {
-                const attrs = res.data || [];
-                setCategoryAttrs(attrs);
-
-                // Mevcut mappings üzerine zorunlu alanları tekrar uygula
-                const newMappings = { ...attrMappings };
-                attrs.forEach((attr: any) => {
-                    const attrId = attr.attribute?.id;
-                    const attrName = (attr.attribute?.name || "").toLowerCase();
-                    const vals = attr.attributeValues || [];
-
-                    if (!newMappings[attrId]) {
-                        if (attrId === 1192 || attrName.includes("menşei")) {
-                            const cnVal = vals.find((v: any) => v.name === "CN" || v.id === 10617300);
-                            if (cnVal) newMappings[attrId] = cnVal.id;
-                        } else if (attrId === 338 || attrName.includes("beden")) {
-                            const tekEbat = vals.find((v: any) => v.name.toLowerCase().includes("tek ebat") || v.id === 6821);
-                            if (tekEbat) newMappings[attrId] = tekEbat.id;
-                        }
-                    }
-                });
-                setAttrMappings(newMappings);
-            } else {
-                toast.error(res.message);
-            }
-        } catch (e) {
-            toast.error("Kategori özellikleri yüklenemedi.");
-        } finally {
-            setAttrLoading(false);
-        }
-    };
-
     const handleSend = async () => {
         if (!selectedProduct) return;
         
-        // Convert mappings to Trendyol format
+        // Varyantlı ürün: her varyantın renk / beden değerleri
+        const vRows = (selectedProduct.variants || []).filter((v: any) => v.barcode);
+        const vAttrs = vRows.length > 0 ? getVariantAttrs(categoryAttrs, vRows.some((v: any) => v.color)) : [];
+        const vAttrIds = new Set(vAttrs.map((a: any) => String(a.attribute.id)));
+        let variantAttributes: Record<string, any[]> | undefined;
+        if (vRows.length > 0 && vAttrs.length > 0) {
+            variantAttributes = {};
+            const missing: string[] = [];
+            for (const v of vRows) {
+                const m = variantMappings[v.id] || {};
+                const list: any[] = [];
+                for (const a of vAttrs) {
+                    const val = m[a.attribute.id];
+                    if (val === undefined || val === null || val === "") {
+                        if (a.required || a.slicer || a.varianter) missing.push(`${variantLabel(v)}: ${a.attribute.name}`);
+                        continue;
+                    }
+                    list.push({
+                        attributeId: a.attribute.id,
+                        attributeValueId: typeof val === "number" ? val : undefined,
+                        customAttributeValue: typeof val === "string" ? val.trim() : undefined,
+                    });
+                }
+                variantAttributes[v.id] = list;
+            }
+            if (missing.length > 0) {
+                toast.error(`Varyant değerleri eksik: ${missing.slice(0, 6).join(", ")}${missing.length > 6 ? " ..." : ""}`);
+                return;
+            }
+            // Trendyol aynı model kodunda renk (slicer) + beden (varianter) değerleri aynı olan iki barkodu kabul etmiyor
+            const distinguishing = vAttrs.filter((a: any) => a.slicer || a.varianter);
+            const seen = new Map<string, string>();
+            const clashes: string[] = [];
+            for (const v of vRows) {
+                const key = distinguishing.map((a: any) => String(variantMappings[v.id]?.[a.attribute.id] ?? "")).join("|").toLocaleLowerCase("tr-TR");
+                if (seen.has(key)) clashes.push(`${seen.get(key)} ve ${variantLabel(v)}`);
+                else seen.set(key, variantLabel(v));
+            }
+            if (clashes.length > 0) {
+                toast.error(`Trendyol bu varyantları ayırt edemez (renk/beden değerleri aynı): ${clashes.slice(0, 4).join("; ")}. Renk alanına bedeni de yazın (ör. "Siyah / Mavi - M").`, { duration: 12000 });
+                return;
+            }
+        }
+
+        // Convert mappings to Trendyol format, filtering out empty values
+        // (varyant bazında sorulan özellikler ürün genelinden çıkarılır)
         const finalAttrs = Object.entries(attrMappings)
+            .filter(([id]) => !vAttrIds.has(String(id)))
             .filter(([_, val]) => val !== undefined && val !== "" && val !== null)
             .map(([id, val]) => ({
                 attributeId: Number(id),
                 attributeValueId: typeof val === "number" ? val : undefined,
-                customAttributeValue: typeof val === "string" ? val : undefined
+                customAttributeValue: typeof val === "string" ? val.trim() : undefined
             }));
 
         setLoadingProductId(selectedProduct.id);
         setShowAttrModal(false);
 
         try {
-            const res = await sendProductToTrendyol(selectedProduct.id, finalAttrs, selectedCategoryId || undefined);
+            const res = await sendProductToTrendyol(selectedProduct.id, finalAttrs, selectedCategoryId || undefined, variantAttributes);
             if (res.success) {
                 toast.success(res.message);
                 // Update local state
@@ -222,7 +442,7 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
     const handleQuickSync = async (product: any) => {
         setLoadingProductId(product.id);
         try {
-            const res = await sendProductToTrendyol(product.id, []);
+            const res = await sendProductToTrendyol(product.id, []); // Boş dizi gönderilirse sadece stok/fiyat güncellenir (veya mevcut verilerle tekrar yollanır)
             if (res.success) {
                 toast.success("Stok ve Fiyat başarıyla güncellendi.");
             } else {
@@ -235,56 +455,67 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
         }
     };
 
-    const filteredProducts = products.filter(p => 
+    const filteredProducts = pagination ? products : products.filter(p => 
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.sku?.toLowerCase().includes(search.toLowerCase()) ||
         p.barcode?.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Kategori özelliklerini Zorunlu / Temel ve Opsiyonel / GPSR olarak grupla
-    const { primaryAttrs, optionalGpsrAttrs } = useMemo(() => {
-        const primary: any[] = [];
-        const gpsr: any[] = [];
-
-        const gpsrKeywords = ["ithalatçı", "ithalatci", "üretici", "uretici", "yetkili", "adres", "posta", "telefon", "mail", "gpsr", "sorumlu"];
-
-        categoryAttrs.forEach(attr => {
-            const name = (attr.attribute?.name || "").toLowerCase();
-            const isGpsrRelated = gpsrKeywords.some(kw => name.includes(kw));
-
-            if (!attr.required && isGpsrRelated) {
-                gpsr.push(attr);
-            } else {
-                primary.push(attr);
-            }
-        });
-
-        return { primaryAttrs: primary, optionalGpsrAttrs: gpsr };
-    }, [categoryAttrs]);
-
     return (
         <div className="space-y-4">
+            {pagination ? (
+                <MarketplacePagination
+                    currentPage={pagination.currentPage}
+                    totalPages={pagination.totalPages}
+                    totalCount={pagination.totalCount}
+                    limit={pagination.limit}
+                />
+            ) : null}
+
             <div className="flex flex-col md:flex-row md:items-center gap-4 bg-white dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                        placeholder="Ürün adı, barkod veya SKU ara..." 
-                        className="pl-10 border-none bg-gray-50 dark:bg-gray-800/50 focus-visible:ring-orange-500"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                {!pagination && (
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input 
+                            placeholder="Ürün adı, barkod veya SKU ara..." 
+                            className="pl-10 border-none bg-gray-50 dark:bg-gray-800/50 focus-visible:ring-orange-500"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:ml-auto">
                     <Link href="/admin/integrations/trendyol/batches">
                         <Button 
                             variant="outline"
-                            className="border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 gap-2 h-10 px-4 rounded-xl shadow-sm transition-all active:scale-95"
+                            className="border-orange-200 text-orange-600 hover:bg-orange-50 gap-2 h-10 px-4 rounded-xl shadow-sm transition-all active:scale-95"
                         >
-                            <History className="w-4 h-4 text-gray-500" />
+                            <History className="w-4 h-4" />
                             <span className="hidden sm:inline">İşlem Geçmişi (Batch İzle)</span>
                             <span className="sm:hidden">Geçmiş</span>
                         </Button>
                     </Link>
+
+                    <Button
+                        variant="outline"
+                        onClick={handleMatchAll}
+                        disabled={matching}
+                        className="border-orange-200 text-orange-600 hover:bg-orange-50 gap-2 h-10 px-4 rounded-xl shadow-sm"
+                        title="Trendyol'da olan ama listede 'Gönderilmedi' görünen ürünleri barkoddan eşleştirir"
+                    >
+                        <RefreshCcw className={`w-4 h-4 ${matching ? "animate-spin" : ""}`} />
+                        {matching ? "Eşleştiriliyor..." : "Trendyol ile Eşleştir"}
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        onClick={() => setBulkCatModalOpen(!bulkCatModalOpen)}
+                        disabled={selectedIds.length === 0}
+                        className="border-purple-200 text-purple-700 hover:bg-purple-50 gap-2 h-10 px-4 rounded-xl shadow-sm transition-all"
+                    >
+                        <Tag className="w-4 h-4 text-purple-600" />
+                        <span>Toplu Kategori Ata ({selectedIds.length})</span>
+                    </Button>
 
                     <Button 
                         onClick={handleBulkSync} 
@@ -297,17 +528,80 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                         <span className="sm:hidden">Toplu Güncelle</span>
                     </Button>
 
-                    <Badge variant="outline" className="h-10 px-4 rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-950/20 dark:text-orange-400 border-orange-100 dark:border-orange-900 font-bold">
-                        {initialProducts.length} ÜRÜN
-                    </Badge>
+                    {pagination ? (
+                        <Badge variant="outline" className="h-10 px-4 rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-950/20 dark:text-orange-400 border-orange-100 dark:border-orange-900 font-bold">
+                            TOPLAM {pagination.totalCount.toLocaleString("tr-TR")} ÜRÜN
+                        </Badge>
+                    ) : (
+                        <Badge variant="outline" className="h-10 px-4 rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-950/20 dark:text-orange-400 border-orange-100 dark:border-orange-900 font-bold">
+                            {initialProducts.length} ÜRÜN
+                        </Badge>
+                    )}
                 </div>
             </div>
+
+            {/* Toplu Kategori Atama Paneli */}
+            {bulkCatModalOpen && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/50 rounded-xl p-4 shadow-sm">
+                    <Tag className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5 sm:mt-0" />
+                    <div className="flex-1 space-y-1">
+                        <p className="text-sm font-semibold text-purple-800 dark:text-purple-300">
+                            Seçili {selectedIds.length} ürüne Trendyol Kategori ID ata
+                        </p>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">
+                            Bu ürünler site kategorisi yerine doğrudan belirlediğiniz Trendyol kategorisine gönderilecektir.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <MarketplaceCategoryPicker
+                            marketplace="trendyol"
+                            className="w-full sm:w-64"
+                            onPick={(id, name) => { setBulkCatValue(id); toast.info(`Seçildi: ${name} (#${id}) — "Uygula"ya basın.`); }}
+                        />
+                        <Input
+                            placeholder="Trendyol Kategori ID (örn: 1045)"
+                            type="number"
+                            value={bulkCatValue}
+                            onChange={(e) => setBulkCatValue(e.target.value)}
+                            className="h-9 w-full sm:w-56 text-sm bg-white dark:bg-gray-800 font-mono"
+                        />
+                        <Button
+                            size="sm"
+                            onClick={handleBulkCatAssign}
+                            disabled={savingCat || !bulkCatValue.trim()}
+                            className="bg-purple-600 hover:bg-purple-700 text-white shrink-0"
+                        >
+                            {savingCat ? "Kaydediliyor..." : "Uygula"}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setBulkCatModalOpen(false)}
+                            className="shrink-0"
+                        >
+                            İptal
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             <div className="bg-white dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
                 <Table>
                     <TableHeader className="bg-gray-50/50 dark:bg-gray-800/50">
                         <TableRow>
-                            <TableHead className="w-[100px]">Görsel</TableHead>
+                            <TableHead className="w-[40px]">
+                                <Checkbox
+                                    checked={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
+                                    onCheckedChange={(checked) => {
+                                        if (checked) {
+                                            setSelectedIds(filteredProducts.map((p) => p.id));
+                                        } else {
+                                            setSelectedIds([]);
+                                        }
+                                    }}
+                                />
+                            </TableHead>
+                            <TableHead className="w-[80px]">Görsel</TableHead>
                             <TableHead>Ürün Bilgisi</TableHead>
                             <TableHead>Fiyat / Stok</TableHead>
                             <TableHead>Kategori / Marka</TableHead>
@@ -319,10 +613,26 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                         {filteredProducts.map((product) => {
                             const isSynced = !!product.trendyolProduct?.isSynced;
                             const mappedCat = product.categories.find((c: any) => c.trendyolCategoryId !== null);
+                            // Gönderilebilir mi: site kategorisi eşleşmesi ya da ürüne özel Trendyol kategorisi (Özel Kat).
+                            // Önceden sadece site eşleşmesine bakılıyordu; Özel Kat'lı ürünlerde düğme pasif kalıyordu.
+                            const hasTrendyolCat = !!product.trendyolProduct?.trendyolCategoryId || !!mappedCat;
                             const mappedBrand = product.brand?.trendyolBrandId !== null;
+                            const isSelected = selectedIds.includes(product.id);
 
                             return (
                                 <TableRow key={product.id} className="hover:bg-orange-50/10 transition-colors">
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={isSelected}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setSelectedIds((prev) => [...prev, product.id]);
+                                                } else {
+                                                    setSelectedIds((prev) => prev.filter((id) => id !== product.id));
+                                                }
+                                            }}
+                                        />
+                                    </TableCell>
                                     <TableCell>
                                         <div className="w-16 h-16 rounded-lg border bg-muted flex items-center justify-center overflow-hidden">
                                             {product.images?.[0] ? (
@@ -332,9 +642,9 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="whitespace-normal min-w-[220px]">
                                         <div className="flex flex-col">
-                                            <span className="font-semibold text-sm line-clamp-1">{product.name}</span>
+                                            <span className="font-semibold text-sm line-clamp-2 break-words" title={product.name}>{product.name}</span>
                                             <span className="text-xs text-muted-foreground font-mono">SKU: {product.sku || "-"}</span>
                                             <span className="text-[10px] text-muted-foreground">Barkod: {product.barcode || "-"}</span>
                                         </div>
@@ -350,26 +660,110 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-1 flex-wrap">
-                                                {mappedCat ? (
-                                                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 border-none text-[10px]">
-                                                        {mappedCat.name}
-                                                    </Badge>
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex items-center gap-1">
+                                                {product.trendyolProduct?.trendyolCategoryId ? (
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center gap-1">
+                                                            <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200 dark:bg-orange-950/40 dark:text-orange-300 border-orange-300 text-[10px] font-bold">
+                                                                Özel Kat: #{product.trendyolProduct.trendyolCategoryId}
+                                                            </Badge>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-5 w-5 text-muted-foreground hover:text-orange-600"
+                                                                onClick={() => {
+                                                                    setEditingCatId(product.id);
+                                                                    setEditCatValue(String(product.trendyolProduct.trendyolCategoryId));
+                                                                }}
+                                                                title="Özel kategoriyi düzenle / kaldır"
+                                                            >
+                                                                <Edit3 className="w-3 h-3" />
+                                                            </Button>
+                                                        </div>
+                                                        {mappedCat && (
+                                                            <span className="text-[9px] text-muted-foreground line-through whitespace-normal">
+                                                                Eşleşen: {mappedCat.name} (#{mappedCat.trendyolCategoryId})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : mappedCat ? (
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center gap-1">
+                                                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 border-none text-[10px]">
+                                                                {mappedCat.name}
+                                                            </Badge>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-5 w-5 text-gray-400 hover:text-orange-600"
+                                                                onClick={() => {
+                                                                    setEditingCatId(product.id);
+                                                                    setEditCatValue("");
+                                                                }}
+                                                                title="Bu ürüne özel Trendyol kategorisi ata"
+                                                            >
+                                                                <Plus className="w-3 h-3" />
+                                                            </Button>
+                                                        </div>
+                                                        <span className="text-[9px] text-muted-foreground font-mono mt-0.5">
+                                                            Trendyol ID: #{mappedCat.trendyolCategoryId}
+                                                        </span>
+                                                    </div>
                                                 ) : (
-                                                    <Badge variant="outline" className="text-red-500 border-red-200 text-[10px]">
-                                                        Kategori Eşleşmemiş
-                                                    </Badge>
-                                                )}
-                                                {product.categories.filter((c: any) => c.trendyolCategoryId !== null).length > 1 && (
-                                                    <Badge variant="outline" className="text-[9px] border-orange-200 text-orange-600 bg-orange-50/50">
-                                                        +{product.categories.filter((c: any) => c.trendyolCategoryId !== null).length - 1} Kategori
-                                                    </Badge>
+                                                    <div className="flex items-center gap-1">
+                                                        <Badge variant="outline" className="text-red-500 border-red-200 text-[10px]">
+                                                            Kategori Eşleşmemiş
+                                                        </Badge>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-5 w-5 text-orange-600 hover:bg-orange-50"
+                                                            onClick={() => {
+                                                                setEditingCatId(product.id);
+                                                                setEditCatValue("");
+                                                            }}
+                                                            title="Bu ürüne özel Trendyol kategorisi ata"
+                                                        >
+                                                            <Plus className="w-3 h-3" />
+                                                        </Button>
+                                                    </div>
                                                 )}
                                             </div>
+
+                                            {editingCatId === product.id && (
+                                                <div className="flex items-center gap-1 p-1 bg-white dark:bg-gray-800 border border-orange-300 rounded-md shadow-sm z-10" onClick={(e) => e.stopPropagation()}>
+                                                    {/* Adıyla arayıp seç: seçince hemen kaydedilir (alt kategori olmalı) */}
+                                                    <MarketplaceCategoryPicker marketplace="trendyol" className="w-52" autoFocus onPick={(id) => handleSaveCatId(product.id, id)} />
+                                                    <Input
+                                                        type="number"
+                                                        value={editCatValue}
+                                                        onChange={(e) => setEditCatValue(e.target.value)}
+                                                        placeholder="Kat ID"
+                                                        className="h-6 text-[10px] w-20 px-1 font-mono"
+                                                        autoFocus
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter") handleSaveCatId(product.id);
+                                                            if (e.key === "Escape") setEditingCatId(null);
+                                                        }}
+                                                    />
+                                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600 hover:bg-emerald-50" onClick={() => handleSaveCatId(product.id)} disabled={savingCat} title="Kaydet">
+                                                        <Save className="h-3 w-3" />
+                                                    </Button>
+                                                    {product.trendyolProduct?.trendyolCategoryId && (
+                                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500 hover:bg-red-50" onClick={() => handleSaveCatId(product.id, "")} disabled={savingCat} title="Özel kategoriyi sil (Site eşleşmesine dön)">
+                                                            <X className="h-3 w-3" />
+                                                        </Button>
+                                                    )}
+                                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400" onClick={() => setEditingCatId(null)}>
+                                                        <X className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center gap-1">
                                                 {mappedBrand ? (
-                                                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 border-none text-[10px]">
+                                                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-primary border-none text-[10px]">
                                                         {product.brand?.name}
                                                     </Badge>
                                                 ) : (
@@ -387,10 +781,18 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                                                 Senkronize
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-1 text-amber-500 text-xs font-medium">
-                                                <AlertCircle className="w-4 h-4" />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleVerify(product.id)}
+                                                disabled={verifyingId === product.id}
+                                                className="flex items-center gap-1 text-amber-500 text-xs font-medium hover:underline"
+                                                title="Trendyol'da barkodla kontrol etmek için tıklayın"
+                                            >
+                                                {verifyingId === product.id
+                                                    ? <RefreshCcw className="w-4 h-4 animate-spin" />
+                                                    : <AlertCircle className="w-4 h-4" />}
                                                 Gönderilmedi
-                                            </div>
+                                            </button>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
@@ -406,7 +808,7 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
                                                     </Button>
                                                 </>
                                             ) : (
-                                                <Button size="sm" className="gap-2 text-xs bg-orange-600 hover:bg-orange-700 text-white shadow-md shadow-orange-500/20" onClick={() => handleOpenWizard(product)} disabled={loadingProductId === product.id || !mappedCat || !mappedBrand}>
+                                                <Button size="sm" className="gap-2 text-xs bg-orange-600 hover:bg-orange-700 text-white shadow-md shadow-orange-500/20" onClick={() => handleOpenWizard(product)} disabled={loadingProductId === product.id || !hasTrendyolCat || !mappedBrand}>
                                                     <Send className="w-3 h-3" />
                                                     Trendyol'a Gönder
                                                 </Button>
@@ -422,167 +824,253 @@ export function TrendyolProductList({ initialProducts }: TrendyolProductListProp
 
             {/* ATTRIBUTE MAPPING DIALOG */}
             <Dialog open={showAttrModal} onOpenChange={setShowAttrModal}>
-                <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto rounded-3xl border-orange-100 dark:border-orange-900/30">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-base">
-                            <Box className="w-5 h-5 text-orange-500" />
-                            Trendyol V2 Ürün & Özellik Eşleştirme
-                        </DialogTitle>
-                        <DialogDescription className="text-xs">
-                            Trendyol V2 Seller Center standartlarına göre zorunlu ve kategori bazlı özellikleri tamamlayın.
-                        </DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="sm:max-w-[640px] w-[95vw] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-3xl border-orange-100 dark:border-orange-900/30 shadow-2xl">
+                    <div className="p-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+                                <Box className="w-5 h-5 text-orange-500 shrink-0" />
+                                Kategori Özelliklerini Eşleştir
+                            </DialogTitle>
+                            <DialogDescription className="text-xs sm:text-sm text-muted-foreground truncate">
+                                Trendyol "{selectedProduct?.categories?.find((c: any) => c.trendyolCategoryId === selectedCategoryId)?.name || selectedProduct?.categories?.[0]?.name}" kategorisi için zorunlu alanları doldurun.
+                            </DialogDescription>
+                        </DialogHeader>
+                    </div>
 
-                    {/* Çoklu Kategori Seçimi */}
-                    {selectedProduct && selectedProduct.categories.filter((c: any) => c.trendyolCategoryId !== null).length > 1 && (
-                        <div className="bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/40 p-3 rounded-2xl space-y-1.5 mt-2">
-                            <Label className="text-xs font-semibold text-orange-800 dark:text-orange-300 flex items-center gap-1.5">
-                                <Layers className="w-3.5 h-3.5 text-orange-500" />
-                                Hedef Trendyol Kategorisi ({selectedProduct.categories.filter((c: any) => c.trendyolCategoryId !== null).length} Eşleşen Kategori)
-                            </Label>
-                            <Select 
-                                value={selectedCategoryId?.toString()} 
-                                onValueChange={(val) => handleCategoryChange(Number(val))}
-                            >
-                                <SelectTrigger className="bg-white dark:bg-gray-900 border-orange-200 text-xs h-9">
-                                    <SelectValue placeholder="Kategori seçiniz..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {selectedProduct.categories
-                                        .filter((c: any) => c.trendyolCategoryId !== null)
-                                        .map((c: any) => (
-                                            <SelectItem key={c.trendyolCategoryId} value={c.trendyolCategoryId.toString()} className="text-xs">
-                                                {c.name} {c.parentId ? "(Alt Kategori)" : ""} - #{c.trendyolCategoryId}
-                                            </SelectItem>
-                                        ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4 min-w-0">
+                        {/* Çoklu Kategori Varsa Kullanıcıya Açıkça Seçim Sun (Tekilleştirilmiş) */}
+                        {(() => {
+                            if (!selectedProduct) return null;
+                            const validCats = (selectedProduct.categories || []).filter(
+                                (c: any) => c.trendyolCategoryId !== null && c.trendyolCategoryId !== undefined
+                            );
+                            const uniqueCats = Array.from(
+                                new Map(validCats.map((c: any) => [c.trendyolCategoryId, c])).values()
+                            );
 
-                    {attrLoading ? (
-                        <div className="py-12 flex flex-col items-center justify-center gap-3">
-                            <RefreshCcw className="w-10 h-10 animate-spin text-orange-500" />
-                            <p className="text-sm text-muted-foreground animate-pulse">Trendyol V2 kategori özellikleri yükleniyor...</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4 py-2">
-                            {categoryAttrs.length === 0 && (
-                                <div className="text-center py-2 bg-muted/40 rounded-xl">
-                                    <p className="text-xs text-muted-foreground">Bu kategori için özel nitelik bulunamadı. Aşağıdaki zorunlu bilgileri kontrol edip devam edebilirsiniz.</p>
+                            if (uniqueCats.length <= 1) return null;
+
+                            return (
+                                <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800 rounded-2xl space-y-1.5 shrink-0">
+                                    <Label className="text-xs font-semibold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                                        <span>Ürünün Birden Çok Kategorisi Var. Trendyol'a Gönderilecek Kategori:</span>
+                                    </Label>
+                                    <Select 
+                                        value={selectedCategoryId?.toString()} 
+                                        onValueChange={(val) => handleOpenWizard(selectedProduct, Number(val))}
+                                    >
+                                        <SelectTrigger className="w-full max-w-full bg-white dark:bg-gray-800 font-medium text-xs truncate">
+                                            <SelectValue className="truncate" />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-w-[calc(100vw-2rem)]">
+                                            {uniqueCats.map((c: any) => (
+                                                <SelectItem key={c.trendyolCategoryId} value={c.trendyolCategoryId.toString()} className="truncate">
+                                                    {c.name} (Trendyol ID: #{c.trendyolCategoryId})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            )}
+                            );
+                        })()}
 
-                            {/* Temel ve Kategori Bazlı Özellikler (Arama Kutulu Seçim) */}
-                            {primaryAttrs.map((attr: any) => {
-                                const attrId = attr.attribute.id;
-                                return (
-                                    <div key={attrId} className="space-y-1.5">
-                                        <Label className="flex items-center justify-between text-xs font-medium">
-                                            <span className="flex items-center gap-1">
-                                                {attr.attribute.name}
-                                                {attr.required && <span className="text-red-500 font-bold">*</span>}
-                                            </span>
-                                            {attr.attributeValues && attr.attributeValues.length > 0 && (
-                                                <span className="text-[10px] text-muted-foreground font-mono">
-                                                    {attr.attributeValues.length} seçenek
-                                                </span>
-                                            )}
-                                        </Label>
-                                        
-                                        <AttributeSearchableSelect
-                                            attributeId={attrId}
-                                            attributeName={attr.attribute.name}
-                                            required={attr.required}
-                                            allowCustom={attr.allowCustom}
-                                            values={attr.attributeValues || []}
-                                            value={attrMappings[attrId]}
-                                            onChange={(val) => setAttrMappings((prev: any) => ({ ...prev, [attrId]: val }))}
-                                            placeholder={`${attr.attribute.name} seçin veya arayın...`}
-                                        />
-                                    </div>
-                                );
-                            })}
-
-                            {/* Her zaman gereken zorunlu metin alanları */}
-                            <div className="border-t pt-3 mt-3">
-                                <p className="text-xs font-semibold text-orange-600 mb-2 flex items-center gap-1.5">
-                                    <FileText className="w-3.5 h-3.5" />
-                                    Zorunlu İthalatçı & Kullanım Bilgileri
-                                </p>
-                                
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div className="space-y-1.5">
-                                        <Label className="flex items-center gap-1 text-xs">
-                                            Birincil İthalatçı Adı <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input 
-                                            placeholder="Örn: Serin Motor" 
-                                            value={attrMappings[1216] || ""}
-                                            className="h-9 text-xs focus-visible:ring-orange-500"
-                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, 1216: e.target.value }))}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="flex items-center gap-1 text-xs">
-                                            Kullanım Talimatı / Uyarılar <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input 
-                                            placeholder="Örn: Ustanıza danışınız." 
-                                            value={attrMappings[1116] || ""}
-                                            className="h-9 text-xs focus-visible:ring-orange-500"
-                                            onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, 1116: e.target.value }))}
-                                        />
-                                    </div>
-                                </div>
+                        {attrLoading ? (
+                            <div className="py-12 flex flex-col items-center justify-center gap-3">
+                                <RefreshCcw className="w-10 h-10 animate-spin text-orange-500" />
+                                <p className="text-sm text-muted-foreground animate-pulse">Özellikler yükleniyor...</p>
                             </div>
+                        ) : (
+                            <div className="space-y-4 py-1">
+                                {(() => {
+                                    const vRows = (selectedProduct?.variants || []).filter((v: any) => v.barcode);
+                                    const vAttrs = vRows.length > 0 ? getVariantAttrs(categoryAttrs, vRows.some((v: any) => v.color)) : [];
+                                    const vAttrIds = new Set(vAttrs.map((a: any) => a.attribute.id));
+                                    const requiredAttrs = categoryAttrs.filter((a: any) => a.required && !vAttrIds.has(a.attribute.id));
+                                    const optionalAttrs = categoryAttrs.filter((a: any) => !a.required && !vAttrIds.has(a.attribute.id));
 
-                            {/* İsteğe Bağlı GPSR ve Ek Üretici Alanları (Akordiyon İçinde) */}
-                            {optionalGpsrAttrs.length > 0 && (
-                                <Accordion type="single" collapsible className="border rounded-2xl px-3 bg-gray-50/50 dark:bg-gray-800/30">
-                                    <AccordionItem value="gpsr-section" className="border-none">
-                                        <AccordionTrigger className="py-2.5 text-xs text-muted-foreground hover:text-foreground">
-                                            <span>GPSR & İthalatçı / Üretici Ek Bilgileri (İsteğe Bağlı - {optionalGpsrAttrs.length} Alan)</span>
-                                        </AccordionTrigger>
-                                        <AccordionContent className="pt-2 space-y-3">
-                                            {optionalGpsrAttrs.map((attr: any) => {
-                                                const attrId = attr.attribute.id;
-                                                return (
-                                                    <div key={attrId} className="space-y-1">
-                                                        <Label className="text-[11px] text-muted-foreground">
-                                                            {attr.attribute.name}
-                                                        </Label>
-                                                        <AttributeSearchableSelect
-                                                            attributeId={attrId}
-                                                            attributeName={attr.attribute.name}
-                                                            required={false}
-                                                            allowCustom={attr.allowCustom}
-                                                            values={attr.attributeValues || []}
-                                                            value={attrMappings[attrId]}
-                                                            onChange={(val) => setAttrMappings((prev: any) => ({ ...prev, [attrId]: val }))}
-                                                            placeholder={`${attr.attribute.name} girin veya seçin...`}
-                                                        />
+                                    const renderVariantField = (attr: any, v: any) => {
+                                        const attrId = attr.attribute.id;
+                                        const val = variantMappings[v.id]?.[attrId];
+                                        const setVal = (x: any) =>
+                                            setVariantMappings((prev) => ({ ...prev, [v.id]: { ...(prev[v.id] || {}), [attrId]: x } }));
+                                        const hasValues = attr.attributeValues && attr.attributeValues.length > 0;
+                                        return (
+                                            <div key={attrId} className="space-y-1 min-w-0">
+                                                <Label className="text-[11px] font-medium">
+                                                    {attr.attribute.name}
+                                                    <span className="ml-1 text-[10px] text-muted-foreground">
+                                                        {attr.slicer ? "(ayrı ürün kartı)" : attr.varianter ? "(seçenek)" : ""}
+                                                    </span>
+                                                </Label>
+                                                {hasValues ? (
+                                                    <AttributeSearchableSelect
+                                                        options={attr.attributeValues}
+                                                        value={val}
+                                                        placeholder={`${attr.attribute.name} seçin...`}
+                                                        searchPlaceholder={`${attr.attribute.name} ara...`}
+                                                        allowCustom={attr.allowCustom}
+                                                        onValueChange={(x) => {
+                                                            const num = Number(x);
+                                                            setVal(isNaN(num) ? x : num);
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <Input
+                                                        className="bg-white dark:bg-gray-800 h-9"
+                                                        placeholder="Değer girin..."
+                                                        value={typeof val === "string" ? val : ""}
+                                                        onChange={(e) => setVal(e.target.value)}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    };
+
+                                    const renderField = (attr: any) => {
+                                        const attrId = attr.attribute.id;
+                                        const hasValues = attr.attributeValues && attr.attributeValues.length > 0;
+
+                                        return (
+                                            <div key={attrId} className="space-y-1.5">
+                                                <Label className="flex items-center gap-1 text-xs font-medium">
+                                                    {attr.attribute.name}
+                                                    {attr.required ? (
+                                                        <span className="text-red-500 font-bold">*</span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-muted-foreground font-normal">(İsteğe bağlı)</span>
+                                                    )}
+                                                </Label>
+                                                
+                                                {hasValues ? (
+                                                    <AttributeSearchableSelect
+                                                        options={attr.attributeValues}
+                                                        value={attrMappings[attrId]}
+                                                        placeholder={`${attr.attribute.name} seçin veya arayın...`}
+                                                        searchPlaceholder={`${attr.attribute.name} ara... (yazdıkça filtreler)`}
+                                                        allowCustom={attr.allowCustom}
+                                                        onValueChange={(val, option) => {
+                                                            const num = Number(val);
+                                                            const finalVal = isNaN(num) ? val : num;
+                                                            
+                                                            // Web Color seçildiğinde Renk alanını da otomatik senkronize et
+                                                            if (attrId === 348 && option) {
+                                                                setAttrMappings((prev: any) => ({
+                                                                    ...prev,
+                                                                    348: finalVal,
+                                                                    47: option.name
+                                                                }));
+                                                            } else {
+                                                                setAttrMappings((prev: any) => ({ ...prev, [attrId]: finalVal }));
+                                                            }
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <Input 
+                                                        placeholder={attr.allowCustom ? "Değer girin..." : "Değer seçilemedi"} 
+                                                        className="bg-white dark:bg-gray-800"
+                                                        value={typeof attrMappings[attrId] === "string" ? attrMappings[attrId] : ""}
+                                                        onChange={(e) => setAttrMappings((prev: any) => ({ ...prev, [attrId]: e.target.value }))}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    };
+
+                                    return (
+                                        <>
+                                            {/* Varyantlar: her varyant kendi renk / beden değeri ve görselleriyle gider */}
+                                            {vRows.length > 0 && (
+                                                <div className="space-y-3 p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/70 dark:border-blue-900/40">
+                                                    <div className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                                                        Varyantlar ({vRows.length})
                                                     </div>
-                                                );
-                                            })}
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
-                            )}
-                        </div>
-                    )}
+                                                    {vAttrs.length > 0 && sizeGoesIntoColor(vAttrs, vRows) && (
+                                                        <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                                                            Bu Trendyol kategorisinde beden özelliği yok. Aynı rengin bedenleri ayırt edilebilsin diye beden renk alanına yazıldı (ör. &quot;Siyah / Mavi - M&quot;); müşteri seçenek listesinden renk-bedeni seçer.
+                                                        </p>
+                                                    )}
+                                                    {vAttrs.length === 0 ? (
+                                                        <p className="text-[11px] text-red-600">
+                                                            Bu Trendyol kategorisinde renk/beden gibi varyant özelliği yok; varyantlar Trendyol'da ayrı seçenek olarak görünmez. Ürüne özel kategori seçmeyi düşünün.
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80 -mt-1">
+                                                            Değerler sitedeki renk/beden yazısından otomatik eşleştirildi; boş kalanları seçin. Onaylı varyantlarda Trendyol renk/beden değiştirmeye izin vermez, onlara sadece stok/fiyat gider.
+                                                        </p>
+                                                    )}
+                                                    <div className="space-y-2">
+                                                        {vRows.map((v: any) => (
+                                                            <div key={v.id} className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-gray-900 p-3 space-y-2">
+                                                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                                    <span className="font-semibold">{variantLabel(v)}</span>
+                                                                    <span className="font-mono text-[10px] text-gray-500">{v.barcode}</span>
+                                                                    <span className="text-[10px] text-gray-500">
+                                                                        {(v.images || []).length > 0 ? `${v.images.length} varyant görseli` : "ürünün görselleri"}
+                                                                    </span>
+                                                                    {v.isActive === false && <span className="text-[10px] text-red-500">pasif</span>}
+                                                                </div>
+                                                                {vAttrs.length > 0 && (
+                                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                        {vAttrs.map((a: any) => renderVariantField(a, v))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
 
-                    <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+                                            {/* Zorunlu Özellikler */}
+                                            {requiredAttrs.length > 0 ? (
+                                                <div className="space-y-3 p-4 rounded-2xl bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-900/40">
+                                                    <div className="flex items-center gap-2 text-sm font-semibold text-orange-700 dark:text-orange-400">
+                                                        <AlertCircle className="w-4 h-4 shrink-0" />
+                                                        <span>Zorunlu Alanlar ({requiredAttrs.length} adet)</span>
+                                                    </div>
+                                                    <p className="text-[11px] text-orange-600/80 dark:text-orange-400/80 -mt-1">
+                                                        Trendyol ürün onayının başarıyla tamamlanması için bu alanları seçiniz.
+                                                    </p>
+                                                    <div className="space-y-3 pt-1">
+                                                        {requiredAttrs.map(renderField)}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-green-800 text-xs flex items-center gap-2">
+                                                    <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                                                    <span>Bu kategori için özel zorunlu alan bulunmamaktadır.</span>
+                                                </div>
+                                            )}
+
+                                            {/* İsteğe Bağlı Özellikler (İthalatçı, Üretici vb.) */}
+                                            {optionalAttrs.length > 0 && (
+                                                <details className="group border border-gray-200 dark:border-gray-800 rounded-2xl p-3.5 bg-gray-50/50 dark:bg-gray-900/30">
+                                                    <summary className="cursor-pointer text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center justify-between select-none">
+                                                        <span className="flex items-center gap-1.5">
+                                                            İsteğe Bağlı Ek Bilgiler ({optionalAttrs.length} adet - İthalatçı vb.)
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
+                                                    </summary>
+                                                    <p className="text-[11px] text-muted-foreground mt-2 mb-3">
+                                                        Bu alanlar zorunlu değildir. Boş bırakırsanız ürününüz yine de sorunsuz olarak Trendyol'a iletilir.
+                                                    </p>
+                                                    <div className="space-y-3 pt-1">
+                                                        {optionalAttrs.map(renderField)}
+                                                    </div>
+                                                </details>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 px-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/60 shrink-0 flex items-center justify-end gap-2">
                         <Button variant="ghost" onClick={() => setShowAttrModal(false)}>İptal</Button>
-                        <Button 
-                            className="bg-orange-600 hover:bg-orange-700 text-white shadow-md shadow-orange-500/20" 
-                            onClick={handleSend} 
-                            disabled={loadingProductId !== null || attrLoading}
-                        >
-                            {loadingProductId ? "Gönderiliyor..." : "Trendyol V2'ye Gönder"}
+                        <Button className="bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm" onClick={handleSend} disabled={loadingProductId !== null}>
+                            {loadingProductId ? "Gönderiliyor..." : "Verileri Gönder"}
                         </Button>
-                    </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

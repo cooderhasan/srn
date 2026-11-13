@@ -183,6 +183,11 @@ model Brand {
   isActive  Boolean   @default(true)
   trendyolBrandId Int?
   n11BrandId      Int?
+  // Pazaryerlerine gönderilen yasal iktisadi işletmeci bilgileri (ürün güvenliği): bu markanın imalatçısı / ithalatçısı
+  manufacturerFirmId String?
+  manufacturerFirm   OperatorFirm? @relation("BrandManufacturer", fields: [manufacturerFirmId], references: [id], onDelete: SetNull)
+  importerFirmId     String?
+  importerFirm       OperatorFirm? @relation("BrandImporter", fields: [importerFirmId], references: [id], onDelete: SetNull)
   hbBrandId       String?
   products  Product[]
   createdAt DateTime  @default(now())
@@ -285,6 +290,7 @@ model ProductVariant {
   barcode         String?     // Varyant özel Barkod
   stock           Int         @default(0)
   priceAdjustment Decimal     @default(0) @db.Decimal(12, 2) // Fiyat farkı (+/-)
+  images          String[]    @default([]) // Bu varyanta ait görseller (ürün görsellerinden seçilir; boşsa ürünün tüm görselleri)
   isActive        Boolean     @default(true)
   orderItems      OrderItem[]
   cartItems       CartItem[]
@@ -535,6 +541,7 @@ model TrendyolConfig {
 model TrendyolProduct {
   id             String   @id @default(cuid())
   productId      String
+  trendyolCategoryId Int? // Ürüne özel Trendyol Kategori ID (site kategorisinden bağımsız)
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   barcode        String   // Barker
@@ -558,6 +565,8 @@ model N11Config {
   id             String   @id @default(cuid())
   apiKey         String
   apiSecret      String
+  shipmentTemplate String   @default("Karaaslan")
+  integratorName   String   @default("SRN_Entegrasyon")
   isActive       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -568,6 +577,7 @@ model N11Config {
 model N11Product {
   id             String   @id @default(cuid())
   productId      String
+  n11CategoryId  Int?     // Ürüne özel N11 Kategori ID (site kategorisinden bağımsız)
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   n11Id          String?  // N11 Product ID
@@ -617,6 +627,9 @@ model HepsiburadaConfig {
 model HepsiburadaProduct {
   id             String   @id @default(cuid())
   productId      String
+  hbCategoryId   String?  // Ürüne özel Hepsiburada Kategori ID (site kategorisinden bağımsız)
+  batchRequestId String?  // Son ürün gönderiminin HB trackingId'si
+  batchStatus    String?  // PENDING, SUCCESS, FAILED
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
   hbSku          String?  // Hepsiburada SKU
@@ -809,4 +822,18 @@ model PasswordResetToken {
   @@index([email])
   @@index([token])
   @@map("password_reset_tokens")
+}
+
+/// İmalatçı / ithalatçı firma kartı. Rol firmada değil markada seçilir (aynı firma bir markada imalatçı, diğerinde ithalatçı olabilir)
+model OperatorFirm {
+  id             String   @id @default(cuid())
+  name           String
+  address        String
+  email          String
+  manufacturerOf Brand[]  @relation("BrandManufacturer")
+  importerOf     Brand[]  @relation("BrandImporter")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("operator_firms")
 }

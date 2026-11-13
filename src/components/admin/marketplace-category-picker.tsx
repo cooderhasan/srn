@@ -1,0 +1,301 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { Input } from "@/components/ui/input";
+import { Loader2, Search, X } from "lucide-react";
+
+export type PickerMarketplace = "trendyol" | "n11" | "hepsiburada";
+
+type Cat = { id: string; name: string; path?: string; leaf: boolean };
+
+/** Pazaryeri kategori listesi (HB hariç) bir kez yüklenir, sayfa boyunca bellekte tutulur */
+const listCache = new Map<PickerMarketplace, Promise<Cat[]>>();
+
+/** "A > B" adlı bir kategori, "A > B > C" diye başlayan başka bir kategori varsa üst kategoridir (ürün açılamaz) */
+function markLeaves(items: { id: string; name: string }[]): Cat[] {
+    const names = items.map((i) => i.name);
+    return items.map((i) => ({
+        id: i.id,
+        name: i.name,
+        leaf: !names.some((n) => n !== i.name && n.startsWith(`${i.name} > `)),
+    }));
+}
+
+async function loadList(m: PickerMarketplace): Promise<Cat[]> {
+    const norm = (arr: any[]) => (arr || []).map((c: any) => ({ id: String(c.id ?? c.categoryId), name: String(c.name ?? "") })).filter((c) => c.id && c.name);
+    switch (m) {
+        case "trendyol": {
+            const { getTrendyolCategories } = await import("@/app/admin/(protected)/integrations/trendyol/actions");
+            const r: any = await getTrendyolCategories();
+            if (!r?.success) throw new Error(r?.message || "Trendyol kategorileri alınamadı.");
+            return markLeaves(norm(r.data));
+        }
+        case "n11": {
+            const { getFlatN11Categories } = await import("@/app/admin/(protected)/integrations/n11/actions");
+            const r: any = await getFlatN11Categories();
+            if (!r?.success) throw new Error(r?.message || "N11 kategorileri alınamadı.");
+            return markLeaves(norm(r.categories));
+        }
+        default:
+            return [];
+    }
+}
+
+function getList(m: PickerMarketplace) {
+    if (!listCache.has(m)) {
+        const p = loadList(m).catch((e) => {
+            listCache.delete(m); // hata olursa sonraki denemede tekrar yüklensin
+            throw e;
+        });
+        listCache.set(m, p);
+    }
+    return listCache.get(m)!;
+}
+
+async function searchCats(m: PickerMarketplace, q: string): Promise<Cat[]> {
+    if (m === "hepsiburada") {
+        const { searchHepsiburadaCategories } = await import("@/app/admin/(protected)/integrations/hepsiburada/actions");
+        const r: any = await searchHepsiburadaCategories(q);
+        if (!r?.success) throw new Error(r?.message || "HB kategorileri alınamadı.");
+        return (r.data || []).map((c: any) => ({
+            id: String(c.categoryId),
+            name: String(c.name),
+            path: Array.isArray(c.paths) ? c.paths.join(" > ") : undefined,
+            leaf: c.leaf !== false,
+        }));
+    }
+    const all = await getList(m);
+    const terms = q.toLocaleLowerCase("tr-TR").split(/\s+/).filter(Boolean);
+    return all
+        .filter((c) => {
+            const s = `${c.name} ${c.id}`.toLocaleLowerCase("tr-TR");
+            return terms.every((t) => s.includes(t));
+        })
+        .sort((a, b) => Number(b.leaf) - Number(a.leaf))
+        .slice(0, 50);
+}
+
+/**
+ * Pazaryeri kategorisini ADIYLA arayıp seçme (önceden ürün satırlarında sadece ID yazılabiliyordu).
+ * Ürün sadece en alt kategoriye açılabildiği için üst kategoriler görünür ama seçilemez.
+ */
+export function MarketplaceCategoryPicker({
+    marketplace,
+    onPick,
+    placeholder = "Kategoriyi adıyla ara...",
+    className = "",
+    autoFocus = false,
+}: {
+    marketplace: PickerMarketplace;
+    onPick: (id: string, name: string) => void;
+    placeholder?: string;
+    className?: string;
+    autoFocus?: boolean;
+}) {
+    const [q, setQ] = useState("");
+    const [results, setResults] = useState<Cat[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const boxRef = useRef<HTMLDivElement>(null);
+    const [listPos, setListPos] = useState<CSSProperties | null>(null);
+    const hasResults = results.length > 0;
+
+    // Sonuç listesi sayfanın üstünde açılır: tablo az satırlıyken (arama, filtre) içinde açılan liste kesiliyordu.
+    // Pencere (dialog) içinde yerinde kalır; dışarı taşınırsa tıklama pencereyi kapatır.
+    useLayoutEffect(() => {
+        const box = boxRef.current;
+        if (!hasResults || !box || box.closest('[role="dialog"]')) {
+            setListPos(null);
+            return;
+        }
+        const place = () => {
+            const r = box.getBoundingClientRect();
+            const width = Math.min(680, window.innerWidth * 0.9);
+            const below = window.innerHeight - r.bottom;
+            const up = below < 340 && r.top > below;
+            setListPos({
+                position: "fixed",
+                width,
+                maxHeight: Math.min(400, (up ? r.top : below) - 16),
+                left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+                ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
+            });
+        };
+        place();
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+        return () => {
+            window.removeEventListener("scroll", place, true);
+            window.removeEventListener("resize", place);
+        };
+    }, [hasResults]);
+
+    const search = (v: string) => {
+        setQ(v);
+        setError("");
+        if (v.trim().length < 2) {
+            setResults([]);
+            return;
+        }
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(async () => {
+            setLoading(true);
+            try {
+                setResults(await searchCats(marketplace, v.trim()));
+            } catch (e: any) {
+                setError(e?.message || "Kategoriler alınamadı.");
+            } finally {
+                setLoading(false);
+            }
+        }, 300);
+    };
+
+    const resultList = hasResults && (
+        <div
+            style={listPos ?? undefined}
+            className={`${listPos ? "z-[100]" : "absolute z-50 mt-1 w-[min(440px,90vw)]"} max-h-60 overflow-y-auto rounded-md border border-orange-200 bg-white shadow-xl dark:bg-gray-800`}
+        >
+            {results.map((c) => (
+                <button
+                    key={c.id}
+                    type="button"
+                    disabled={!c.leaf}
+                    onClick={() => {
+                        onPick(c.id, c.name);
+                        setQ("");
+                        setResults([]);
+                    }}
+                    className={`flex w-full items-start justify-between gap-2 border-b border-gray-100 px-2.5 py-1.5 text-left last:border-0 dark:border-gray-700 ${c.leaf ? "hover:bg-orange-50 dark:hover:bg-orange-900/20" : "cursor-not-allowed opacity-50"}`}
+                    title={c.leaf ? "" : "Üst kategori: ürün açılamaz, alt kategorisini seçin"}
+                >
+                    <span className="flex flex-col">
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</span>
+                        {c.path && <span className="text-xs font-medium text-gray-600 line-clamp-1 dark:text-gray-300">{c.path}</span>}
+                        {!c.leaf && <span className="text-[10px] text-red-500">Üst kategori — alt kategorisini seçin</span>}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs font-medium text-orange-700">#{c.id}</span>
+                </button>
+            ))}
+        </div>
+    );
+
+    return (
+        <div ref={boxRef} className={`relative ${className}`}>
+            <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-gray-400" />
+            <Input
+                value={q}
+                onChange={(e) => search(e.target.value)}
+                placeholder={placeholder}
+                className="h-8 pl-7 text-xs"
+                autoFocus={autoFocus}
+            />
+            {loading && <Loader2 className="absolute right-2 top-2 h-3.5 w-3.5 animate-spin text-orange-500" />}
+            {error && <p className="mt-1 text-[10px] text-red-500">{error}</p>}
+            {!loading && q.trim().length >= 2 && results.length === 0 && !error && (
+                <p className="mt-1 text-[10px] text-gray-500">Sonuç yok.</p>
+            )}
+            {listPos && resultList ? createPortal(resultList, document.body) : resultList}
+        </div>
+    );
+}
+
+/** Kayıtlı ID'nin adını önbellekteki listeden bulur (HB'de liste olmadığı için sadece ID gösterilir) */
+async function findCategoryName(m: PickerMarketplace, id: string): Promise<string> {
+    if (m === "hepsiburada") return "";
+    const all = await getList(m);
+    return all.find((c) => c.id === id)?.name || "";
+}
+
+/**
+ * Kategoriler sayfası için: mevcut eşleşmeyi gösterir, adıyla arayıp seçtirir, temizletir,
+ * gerekirse ID elle de yazılabilir.
+ */
+export function MarketplaceCategoryField({
+    marketplace,
+    value,
+    onChange,
+    placeholder,
+}: {
+    marketplace: PickerMarketplace;
+    value?: string | number | null;
+    onChange: (id: string | undefined) => void;
+    placeholder?: string;
+}) {
+    const current = value === undefined || value === null || value === "" ? "" : String(value);
+    const [name, setName] = useState("");
+    const [manual, setManual] = useState(false);
+    const [manualValue, setManualValue] = useState("");
+
+    useEffect(() => {
+        let alive = true;
+        setName("");
+        if (!current) return;
+        findCategoryName(marketplace, current)
+            .then((n) => alive && setName(n))
+            .catch(() => {});
+        return () => {
+            alive = false;
+        };
+    }, [marketplace, current]);
+
+    const applyManual = () => {
+        const v = manualValue.trim();
+        if (!v) return;
+        onChange(v);
+        setManual(false);
+        setManualValue("");
+    };
+
+    return (
+        <div className="space-y-2">
+            {current && (
+                <div className="flex items-center gap-2 rounded-lg bg-orange-100 p-2 text-sm dark:bg-orange-900/30">
+                    <span className="flex-1 truncate font-medium text-orange-800 dark:text-orange-300">
+                        {name ? `✓ ${name}` : "Mevcut ID"}
+                    </span>
+                    <span className="font-mono text-xs text-orange-600">#{current}</span>
+                    <button type="button" onClick={() => onChange(undefined)} className="text-orange-500 hover:text-red-600" title="Eşleştirmeyi kaldır">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
+            <MarketplaceCategoryPicker
+                marketplace={marketplace}
+                placeholder={placeholder ?? "Kategori adıyla arayın (min. 2 karakter)..."}
+                onPick={(id, n) => {
+                    onChange(id);
+                    setName(n);
+                }}
+            />
+            {manual ? (
+                <div className="flex gap-2">
+                    <Input
+                        value={manualValue}
+                        onChange={(e) => setManualValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                applyManual();
+                            }
+                        }}
+                        placeholder="Kategori ID"
+                        className="h-8 font-mono text-xs"
+                        autoFocus
+                    />
+                    <button type="button" onClick={applyManual} className="rounded-md bg-orange-500 px-3 text-xs text-white hover:bg-orange-600">
+                        Ekle
+                    </button>
+                    <button type="button" onClick={() => setManual(false)} className="px-2 text-xs text-gray-500 hover:text-gray-700">
+                        Vazgeç
+                    </button>
+                </div>
+            ) : (
+                <button type="button" onClick={() => setManual(true)} className="text-[10px] text-gray-500 underline hover:text-orange-600">
+                    ID'yi elle yaz
+                </button>
+            )}
+        </div>
+    );
+}

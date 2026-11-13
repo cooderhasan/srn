@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
 import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin-guard";
 
 function slugify(text: string): string {
     return text
@@ -27,7 +28,8 @@ export async function getBrands() {
     });
 }
 
-export async function createBrand(data: { name: string; logoUrl?: string; trendyolBrandId?: number | null; n11BrandId?: number | null; hbBrandId?: string | null }) {
+export async function createBrand(data: { name: string; logoUrl?: string; trendyolBrandId?: number | null; n11BrandId?: number | null; hbBrandId?: string | null; manufacturerFirmId?: string | null; importerFirmId?: string | null }) {
+    await requireAdmin();
     await prisma.brand.create({
         data: {
             name: data.name,
@@ -36,13 +38,18 @@ export async function createBrand(data: { name: string; logoUrl?: string; trendy
             trendyolBrandId: data.trendyolBrandId ?? null,
             n11BrandId: data.n11BrandId ?? null,
             hbBrandId: data.hbBrandId ?? null,
+            manufacturerFirmId: data.manufacturerFirmId || null,
+            importerFirmId: data.importerFirmId || null,
         },
     });
     revalidatePath("/admin/brands");
 }
 
-export async function updateBrand(id: string, data: { name?: string; logoUrl?: string; isActive?: boolean; trendyolBrandId?: number | null; n11BrandId?: number | null; hbBrandId?: string | null }) {
-    const updateData: { name?: string; slug?: string; logoUrl?: string; isActive?: boolean; trendyolBrandId?: number | null; n11BrandId?: number | null; hbBrandId?: string | null } = { ...data };
+export async function updateBrand(id: string, data: { name?: string; logoUrl?: string; isActive?: boolean; trendyolBrandId?: number | null; n11BrandId?: number | null; hbBrandId?: string | null; manufacturerFirmId?: string | null; importerFirmId?: string | null }) {
+    await requireAdmin();
+    const updateData: any = { ...data };
+    if (data.manufacturerFirmId !== undefined) updateData.manufacturerFirmId = data.manufacturerFirmId || null;
+    if (data.importerFirmId !== undefined) updateData.importerFirmId = data.importerFirmId || null;
     if (data.name) {
         updateData.slug = slugify(data.name);
     }
@@ -54,8 +61,56 @@ export async function updateBrand(id: string, data: { name?: string; logoUrl?: s
 }
 
 export async function deleteBrand(id: string) {
+    await requireAdmin();
     await prisma.brand.delete({
         where: { id },
     });
     revalidatePath("/admin/brands");
+}
+
+// --- İktisadi işletmeci firmaları (imalatçı / ithalatçı) ---
+
+export async function getOperatorFirms() {
+    await requireAdmin();
+    return prisma.operatorFirm.findMany({
+        orderBy: { name: "asc" },
+        include: { _count: { select: { manufacturerOf: true, importerOf: true } } },
+    });
+}
+
+function cleanFirm(data: { name: string; address: string; email: string }) {
+    const name = (data.name || "").trim();
+    const address = (data.address || "").trim();
+    const email = (data.email || "").trim();
+    if (!name || !address || !email) throw new Error("Ünvan, adres ve e-posta zorunludur.");
+    return { name, address, email };
+}
+
+export async function saveOperatorFirm(id: string | null, data: { name: string; address: string; email: string }) {
+    await requireAdmin();
+    try {
+        const clean = cleanFirm(data);
+        const firm = id
+            ? await prisma.operatorFirm.update({ where: { id }, data: clean })
+            : await prisma.operatorFirm.create({ data: clean });
+        revalidatePath("/admin/brands");
+        return { success: true, firm };
+    } catch (e: any) {
+        return { success: false, message: e?.message || "Firma kaydedilemedi." };
+    }
+}
+
+export async function deleteOperatorFirm(id: string) {
+    await requireAdmin();
+    // Markalardaki bağlantı onDelete: SetNull ile boşalır
+    await prisma.operatorFirm.delete({ where: { id } });
+    revalidatePath("/admin/brands");
+    return { success: true };
+}
+
+/** Pazaryeri gönderim formları için: ürünün markasına tanımlı imalatçı / ithalatçı */
+export async function getProductOperators(productId: string) {
+    await requireAdmin();
+    const { productOperatorsOf } = await import("@/lib/operator-firms");
+    return productOperatorsOf(productId);
 }

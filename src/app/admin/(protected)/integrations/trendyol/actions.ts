@@ -1,8 +1,12 @@
 
 "use server";
+import { requireAdmin } from "@/lib/admin-guard";
+import { fillEmptyPriceOnSend } from "@/lib/marketplace-price-send";
 
 import { prisma } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
+import { isListingLive, formatListingReport } from "@/lib/marketplace-report";
 import { TrendyolClient } from "@/services/trendyol/api";
 import { generateSlug } from "@/lib/helpers";
 import { getSiteSettings } from "@/app/admin/(protected)/settings/actions";
@@ -11,6 +15,7 @@ import { getSiteSettings } from "@/app/admin/(protected)/settings/actions";
 // due to the dev server lock, but the runtime works if DB schema is updated.
 
 export async function getTrendyolConfig() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst();
         return { success: true, data: config };
@@ -20,6 +25,7 @@ export async function getTrendyolConfig() {
 }
 
 export async function saveTrendyolConfig(prevState: any, formData: FormData) {
+    await requireAdmin();
     try {
         const supplierId = formData.get("supplierId") as string;
         const apiKey = formData.get("apiKey") as string;
@@ -57,6 +63,7 @@ export async function saveTrendyolConfig(prevState: any, formData: FormData) {
 }
 
 export async function testTrendyolConnection() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst();
         if (!config) return { success: false, message: "Ayarlar bulunamadı." };
@@ -82,6 +89,7 @@ export async function testTrendyolConnection() {
 import { addMarketplaceSyncJob } from "@/lib/queue/producer";
 
 export async function enqueueTrendyolSync() {
+    await requireAdmin();
     try {
         await addMarketplaceSyncJob({ marketplace: "trendyol", type: "products" });
         return { success: true, message: "Senkronizasyon işlemi kuyruğa alındı. Arka planda işlenecektir." };
@@ -104,6 +112,7 @@ export async function enqueueTrendyolOrderSync() {
 }
 
 export async function syncProductsToTrendyol(productIds?: string[], type: "products" | "prices" | "stocks" = "products") {
+    await requireAdmin();
     try {
         // 1. Check Config
         const config = await (prisma as any).trendyolConfig.findFirst({
@@ -138,7 +147,8 @@ export async function syncProductsToTrendyol(productIds?: string[], type: "produ
             include: {
                 brand: true,
                 categories: true,
-                variants: true
+                variants: true,
+                trendyolProduct: true
             }
         });
 
@@ -191,9 +201,15 @@ export async function syncProductsToTrendyol(productIds?: string[], type: "produ
         const items: any[] = [];
 
         for (const p of products) {
-            // Priority for Category: our mapped Category ID > Fallback
-            const mappedCategory = (p as any).categories.find((c: any) => c.trendyolCategoryId !== null);
-            const trendyolCatId = mappedCategory ? mappedCategory.trendyolCategoryId : 1234;
+            // Priority for Category: 1) Ürüne özel trendyolCategoryId → 2) Site kategori eşleşmesi → 3) Fallback
+            const productOverrideCatId = (p as any).trendyolProduct?.trendyolCategoryId;
+            let trendyolCatId;
+            if (productOverrideCatId) {
+                trendyolCatId = productOverrideCatId;
+            } else {
+                const mappedCategory = (p as any).categories.find((c: any) => c.trendyolCategoryId !== null);
+                trendyolCatId = mappedCategory ? mappedCategory.trendyolCategoryId : 1234;
+            }
 
             // Brand Mapping
             const brandId = (p as any).brand?.trendyolBrandId || 1795; // Default "Diğer" if not found? Need real check
@@ -355,6 +371,7 @@ export async function syncProductsToTrendyol(productIds?: string[], type: "produ
 }
 
 export async function getTrendyolBrands(search: string = "") {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon yok." };
@@ -382,7 +399,7 @@ export async function getTrendyolBrands(search: string = "") {
     }
 }
 
-export async function getTrendyolCategories() {
+async function fetchTrendyolCategoriesLive() {
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon yok." };
@@ -437,7 +454,15 @@ export async function clearBarcodeCache() {
     console.log("🔄 Barkod cache temizlendi.");
 }
 
+// Kategori listesi 24 saat veritabanında saklanır (lib/category-cache); her aramada pazaryerine bağlanılmaz
+export async function getTrendyolCategories() {
+    await requireAdmin();
+    const { cachedCategoryResult } = await import("@/lib/category-cache");
+    return cachedCategoryResult("trendyol", fetchTrendyolCategoriesLive, (r: any) => !!r?.success && Array.isArray(r.data) && r.data.length > 0);
+}
+
 export async function syncOrdersFromTrendyol() {
+    await requireAdmin();
     try {
         // Cache TTL kontrolü
         if (Date.now() - notFoundBarcodeCacheTime > BARCODE_CACHE_TTL) {
@@ -470,7 +495,7 @@ export async function syncOrdersFromTrendyol() {
         let skippedBarcodes: string[] = [];
 
         // Aynı sipariş numarasının paketleri birlikte işlenir. Trendyol kısmi iptalde siparişi böler (İptal paketi + aktif paket);
-        // paketler tek tek işlenince sipariş tamamen iptal ediliyor, bütün adetlerin stoğu geri ekleniyordu (lib/trendyol-order-packages.ts).
+        // paketler tek tek işlenince sipariş tamamen iptal ediliyor, stok her senkronda tekrar ekleniyordu (lib/trendyol-order-packages.ts).
         const packagesByOrder = new Map<string, any[]>();
         for (const o of orders) {
             const key = String(o.orderNumber);
@@ -577,6 +602,7 @@ export async function syncOrdersFromTrendyol() {
                     if (!skippedBarcodes.includes(line.barcode)) {
                         skippedBarcodes.push(line.barcode);
                     }
+                    // Sitede bulunamayan kalem "Tanımsız Ürün"e bağlanır; stoğu düşülmez (lib/stock-sync bu ürünü atlar)
                     const fallback = await (await import("@/lib/unmatched-product")).getUnmatchedProduct();
                     productId = fallback.id;
                     unmatchedNames.push(`${line.productName} (barkod: ${line.barcode})`);
@@ -591,7 +617,7 @@ export async function syncOrdersFromTrendyol() {
                         unitPrice: line.price,
                         discountRate: 0,
                         vatRate: 20,
-                        lineTotal: line.price * line.quantity
+                        lineTotal: line.price * line.quantity,
                     });
                     total += line.price * line.quantity;
                 }
@@ -599,7 +625,7 @@ export async function syncOrdersFromTrendyol() {
 
             if (resolvedItems.length > 0) {
                 // Use $transaction to atomically create the order AND decrement stock
-                // Transaction stok düşülen ürün ID'lerini döner (paket alt ürünleri dahil); diğer pazaryerleri bunlarla güncellenir
+                // Transaction stok düşülen ürün ID'lerini döner; diğer pazaryerlerine stok senkronu bunlarla tetiklenir
                 const affectedProductIds: string[] = await prisma.$transaction(async (tx) => {
                     // 1. Create the order
                     await tx.order.create({
@@ -666,6 +692,7 @@ export async function syncOrdersFromTrendyol() {
     }
 }
 export async function getTrendyolCategoryAttributes(categoryId: number) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -693,90 +720,117 @@ export async function getTrendyolCategoryAttributes(categoryId: number) {
             }
         }
         
-        // Normalize attribute structure to ensure UI compatibility
-        const normalizedAttrs = attrs.map(attr => {
-            if (attr.attribute && attr.attribute.id !== undefined) {
-                return attr; 
-            } else if (attr.id !== undefined && attr.name) {
-                return {
-                    attribute: {
-                        id: attr.id,
-                        name: attr.name
-                    },
-                    required: attr.required || false,
-                    allowCustom: attr.allowCustom || false,
-                    attributeValues: attr.attributeValues || []
-                };
+        // Normalize attribute structure and fetch values for required/restricted attributes
+        const normalizedAttrs = await Promise.all(attrs.map(async (attr) => {
+            let attrObj = attr.attribute;
+            let isRequired = attr.required || false;
+            let allowCustom = attr.allowCustom !== undefined ? attr.allowCustom : true;
+            let values = attr.attributeValues || [];
+
+            if (!attrObj && attr.id !== undefined && attr.name) {
+                attrObj = { id: attr.id, name: attr.name };
             }
-            return attr;
-        });
 
-        // Trendyol V2: Özellik değerleri artık ayrı servisten döner.
-        // Gerekli veya değer havuzu olan özelliklerin değerlerini çekelim (sayfa boyutu: 1000).
-        const populatedAttrs = await Promise.all(
-            normalizedAttrs.map(async (attr) => {
-                const attrId = attr.attribute?.id;
-                if (attrId && (!attr.attributeValues || attr.attributeValues.length === 0)) {
-                    try {
-                        const valRes = await client.getCategoryAttributeValues(categoryId, attrId, 0, 1000);
-                        const vals = valRes?.categoryAttributeValues || valRes?.content || (Array.isArray(valRes) ? valRes : []);
-                        if (vals && vals.length > 0) {
-                            return {
-                                ...attr,
-                                attributeValues: vals.map((v: any) => ({
-                                    id: v.id,
-                                    name: v.name
-                                }))
-                            };
-                        }
-                    } catch (e) {
-                        // Sessizce devam et
-                    }
-                }
+            if (!attrObj || attrObj.id === undefined) {
                 return attr;
-            })
-        );
+            }
+
+            // Trendyol V2 returns values in a separate endpoint for restricted or required attributes
+            if (values.length === 0 && (!allowCustom || isRequired)) {
+                try {
+                    const valRes = await client.getCategoryAttributeValues(categoryId, attrObj.id, 1000);
+                    const rawList = Array.isArray(valRes) ? valRes : (valRes?.content || []);
+                    if (Array.isArray(rawList) && rawList.length > 0) {
+                        let parsedValues = rawList.map((v: any) => ({
+                            id: v.attributeValueId ?? v.id,
+                            name: v.attributeValue ?? v.name
+                        }));
+
+                        // Popüler seçenekleri en başa alalım
+                        if (attrObj.id === 338) { // Beden
+                            const tekEbat = parsedValues.find((v: any) => v.name?.toLowerCase().includes("tek ebat"));
+                            if (tekEbat) {
+                                parsedValues = [tekEbat, ...parsedValues.filter((v: any) => v.id !== tekEbat.id)];
+                            }
+                        }
+                        if (attrObj.id === 1192) { // Menşei
+                            const tr = parsedValues.find((v: any) => v.name === "TR" || v.name === "Türkiye");
+                            const cn = parsedValues.find((v: any) => v.name === "CN" || v.name === "Çin");
+                            const top = [tr, cn].filter(Boolean) as any[];
+                            const topIds = new Set(top.map(t => t.id));
+                            parsedValues = [...top, ...parsedValues.filter((v: any) => !topIds.has(v.id))];
+                        }
+                        if (attrObj.id === 348) { // Web Color
+                            const siyah = parsedValues.find((v: any) => v.name?.toLowerCase() === "siyah");
+                            const beyaz = parsedValues.find((v: any) => v.name?.toLowerCase() === "beyaz");
+                            const top = [siyah, beyaz].filter(Boolean) as any[];
+                            const topIds = new Set(top.map(t => t.id));
+                            parsedValues = [...top, ...parsedValues.filter((v: any) => !topIds.has(v.id))];
+                        }
+
+                        values = parsedValues;
+                    }
+                } catch (e) {
+                    // Ignore value fetch errors
+                }
+            }
+
+            // Renk (47) Trendyol'da serbest metindir ancak kullanıcıya popüler renkleri öneri olarak sunalım
+            if (attrObj.id === 47 && values.length === 0) {
+                values = [
+                    { id: "Siyah", name: "Siyah" },
+                    { id: "Beyaz", name: "Beyaz" },
+                    { id: "Gri", name: "Gri" },
+                    { id: "Kırmızı", name: "Kırmızı" },
+                    { id: "Mavi", name: "Mavi" },
+                    { id: "Sarı", name: "Sarı" },
+                    { id: "Yeşil", name: "Yeşil" },
+                    { id: "Turuncu", name: "Turuncu" },
+                    { id: "Lacivert", name: "Lacivert" },
+                    { id: "Bordo", name: "Bordo" },
+                    { id: "Çok Renkli", name: "Çok Renkli" }
+                ];
+            }
+
+            return {
+                attribute: attrObj,
+                required: isRequired,
+                allowCustom: allowCustom,
+                attributeValues: values,
+                // slicer: her değer ayrı ürün kartı (renk), varianter: aynı kartta seçenek (beden)
+                slicer: !!attr.slicer,
+                varianter: !!attr.varianter
+            };
+        }));
         
-        console.log(`[Trendyol API] Parsed ${populatedAttrs.length} normalized attributes with V2 values.`);
-        return { success: true, data: populatedAttrs };
+        console.log(`[Trendyol API] Parsed ${normalizedAttrs.length} normalized attributes with V2 values.`);
+        return { success: true, data: normalizedAttrs };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
 }
 
-export async function getTrendyolCategoryAttributeValues(categoryId: number, attributeId: number) {
+export async function sendProductToTrendyol(
+    productId: string,
+    attributeMappings: any[],
+    targetCategoryId?: number,
+    // Varyantlı ürün: varyant ID -> o varyantın renk/beden vb. özellikleri (formdaki varyant tablosundan)
+    variantAttributes?: Record<string, any[]>
+) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
 
-        const client = new TrendyolClient({
-            supplierId: config.supplierId,
-            apiKey: config.apiKey,
-            apiSecret: config.apiSecret
-        });
-
-        const data = await client.getCategoryAttributeValues(categoryId, attributeId, 0, 1000);
-        const vals = data?.categoryAttributeValues || data?.content || (Array.isArray(data) ? data : []);
-        return { 
-            success: true, 
-            data: vals.map((v: any) => ({ id: v.id, name: v.name })) 
-        };
-    } catch (error: any) {
-        return { success: false, message: "Hata: " + error.message };
-    }
-}
-
-export async function sendProductToTrendyol(productId: string, attributeMappings: any[], targetCategoryId?: number) {
-    try {
-        const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
-        if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+        const priceNote = await fillEmptyPriceOnSend("trendyol", [productId]);
 
         const product = await prisma.product.findUnique({
             where: { id: productId },
             include: {
                 brand: true,
                 categories: true,
-                variants: true
+                variants: true,
+                trendyolProduct: true
             }
         });
 
@@ -788,21 +842,26 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             apiSecret: config.apiSecret
         });
 
-        // 1. Kategori ve Marka ID kontrolü (Çoklu kategori önceliği)
-        const matchedCategories = (product as any).categories.filter((c: any) => c.trendyolCategoryId !== null);
-        if (matchedCategories.length === 0) {
-            return { success: false, message: "Ürünün kategorisi Trendyol ile eşleşmemiş." };
+        // 1. Kategori ve Marka ID kontrolü
+        // Öncelik: 1) targetCategoryId (UI'dan seçilen) → 2) Ürüne özel override → 3) Site kategori eşleşmesi
+        let mappedCategory = null;
+        const productOverrideCatId = (product as any).trendyolProduct?.trendyolCategoryId;
+        if (targetCategoryId) {
+            mappedCategory = (product as any).categories.find((c: any) => c.trendyolCategoryId === targetCategoryId) 
+                || { trendyolCategoryId: targetCategoryId };
+        } else if (productOverrideCatId) {
+            // Ürüne özel kategori override'ı kullan
+            mappedCategory = { trendyolCategoryId: productOverrideCatId };
+        } else {
+            // Birden fazla eşleşmiş kategori varsa daha spesifik olanı (alt kategori, yoksa sonuncu) seç
+            const mappedCats = (product as any).categories.filter((c: any) => c.trendyolCategoryId !== null);
+            mappedCategory = mappedCats.length > 1
+                ? (mappedCats.find((c: any) => c.parentId) || mappedCats[mappedCats.length - 1])
+                : mappedCats[0] || null;
         }
 
-        let mappedCategory = targetCategoryId 
-            ? matchedCategories.find((c: any) => Number(c.trendyolCategoryId) === Number(targetCategoryId) || c.id === String(targetCategoryId))
-            : null;
-
-        if (!mappedCategory) {
-            // Spesifik olanı bul (örneğin parentId'si olan alt kategori veya sonuncu)
-            mappedCategory = matchedCategories.length > 1 
-                ? (matchedCategories.find((c: any) => c.parentId) || matchedCategories[matchedCategories.length - 1]) 
-                : matchedCategories[0];
+        if (!mappedCategory || !mappedCategory.trendyolCategoryId) {
+            return { success: false, message: "Ürünün kategorisi Trendyol ile eşleşmemiş." };
         }
 
         const brandId = (product as any).brand?.trendyolBrandId;
@@ -836,27 +895,37 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
 
         // Varsayılan zorunlu özellikler - Trendyol bu alanları zorunlu tutuyor
         // Kullanıcı kendi eşleştirmesi yapmadıysa varsayılanları ekle
-        // NOT: İthalatçı Adı ve Kullanım Talimatı ürüne göre değiştiği için buraya eklenmez,
-        // kullanıcı "Düzenle" ekranından elle girer.
         const defaultAttributes = [
-            { attributeId: 1192, attributeValueId: 10617300 },  // Menşei: CN
+            { attributeId: 1192, attributeValueId: 10617300 },  // Menşei: CN (veya 10617344 TR)
             { attributeId: 338, attributeValueId: 6821 },       // Beden: Tek Ebat
+            { attributeId: 47, customAttributeValue: "Siyah" }, // Renk: Siyah
+            { attributeId: 348, attributeValueId: 7009 },       // Web Color: Siyah
             { attributeId: 1201, attributeValueId: 10621829 },  // Tamir Edilebilirlik: Tamir Edilmez
             { attributeId: 1209, attributeValueId: 10621791 },  // ECE Uygunluk: Görselinde bulunmuyor
         ];
 
-        // Kullanıcı eşleştirmesi varsa onu kullan, yoksa varsayılanları ekle
+        // Kullanıcı eşleştirmesi varsa onu kullan, boş bırakılanları temizle
         let finalAttributes = attributeMappings && attributeMappings.length > 0 
-            ? attributeMappings 
+            ? attributeMappings.filter((a: any) => a.attributeValueId !== undefined || (a.customAttributeValue && String(a.customAttributeValue).trim() !== ""))
             : [];
 
         // Eksik zorunlu alanları varsayılanlardan ekle
+        const injectedDefaultIds = new Set<number>();
         for (const defAttr of defaultAttributes) {
             const exists = finalAttributes.some((a: any) => a.attributeId === defAttr.attributeId);
             if (!exists) {
                 finalAttributes.push(defAttr);
+                injectedDefaultIds.add(defAttr.attributeId);
             }
         }
+
+        // Varyant bazlı özellikler: geçerli değerleri olanlar
+        const cleanVariantAttrs = (list: any[] | undefined) =>
+            (list || []).filter((a: any) => a && a.attributeId && (a.attributeValueId !== undefined || (a.customAttributeValue && String(a.customAttributeValue).trim() !== "")));
+        const toAbsoluteHttps = (urls: string[]) =>
+            urls
+                .map((url: string) => (url.startsWith("http") ? url : `${siteUrl}${url.startsWith("/") ? "" : "/"}${url}`))
+                .filter((url: string) => url.startsWith("https://"));
 
         const items: any[] = [];
         const baseItem = {
@@ -902,6 +971,24 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
                 
                 const availableStock = Math.max(0, v.stock - (product.criticalStock || 0));
 
+                // Bu varyantın renk/beden değerleri: ürün geneli özelliklerden aynı ID'ler çıkarılıp varyantınkiler eklenir.
+                // Varsayılan "Beden: Tek Ebat / Renk: Siyah / Web Color: Siyah" varyantlı üründe kullanılmaz.
+                const vAttrs = cleanVariantAttrs(variantAttributes?.[v.id]);
+                const vAttrIds = new Set(vAttrs.map((a: any) => Number(a.attributeId)));
+                const attributesForVariant = vAttrs.length > 0
+                    ? [
+                        ...finalAttributes.filter((a: any) =>
+                            !vAttrIds.has(Number(a.attributeId)) &&
+                            !(injectedDefaultIds.has(a.attributeId) && [338, 47, 348].includes(a.attributeId))
+                        ),
+                        ...vAttrs.map((a: any) => ({ ...a, attributeId: Number(a.attributeId) })),
+                    ]
+                    : baseItem.attributes;
+
+                // Varyanta seçilmiş görseller (Trendyol: barkod başına en fazla 8); yoksa ürünün görselleri
+                const vImages = toAbsoluteHttps(((v as any).images || []) as string[]);
+                const imagesForVariant = (vImages.length > 0 ? vImages : imageUrls).slice(0, 8).map((url: string) => ({ url }));
+
                 items.push({
                     ...baseItem,
                     barcode: v.barcode,
@@ -910,6 +997,8 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
                     listPrice: variantListPrice,
                     salePrice: variantSalePrice,
                     dimensionalWeight: 1,
+                    attributes: attributesForVariant,
+                    images: imagesForVariant,
                 });
             }
         } else {
@@ -938,6 +1027,7 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
         const hasAttributeMappings = attributeMappings && attributeMappings.length > 0;
 
         let result;
+        let variantNote = "";
         if (isAlreadySynced && !hasAttributeMappings) {
             const updateItems = items.map((i: any) => ({
                 barcode: i.barcode,
@@ -947,9 +1037,93 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             }));
             console.log("[Trendyol] Updating price/stock only for synced product:", JSON.stringify(updateItems, null, 2));
             result = await client.updatePriceAndInventory(updateItems);
+        } else if (product.variants && product.variants.some((v: any) => v.barcode)) {
+            // Varyantlı ürün: her varyant barkodu ayrı kontrol edilir.
+            // - Trendyol'da yoksa: yeni ürün olarak açılır (aynı productMainId ile gruplanır)
+            // - Onay bekliyor / reddedildiyse: içerik düzeltilerek yeniden gönderilir
+            // - Onaylıysa: içeriğe dokunulmaz (Trendyol onaylı üründe renk/beden değiştirmeye izin vermiyor), sadece stok/fiyat
+            const lookups = await Promise.all(items.map((i: any) => client.getProductByBarcode(i.barcode).catch(() => undefined)));
+            const toCreate = items.filter((_: any, k: number) => lookups[k] === null);
+            const toResend = items.filter((_: any, k: number) => lookups[k] && !lookups[k].approved);
+            const approvedOrUnknown = items.filter((_: any, k: number) => lookups[k] === undefined || lookups[k]?.approved);
+            console.log(`[Trendyol] Varyantlı ürün: ${toCreate.length} yeni, ${toResend.length} onaysız, ${approvedOrUnknown.length} onaylı/bilinmeyen`);
+
+            let firstFailed: any = null;
+            let firstOk: any = null;
+            if (toCreate.length > 0) {
+                const r = await client.createProducts(toCreate);
+                if (r.ok) firstOk = firstOk || r; else firstFailed = firstFailed || r;
+            }
+            if (toResend.length > 0) {
+                const r = await client.updateUnapprovedProducts(toResend);
+                if (r.ok) firstOk = firstOk || r; else firstFailed = firstFailed || r;
+            }
+            if (approvedOrUnknown.length > 0) {
+                const r = await client.updatePriceAndInventory(approvedOrUnknown.map((i: any) => ({
+                    barcode: i.barcode,
+                    quantity: i.quantity,
+                    salePrice: i.salePrice,
+                    listPrice: i.listPrice
+                })));
+                if (r.ok) firstOk = firstOk || r; else firstFailed = firstFailed || r;
+            }
+            result = firstFailed || firstOk;
+            variantNote = ` (${toCreate.length} yeni varyant, ${toResend.length} onay bekleyen yeniden gönderildi, ${approvedOrUnknown.length} onaylı varyantta sadece stok/fiyat)`;
         } else {
-            console.log("[Trendyol] Sending full product payload (Create/Update):", JSON.stringify(items[0], null, 2));
-            result = await client.createProducts(items);
+            // Trendyol V2 Architecture:
+            // Check if product already exists or has a contentId
+            let contentId = tpRecord?.trendyolId;
+
+            if (!contentId && isAlreadySynced) {
+                try {
+                    const existingOnTy = await client.getProductByBarcode(items[0].barcode);
+                    if (existingOnTy?.contentId) {
+                        contentId = String(existingOnTy.contentId);
+                        // Save contentId to DB for subsequent updates
+                        await (prisma as any).trendyolProduct.update({
+                            where: { id: tpRecord.id },
+                            data: { trendyolId: contentId }
+                        }).catch(() => {});
+                    }
+                } catch (e) {
+                    console.warn("[Trendyol] Could not query product by barcode:", e);
+                }
+            }
+
+            if (contentId) {
+                // V2 Approved Product Content Bulk Update
+                console.log("[Trendyol] Sending V2 Content Bulk Update with contentId:", contentId);
+                const contentItems = [{
+                    contentId: Number(contentId),
+                    title: baseItem.title,
+                    description: baseItem.description,
+                    images: baseItem.images,
+                    attributes: baseItem.attributes
+                }];
+                result = await client.updateApprovedProductContent(contentItems);
+                
+                // Also update price/stock in parallel
+                const updateItems = items.map((i: any) => ({
+                    barcode: i.barcode,
+                    quantity: i.quantity,
+                    salePrice: i.salePrice,
+                    listPrice: i.listPrice
+                }));
+                await client.updatePriceAndInventory(updateItems).catch((err: any) => console.warn("[Trendyol] price-inventory update error:", err));
+            } else {
+                // V2 Product Create (v2/products)
+                console.log("[Trendyol] Sending V2 Full Product Payload (v2/products):", JSON.stringify(items[0], null, 2));
+                result = await client.createProducts(items);
+
+                // If Trendyol returns an error indicating barcode already exists or is unapproved
+                if (!result.ok && result.message && (result.message.toLowerCase().includes("barcode") || result.message.toLowerCase().includes("exist"))) {
+                    console.log("[Trendyol] Barcode might already exist, attempting unapproved bulk update...");
+                    const unapprovedRes = await client.updateUnapprovedProducts(items);
+                    if (unapprovedRes.ok) {
+                        result = unapprovedRes;
+                    }
+                }
+            }
         }
 
         if (result.ok) {
@@ -962,23 +1136,9 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             let batchErrors: string[] = [];
             
             try {
-                // Deneme 1: Product API üzerinden sorgula
-                let batchUrl = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
-                let batchRes = await fetch(batchUrl, { headers: client.getHeaders() });
-                
-                // Eğer 404 aldıysak, bu muhtemelen bir stok güncellemesidir, Inventory API'den dene
-                if (batchRes.status === 404) {
-                    batchUrl = `https://apigw.trendyol.com/integration/inventory/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
-                    batchRes = await fetch(batchUrl, { headers: client.getHeaders() });
-                }
-
-                if (batchRes.ok) {
-                    const batchData = await batchRes.json();
-                    
-                    // KRİTİK: Stok güncellemelerinde Trendyol en üst seviyede 'status' dönmeyebilir.
-                    // Bu durumda items içindeki ilk öğenin durumuna bakıyoruz.
+                const batchData = await client.getBatchRequestResult(batchId);
+                if (batchData) {
                     batchStatus = batchData.status || (batchData.items?.[0]?.status) || "UNKNOWN";
-                    
                     if (batchData.items) {
                         for (const item of batchData.items) {
                             if (item.status === "FAILED" && item.failureReasons) {
@@ -1002,10 +1162,10 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
             }
 
             // Batch henüz işleniyor veya başarılı
-            const isCompleted = batchStatus === "COMPLETED";
+            const isCompleted = batchStatus === "COMPLETED" || batchStatus === "SUCCESS";
             
             // Kritik Düzeltme: Eğer ürün zaten senkronizeyse ve şu an sadece stok/fiyat güncelliyorsak, 
-            // işlem henüz bitmemiş (PROCESSING) olsa bile isSynced durumunu bozma (true kalsın).
+            // işlem henüz bitmemiş (PROCESSING / IN_PROGRESS) olsa bile isSynced durumunu bozma (true kalsın).
             const finalIsSynced = isAlreadySynced ? true : isCompleted;
 
             await (prisma as any).trendyolProduct.upsert({
@@ -1033,7 +1193,15 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
                 data: { isTrendyolActive: true }
             });
 
-            return { success: true, message: `Ürün Trendyol'a gönderildi. Batch Durumu: ${batchStatus}`, batchRequestId: batchId };
+            if (batchStatus === "IN_PROGRESS" || batchStatus === "PROCESSING") {
+                return { 
+                    success: true, 
+                    message: "Ürün Trendyol'a iletildi! Trendyol şu anda ürünü kuyrukta işliyor (IN_PROGRESS). Birkaç dakika sonra İşlem Geçmişi sayfasından durumunu kontrol edebilirsiniz." + variantNote + priceNote, 
+                    batchRequestId: batchId 
+                };
+            }
+
+            return { success: true, message: `Ürün Trendyol'a başarıyla gönderildi ve işlendi (Durum: ${batchStatus})${variantNote}${priceNote}`, batchRequestId: batchId };
         } else {
             const errorMsg = result.errors?.[0]?.message || JSON.stringify(result);
             return { success: false, message: "Trendyol Hatası: " + errorMsg };
@@ -1045,6 +1213,7 @@ export async function sendProductToTrendyol(productId: string, attributeMappings
 }
 
 export async function checkTrendyolBatchRequest(batchRequestId: string) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -1055,21 +1224,7 @@ export async function checkTrendyolBatchRequest(batchRequestId: string) {
             apiSecret: config.apiSecret
         });
 
-        // Deneme 1: Product API
-        let url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchRequestId}`;
-        let response = await fetch(url, { headers: client.getHeaders() });
-        
-        // Fallback: Inventory API
-        if (response.status === 404) {
-            url = `https://apigw.trendyol.com/integration/inventory/sellers/${config.supplierId}/products/batch-requests/${batchRequestId}`;
-            response = await fetch(url, { headers: client.getHeaders() });
-        }
-
-        if (!response.ok) {
-            return { success: false, message: `Trendyol Hatası (${response.status})` };
-        }
-
-        const data = await response.json();
+        const data = await client.getBatchRequestResult(batchRequestId);
         return { success: true, data };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
@@ -1077,6 +1232,7 @@ export async function checkTrendyolBatchRequest(batchRequestId: string) {
 }
 
 export async function getTrendyolCargoAndAddresses() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst();
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -1127,6 +1283,7 @@ export async function getTrendyolCargoAndAddresses() {
 }
 
 export async function syncBatchStatuses() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -1158,23 +1315,13 @@ export async function syncBatchStatuses() {
         let updatedCount = 0;
         
         // Tekilleştirilmiş batch ID'leri çıkar (aynı batch içinde birden çok ürün olabilir)
-        const uniqueBatchIds = Array.from(new Set(pendingProducts.map((p: any) => p.batchRequestId)));
+        const uniqueBatchIds = Array.from(new Set<string>(pendingProducts.map((p: any) => String(p.batchRequestId))));
 
         for (const batchId of uniqueBatchIds) {
             try {
-                // Deneme 1: Product API
-                let url = `https://apigw.trendyol.com/integration/product/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
-                let response = await fetch(url, { headers: client.getHeaders() });
-                
-                // Fallback: Inventory API (Stok/Fiyat güncellemeleri burada olabilir)
-                if (response.status === 404) {
-                    url = `https://apigw.trendyol.com/integration/inventory/sellers/${config.supplierId}/products/batch-requests/${batchId}`;
-                    response = await fetch(url, { headers: client.getHeaders() });
-                }
+                const batchData = await client.getBatchRequestResult(batchId).catch(() => null);
 
-                if (response.ok) {
-                    const batchData = await response.json();
-                    
+                if (batchData) {
                     // Stok güncellemeleri için 'status' fallback
                     const batchStatus = batchData.status || (batchData.items?.[0]?.status) || "UNKNOWN";
                     
@@ -1245,6 +1392,7 @@ export async function syncBatchStatuses() {
     }
 }
 export async function getTrendyolSellersProducts(page = 0, size = 50) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon yok." };
@@ -1264,6 +1412,7 @@ export async function getTrendyolSellersProducts(page = 0, size = 50) {
 }
 
 export async function importTrendyolProduct(tProduct: any, targetCategoryId?: string, discountRate: number = 20) {
+    await requireAdmin();
     try {
         // Find if product exists by barcode
         let existingProduct = await prisma.product.findFirst({
@@ -1274,8 +1423,18 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
             // Just link it
             await (prisma as any).trendyolProduct.upsert({
                 where: { productId: existingProduct.id },
-                update: { isSynced: true, lastSyncedAt: new Date() },
-                create: { productId: existingProduct.id, barcode: tProduct.barcode, isSynced: true, lastSyncedAt: new Date() }
+                update: { 
+                    isSynced: true, 
+                    lastSyncedAt: new Date(),
+                    trendyolId: tProduct.contentId ? String(tProduct.contentId) : undefined 
+                },
+                create: { 
+                    productId: existingProduct.id, 
+                    barcode: tProduct.barcode, 
+                    trendyolId: tProduct.contentId ? String(tProduct.contentId) : null,
+                    isSynced: true, 
+                    lastSyncedAt: new Date() 
+                }
             });
             return { success: true, message: "Ürün mevcuttu, Trendyol ile eşleştirildi.", productId: existingProduct.id };
         }
@@ -1351,6 +1510,7 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
             data: {
                 productId: newProduct.id,
                 barcode: tProduct.barcode,
+                trendyolId: tProduct.contentId ? String(tProduct.contentId) : null,
                 isSynced: true,
                 lastSyncedAt: new Date(),
                 batchStatus: "COMPLETED"
@@ -1364,6 +1524,7 @@ export async function importTrendyolProduct(tProduct: any, targetCategoryId?: st
 }
 
 export async function getTrendyolShippingLabel(orderId: string) {
+    await requireAdmin();
     try {
         const order = await prisma.order.findUnique({
             where: { id: orderId },
@@ -1551,6 +1712,7 @@ export async function getTrendyolShippingLabel(orderId: string) {
  * Bu işlem barkodun oluşması için tetikleyicidir.
  */
 export async function updateTrendyolOrderToPicking(orderNumber: string) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -1606,6 +1768,7 @@ export async function getTrendyolQuestions(params: {
     page?: number;
     size?: number;
 } = {}) {
+    await requireAdmin();
     try {
         const client = new TrendyolClient();
         const data = await client.getQuestions(params);
@@ -1617,6 +1780,7 @@ export async function getTrendyolQuestions(params: {
 }
 
 export async function answerTrendyolQuestion(questionId: string | number, text: string) {
+    await requireAdmin();
     try {
         const client = new TrendyolClient();
         const result = await client.answerQuestion(questionId, text);
@@ -1626,5 +1790,177 @@ export async function answerTrendyolQuestion(questionId: string | number, text: 
     } catch (error: any) {
         console.error("Trendyol answerQuestion error:", error);
         return { success: false, message: "Cevap gönderilemedi: " + error.message };
+    }
+}
+
+// ==================== ÜRÜN BAZLI KATEGORİ OVERRIDE ====================
+
+/**
+ * Tekli ürüne Trendyol kategori override set etme
+ * null geçilirse override kaldırılır, site kategori eşleşmesine düşer
+ */
+export async function setTrendyolProductCategory(productId: string, trendyolCategoryId: number | null) {
+    await requireAdmin();
+    try {
+        await (prisma as any).trendyolProduct.upsert({
+            where: { productId },
+            update: { trendyolCategoryId: trendyolCategoryId },
+            create: {
+                productId,
+                barcode: "",
+                trendyolCategoryId: trendyolCategoryId,
+            },
+        });
+        revalidatePath("/admin/integrations/trendyol");
+        return { success: true, message: trendyolCategoryId ? `Ürüne özel Trendyol kategorisi atandı: ${trendyolCategoryId}` : "Ürüne özel kategori kaldırıldı, site eşleşmesi kullanılacak." };
+    } catch (error: any) {
+        console.error("setTrendyolProductCategory error:", error);
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+/**
+ * Toplu ürünlere Trendyol kategori override set etme
+ */
+export async function setBulkTrendyolProductCategory(productIds: string[], trendyolCategoryId: number) {
+    await requireAdmin();
+    try {
+        for (const productId of productIds) {
+            await (prisma as any).trendyolProduct.upsert({
+                where: { productId },
+                update: { trendyolCategoryId },
+                create: {
+                    productId,
+                    barcode: "",
+                    trendyolCategoryId,
+                },
+            });
+        }
+        revalidatePath("/admin/integrations/trendyol");
+        return { success: true, message: `${productIds.length} ürüne Trendyol kategori override atandı: ${trendyolCategoryId}` };
+    } catch (error: any) {
+        console.error("setBulkTrendyolProductCategory error:", error);
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+// ==================== TRENDYOL ÜRÜN DOĞRULAMA / EŞLEŞTİRME ====================
+// Entegra veya eski yöntemlerle gönderilmiş ürünler Trendyol'da olduğu halde listede "Gönderilmedi" görünüyordu.
+// Bu işlemler sadece senkron işaretini düzeltir; ürünün "Trendyol'da açık" ayarına dokunmaz.
+
+async function getTrendyolClientFromConfig() {
+    const config = await (prisma as any).trendyolConfig.findFirst({ where: { isActive: true } });
+    if (!config) return null;
+    return new TrendyolClient({ supplierId: config.supplierId, apiKey: config.apiKey, apiSecret: config.apiSecret });
+}
+
+/** Ürünü barkoduyla Trendyol'un onaylı ürünlerinde arar; bulunursa "senkron" işaretler */
+export async function verifyTrendyolProduct(productId: string) {
+    await requireAdmin();
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
+        return { success: false, synced: false, message: "Yetkisiz işlem." };
+    }
+    try {
+        const client = await getTrendyolClientFromConfig();
+        if (!client) return { success: false, synced: false, message: "Aktif Trendyol entegrasyonu yok." };
+
+        const product: any = await prisma.product.findUnique({
+            where: { id: productId },
+            select: { id: true, barcode: true, variants: { select: { barcode: true } } },
+        });
+        if (!product) return { success: false, synced: false, message: "Ürün bulunamadı." };
+
+        const barcode = product.variants?.find((v: any) => v.barcode)?.barcode || product.barcode;
+        if (!barcode) return { success: false, synced: false, message: "Üründe barkod yok; Trendyol'da aranamaz." };
+
+        const data = await client.getSellersProducts(0, 1, barcode);
+        const found = Array.isArray(data?.content) ? data.content.find((p: any) => p.barcode === barcode) || data.content[0] : null;
+        if (!found) {
+            return { success: true, synced: false, message: `Trendyol'un onaylı ürünlerinde "${barcode}" barkodu bulunamadı. Ürün onay bekliyor olabilir ya da hiç gönderilmemiş.` };
+        }
+
+        await (prisma as any).trendyolProduct.upsert({
+            where: { productId },
+            update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null, trendyolId: found.contentId ? String(found.contentId) : undefined },
+            create: { productId, barcode, isSynced: true, lastSyncedAt: new Date(), trendyolId: found.contentId ? String(found.contentId) : null },
+        });
+
+        const status = found.archived ? "Arşivde" : found.onSale === false ? "Satışta değil" : "Satışta";
+        return { success: true, synced: true, message: `Trendyol'da bulundu. Durum: ${status}, Stok: ${found.quantity ?? "-"}, Fiyat: ${found.salePrice ?? "-"} TL` };
+    } catch (error: any) {
+        console.error("verifyTrendyolProduct error:", error);
+        return { success: false, synced: false, message: "Trendyol hatası: " + error.message };
+    }
+}
+
+/**
+ * Trendyol'daki tüm onaylı ürünleri sayfa sayfa çekip barkodu eşleşen site ürünlerini "senkron" işaretler.
+ */
+export async function matchTrendyolProductsByBarcode() {
+    await requireAdmin();
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
+        return { success: false, message: "Yetkisiz işlem." };
+    }
+    try {
+        const client = await getTrendyolClientFromConfig();
+        if (!client) return { success: false, message: "Aktif Trendyol entegrasyonu yok." };
+
+        const PAGE_SIZE = 100;
+        const MAX_PAGES = 300;
+        const trendyolBarcodes = new Map<string, string | null>(); // barkod -> contentId
+        const liveBarcodes = new Set<string>(); // satışta ve stoklu ilanlar
+        let stockKnown = true;
+        for (let page = 0; page < MAX_PAGES; page++) {
+            const data = await client.getSellersProducts(page, PAGE_SIZE);
+            const content = Array.isArray(data?.content) ? data.content : [];
+            for (const p of content) {
+                if (p.barcode) {
+                    trendyolBarcodes.set(String(p.barcode), p.contentId ? String(p.contentId) : null);
+                    const lv = isListingLive(p);
+                    if (!lv.stockKnown) stockKnown = false;
+                    if (lv.live) liveBarcodes.add(String(p.barcode));
+                }
+            }
+            const totalPages = Number(data?.totalPages ?? 0);
+            if (content.length === 0 || (totalPages && page + 1 >= totalPages)) break;
+        }
+        if (trendyolBarcodes.size === 0) return { success: false, message: "Trendyol'dan onaylı ürün alınamadı." };
+
+        const products: any[] = await prisma.product.findMany({
+            select: { id: true, sku: true, barcode: true, isActive: true, isTrendyolActive: true, variants: { select: { barcode: true } }, trendyolProduct: { select: { isSynced: true } } },
+        });
+
+        let matched = 0;
+        let alreadySynced = 0;
+        const matchedRemote = new Set<string>();
+        const liveButClosed: string[] = [];
+        for (const p of products) {
+            const codes = [p.barcode, ...(p.variants || []).map((v: any) => v.barcode)].filter(Boolean) as string[];
+            const hits = codes.filter((c) => trendyolBarcodes.has(c));
+            hits.forEach((c) => matchedRemote.add(c));
+            const hit = hits[0];
+            if (!hit) continue;
+            if (hits.some((c) => liveBarcodes.has(c)) && !(p.isActive && p.isTrendyolActive)) liveButClosed.push(p.sku || hit);
+            if (p.trendyolProduct?.isSynced) { alreadySynced++; continue; }
+            const contentId = trendyolBarcodes.get(hit) ?? null;
+            await (prisma as any).trendyolProduct.upsert({
+                where: { productId: p.id },
+                update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null, ...(contentId ? { trendyolId: contentId } : {}) },
+                create: { productId: p.id, barcode: hit, isSynced: true, lastSyncedAt: new Date(), trendyolId: contentId },
+            });
+            matched++;
+        }
+
+        revalidatePath("/admin/integrations/trendyol/products");
+        return {
+            success: true,
+            message: `Trendyol'da ${trendyolBarcodes.size} onaylı barkod bulundu. ${matched} ürün "Senkronize" olarak işaretlendi${alreadySynced ? `, ${alreadySynced} ürün zaten senkronizeydi` : ""}.` +
+                formatListingReport([...liveBarcodes].filter((b) => !matchedRemote.has(b)), liveButClosed, stockKnown),
+        };
+    } catch (error: any) {
+        console.error("matchTrendyolProductsByBarcode error:", error);
+        return { success: false, message: "Trendyol hatası: " + error.message };
     }
 }

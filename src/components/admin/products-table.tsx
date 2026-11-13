@@ -495,15 +495,18 @@ export function ProductsTable({ products: initialProducts, brands, pagination }:
                             ) : (
                                 products.map((product) => (
                                     <TableRow key={product.id}>
-                                        <TableCell>
+                                        {/* Uzun ürün adı en fazla 2 satır: tek satırda kalınca sütunu genişletip tabloyu taşırıyor,
+                                            sayfada yatay kaydırma çubuğu çıkıyordu (tamamı üstüne gelince görünür) */}
+                                        <TableCell className="whitespace-normal min-w-[200px] max-w-[450px]">
                                             <div className="flex items-center gap-2">
-                                                <div>
+                                                <div className="min-w-0">
                                                     <div className="flex items-center gap-1.5">
-                                                        <Link 
-                                                            href={`/products/${product.slug}`} 
-                                                            target="_blank" 
+                                                        <Link
+                                                            href={`/products/${product.slug}`}
+                                                            target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="font-medium hover:text-blue-600 transition-colors"
+                                                            className="font-medium hover:text-blue-600 transition-colors line-clamp-2 break-words"
+                                                            title={product.name}
                                                         >
                                                             {product.name}
                                                         </Link>

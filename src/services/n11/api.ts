@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 interface N11Creds {
     apiKey: string;
     apiSecret: string;
+    shipmentTemplate?: string;
+    integratorName?: string;
 }
 
 export class N11Client {
@@ -17,10 +19,29 @@ export class N11Client {
     }
 
     async init() {
-        if (this.creds) return;
+        if (this.creds) {
+            if (!this.creds.shipmentTemplate || !this.creds.integratorName) {
+                try {
+                    const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
+                    if (config) {
+                        if (!this.creds.shipmentTemplate) this.creds.shipmentTemplate = config.shipmentTemplate || "Karaaslan";
+                        if (!this.creds.integratorName) this.creds.integratorName = config.integratorName || "SRN_Entegrasyon";
+                    }
+                } catch (e) {
+                    if (!this.creds.shipmentTemplate) this.creds.shipmentTemplate = "Karaaslan";
+                    if (!this.creds.integratorName) this.creds.integratorName = "SRN_Entegrasyon";
+                }
+            }
+            return;
+        }
         const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
         if (!config) throw new Error("Aktif N11 yapılandırması bulunamadı.");
-        this.creds = { apiKey: config.apiKey, apiSecret: config.apiSecret };
+        this.creds = { 
+            apiKey: config.apiKey, 
+            apiSecret: config.apiSecret, 
+            shipmentTemplate: config.shipmentTemplate || "Karaaslan",
+            integratorName: config.integratorName || "SRN_Entegrasyon"
+        };
     }
 
     private getHeaders() {
@@ -56,7 +77,7 @@ export class N11Client {
     }
 
     private async callRest(endpoint: string, method = "GET", body?: any, retries = 2) {
-        if (!this.creds) await this.init();
+        await this.init();
 
         // Remove double slashes if any
         const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
@@ -102,7 +123,7 @@ export class N11Client {
 
                 if (!response.ok) {
                     console.error(`N11 API Error Response [${endpoint}]:`, JSON.stringify(data));
-                    const errorDetail = data.errors?.[0]?.message || data.message || data.errorDescription || `HTTP ${response.status}`;
+                    const errorDetail = data.errors?.[0]?.message || data.message || data.errorDescription || data.errorMessage || `HTTP ${response.status}`;
                     throw new Error(`N11 API Hatası: ${errorDetail}`);
                 }
 
@@ -153,82 +174,16 @@ export class N11Client {
 
     // --- Order Service ---
 
-    async getOrders(status: "Created" | "Picking" | "Shipped" | "Delivered" | "Cancelled" = "Created") {
+    async getOrders(status?: string, page?: number) {
         try {
             // Updated to official endpoint: /rest/delivery/v1/shipmentPackages
-            const data = await this.callRest(`/rest/delivery/v1/shipmentPackages?status=${status}&size=100&orderByDirection=DESC`);
+            const statusParam = status ? `status=${status}&` : "";
+            const pageParam = page ? `page=${page}&` : "";
+            const data = await this.callRest(`/rest/delivery/v1/shipmentPackages?${statusParam}${pageParam}size=100&orderByDirection=DESC`);
             return { success: true, ...data };
         } catch (error: any) {
             return { success: false, message: error.message };
         }
-    }
-
-    /**
-     * İade talepleri (SOAP ReturnService - ClaimReturnList). Sayfa başına 20 talep, currentPage 0'dan başlar.
-     * status: REQUESTED | CANCELLED | DENIED | PENDING | PENDED | APPROVED | MANUAL_REFUND | ALL
-     * Tarihler talep tarihi, "dd/MM/yyyy". orderNumber verilirse sipariş numarasıyla arar (searchInfoType ORDERID).
-     * Doküman: https://developer.n11.com/documentation/iade-entgrasyonu/iade-talepleri-servisi/
-     */
-    async getClaimReturns(params: { status?: string; page?: number; startDate?: string; endDate?: string; orderNumber?: string }) {
-        if (!this.creds) await this.init();
-        const x = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sch="http://www.n11.com/ws/schemas">
-   <soapenv:Header/>
-   <soapenv:Body>
-      <sch:ClaimReturnListRequest>
-         <auth>
-            <appKey>${x(this.creds!.apiKey)}</appKey>
-            <appSecret>${x(this.creds!.apiSecret)}</appSecret>
-         </auth>
-         <searchData>
-            <status>${x(params.status || "ALL")}</status>
-            <executer></executer>
-            <searchInfoType>${params.orderNumber ? "ORDERID" : ""}</searchInfoType>
-            <searchQuery>${params.orderNumber ? x(params.orderNumber) : ""}</searchQuery>
-            <sender>ALL</sender>
-            <period>
-               <startDate>${x(params.startDate || "")}</startDate>
-               <endDate>${x(params.endDate || "")}</endDate>
-            </period>
-         </searchData>
-         <pagingData>
-            <currentPage>${params.page ?? 0}</currentPage>
-         </pagingData>
-      </sch:ClaimReturnListRequest>
-   </soapenv:Body>
-</soapenv:Envelope>`;
-
-        let text = "";
-        for (const path of ["ReturnService", "returnService"]) {
-            const response = await fetch(`https://api.n11.com/ws/${path}/`, {
-                method: "POST",
-                headers: { "Content-Type": "text/xml;charset=UTF-8", "SOAPAction": "" },
-                body: envelope,
-            });
-            text = await response.text();
-            if (response.status !== 404) break;
-        }
-        if (!/<status>\s*success\s*<\/status>/i.test(text)) {
-            const err = text.match(/<errorMessage>([\s\S]*?)<\/errorMessage>/)?.[1] || text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || text.slice(0, 200);
-            throw new Error(`N11 iade listesi alınamadı: ${err}`);
-        }
-        const tag = (block: string, name: string) => (block.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1] ?? "").trim();
-        const claims = Array.from(text.matchAll(/<claimReturn>([\s\S]*?)<\/claimReturn>/g)).map((m) => {
-            const b = m[1];
-            return {
-                claimReturnId: tag(b, "claimReturnId"),
-                status: tag(b, "status").toUpperCase(),
-                orderNumber: tag(b, "orderNumber"),
-                productName: tag(b, "productName"),
-                quantity: Number(tag(b, "quantity")) || 1,
-                unitPrice: Number(tag(b, "unitPrice")) || 0,
-                finalPrice: Number(tag(b, "finalPrice")) || 0,
-                returnReasonType: tag(b, "returnReasonType"),
-            };
-        });
-        const pageCount = Number(text.match(/<pageCount>(\d+)<\/pageCount>/)?.[1] || 1);
-        return { claims, pageCount };
     }
 
     /**
@@ -330,11 +285,16 @@ export class N11Client {
                     id: attr.attributeId || attr.id,
                     name: attr.attributeName || attr.name,
                     mandatory: attr.isMandatory === true || attr.mandatory === true,
+                    isCustomValue: attr.isCustomValue === true,
+                    // isSlicer: aynı sayfada görselli seçenek (renk), isVariant: aynı sayfada seçenek (beden)
+                    isSlicer: attr.isSlicer === true,
+                    isVariant: attr.isVariant === true,
                     values: rawValues.map((v: any) => {
-                        if (typeof v === 'string') return v;
-                        // Doc says 'name' inside 'value'
-                        return v.name ?? v.attributeValue ?? v.value ?? v.label ?? JSON.stringify(v);
-                    }).filter(Boolean)
+                        if (typeof v === 'string') return { id: null, name: v };
+                        const name = v.name ?? v.attributeValue ?? v.value ?? v.label ?? JSON.stringify(v);
+                        const id = v.id ?? v.attributeValueId ?? null;
+                        return { id, name };
+                    }).filter((v: any) => v && v.name)
                 };
             });
             
@@ -351,16 +311,34 @@ export class N11Client {
             // Official Doc: POST https://api.n11.com/ms/product/tasks/price-stock-update
             const payload = {
                 payload: {
-                    integrator: "SRN_Entegrasyon",
+                    integrator: this.creds?.integratorName || "SRN_Entegrasyon",
                     skus: skus.map(s => ({
                         ...s,
-                        quantity: Math.max(0, Number(s.quantity) || 0),
-                        salePrice: s.salePrice ? Number(s.salePrice).toFixed(2) : undefined,
-                        listPrice: s.listPrice ? Number(s.listPrice).toFixed(2) : undefined
+                        salePrice: s.salePrice ? Math.round(Number(s.salePrice) * 100) / 100 : undefined,
+                        listPrice: s.listPrice ? Math.round(Number(s.listPrice) * 100) / 100 : undefined
                     }))
                 }
             };
             const data = await this.callRest("/ms/product/tasks/price-stock-update", "POST", payload);
+            return { success: true, taskId: data.id };
+        } catch (error: any) {
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Ürünü N11'de satışa açar/kapatır.
+     * Official Doc: POST https://api.n11.com/ms/product/tasks/product-update (status: Active | Suspended)
+     */
+    async updateProductStatus(skus: { stockCode: string; status: "Active" | "Suspended"; vatRate: number }[]) {
+        try {
+            const payload = {
+                payload: {
+                    integrator: this.creds?.integratorName || "SRN_Entegrasyon",
+                    skus,
+                }
+            };
+            const data = await this.callRest("/ms/product/tasks/product-update", "POST", payload);
             return { success: true, taskId: data.id };
         } catch (error: any) {
             return { success: false, message: error.message };
@@ -395,26 +373,37 @@ export class N11Client {
                     currencyType: skuData.currencyType || "TL",
                     productMainId: skuData.productMainId || skuData.sellerCode || skuData.stockCode,
                     preparingDay: skuData.preparingDay ?? 3,
-                    shipmentTemplate: skuData.shipmentTemplate || "Karaaslan",
+                    shipmentTemplate: skuData.shipmentTemplate || this.creds?.shipmentTemplate || "Karaaslan",
                     stockCode: skuData.stockCode || skuData.sellerCode,
-                    salePrice: skuData.salePrice != null ? Number(skuData.salePrice).toFixed(2) : null,
-                    listPrice: skuData.listPrice != null ? Number(skuData.listPrice).toFixed(2) : null,
+                    salePrice: skuData.salePrice != null ? Math.round(Number(skuData.salePrice) * 100) / 100 : null,
+                    listPrice: skuData.listPrice != null ? Math.round(Number(skuData.listPrice) * 100) / 100 : null,
                     vatRate: skuData.vatRate ?? 20,
-                    quantity: Math.max(0, Number(skuData.quantity) || 0),
+                    quantity: skuData.quantity || 0,
                     images: (skuData.images || []).slice(0, 8).map((url: string, index: number) => ({
                         url: url,
                         order: index + 1
                     })),
-                    // REST API attributes: id + valueId/customValue (NOT name/value)
-                    // Filter out attributes without id - N11 requires id for each attribute
+                    // REST API attributes: id + valueId OR customValue (NEVER both!)
+                    // N11 rejects with TASK_ERR_001 if both valueId and customValue are sent together
                     attributes: (skuData.attributes || [])
                         .filter((attr: any) => attr.id != null && attr.id !== '')
-                        .map((attr: any) => ({
-                            id: attr.id,
-                            valueId: attr.valueId ?? null,
-                            customValue: attr.customValue ?? null
-                        }))
+                        .map((attr: any) => {
+                            const a: any = { id: attr.id };
+                            // If valueId exists, use ONLY valueId (predefined list value)
+                            // If no valueId, use ONLY customValue (free text)
+                            if (attr.valueId != null && attr.valueId !== '' && attr.valueId !== 0) {
+                                a.valueId = attr.valueId;
+                            } else if (attr.customValue != null && attr.customValue !== '') {
+                                a.customValue = attr.customValue;
+                            }
+                            return a;
+                        })
+                        .filter((attr: any) => attr.valueId != null || attr.customValue != null)
                 };
+
+                if (skuData.barcode) {
+                    sku.barcode = skuData.barcode;
+                }
 
                 // Optional fields - only add if provided
                 if (skuData.subtitle) {
@@ -446,7 +435,7 @@ export class N11Client {
 
             const payload = {
                 payload: {
-                    integrator: product.integrator || "SRN_Entegrasyon",
+                    integrator: this.creds?.integratorName || "SRN_Entegrasyon",
                     skus: skus
                 }
             };
@@ -555,6 +544,74 @@ export class N11Client {
         }
     }
     /**
+     * İade talepleri (SOAP ReturnService - ClaimReturnList). Sayfa başına 20 talep, currentPage 0'dan başlar.
+     * status: REQUESTED | CANCELLED | DENIED | PENDING | PENDED | APPROVED | MANUAL_REFUND | ALL
+     * Tarihler talep tarihi, "dd/MM/yyyy". orderNumber verilirse sipariş numarasıyla arar (searchInfoType ORDERID).
+     * Doküman: https://developer.n11.com/documentation/iade-entgrasyonu/iade-talepleri-servisi/
+     */
+    async getClaimReturns(params: { status?: string; page?: number; startDate?: string; endDate?: string; orderNumber?: string }) {
+        if (!this.creds) await this.init();
+        const x = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const envelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sch="http://www.n11.com/ws/schemas">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <sch:ClaimReturnListRequest>
+         <auth>
+            <appKey>${x(this.creds!.apiKey)}</appKey>
+            <appSecret>${x(this.creds!.apiSecret)}</appSecret>
+         </auth>
+         <searchData>
+            <status>${x(params.status || "ALL")}</status>
+            <executer></executer>
+            <searchInfoType>${params.orderNumber ? "ORDERID" : ""}</searchInfoType>
+            <searchQuery>${params.orderNumber ? x(params.orderNumber) : ""}</searchQuery>
+            <sender>ALL</sender>
+            <period>
+               <startDate>${x(params.startDate || "")}</startDate>
+               <endDate>${x(params.endDate || "")}</endDate>
+            </period>
+         </searchData>
+         <pagingData>
+            <currentPage>${params.page ?? 0}</currentPage>
+         </pagingData>
+      </sch:ClaimReturnListRequest>
+   </soapenv:Body>
+</soapenv:Envelope>`;
+
+        let text = "";
+        for (const path of ["ReturnService", "returnService"]) {
+            const response = await fetch(`https://api.n11.com/ws/${path}/`, {
+                method: "POST",
+                headers: { "Content-Type": "text/xml;charset=UTF-8", "SOAPAction": "" },
+                body: envelope,
+            });
+            text = await response.text();
+            if (response.status !== 404) break;
+        }
+        if (!/<status>\s*success\s*<\/status>/i.test(text)) {
+            const err = text.match(/<errorMessage>([\s\S]*?)<\/errorMessage>/)?.[1] || text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || text.slice(0, 200);
+            throw new Error(`N11 iade listesi alınamadı: ${err}`);
+        }
+        const tag = (block: string, name: string) => (block.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1] ?? "").trim();
+        const claims = Array.from(text.matchAll(/<claimReturn>([\s\S]*?)<\/claimReturn>/g)).map((m) => {
+            const b = m[1];
+            return {
+                claimReturnId: tag(b, "claimReturnId"),
+                status: tag(b, "status").toUpperCase(),
+                orderNumber: tag(b, "orderNumber"),
+                productName: tag(b, "productName"),
+                quantity: Number(tag(b, "quantity")) || 1,
+                unitPrice: Number(tag(b, "unitPrice")) || 0,
+                finalPrice: Number(tag(b, "finalPrice")) || 0,
+                returnReasonType: tag(b, "returnReasonType"),
+            };
+        });
+        const pageCount = Number(text.match(/<pageCount>(\d+)<\/pageCount>/)?.[1] || 1);
+        return { claims, pageCount };
+    }
+
+    /**
      * N11'e fatura linki gönderme (SOAP - SellerInvoiceService)
      * saveLinkSellerInvoice: Sipariş numarasına fatura PDF linki bağlar
      * Kurallar:
@@ -610,6 +667,67 @@ export class N11Client {
             return { success: false, message: `N11 Fatura Hatası: ${errorMsg}` };
         } catch (error: any) {
             return { success: false, message: `N11 Fatura Bağlantı Hatası: ${error.message}` };
+        }
+    }
+
+    async getProductList(page = 0, pageSize = 100) {
+        if (!this.creds) await this.init();
+
+        const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sch="http://www.n11.com/ws/schemas">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <sch:GetProductListRequest>
+         <auth>
+            <appKey>${this.creds!.apiKey}</appKey>
+            <appSecret>${this.creds!.apiSecret}</appSecret>
+         </auth>
+         <pagingData>
+            <currentPage>${page}</currentPage>
+            <pageSize>${pageSize}</pageSize>
+         </pagingData>
+      </sch:GetProductListRequest>
+   </soapenv:Body>
+</soapenv:Envelope>`;
+
+        try {
+            const response = await fetch("https://api.n11.com/ws/productService/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "text/xml;charset=UTF-8",
+                    "SOAPAction": ""
+                },
+                body: soapEnvelope
+            });
+
+            const text = await response.text();
+            const products: any[] = [];
+            const productMatches = text.match(/<product>([\s\S]*?)<\/product>/g) || [];
+
+            for (const pXml of productMatches) {
+                const idMatch = pXml.match(/<id>(.*?)<\/id>/);
+                const sellerCodeMatch = pXml.match(/<productSellerCode>(.*?)<\/productSellerCode>/);
+                const titleMatch = pXml.match(/<title>(.*?)<\/title>/);
+                const stockMatch = pXml.match(/<quantity>(.*?)<\/quantity>/);
+                const priceMatch = pXml.match(/<price>(.*?)<\/price>/);
+
+                if (idMatch || sellerCodeMatch) {
+                    products.push({
+                        id: idMatch?.[1] || "",
+                        sellerCode: sellerCodeMatch?.[1] || "",
+                        title: titleMatch?.[1] || "",
+                        stock: stockMatch?.[1] ? Number(stockMatch[1]) : 0,
+                        price: priceMatch?.[1] ? Number(priceMatch[1]) : 0,
+                    });
+                }
+            }
+
+            const totalCountMatch = text.match(/<totalCount>(.*?)<\/totalCount>/);
+            const totalCount = totalCountMatch?.[1] ? Number(totalCountMatch[1]) : products.length;
+
+            return { success: true, products, totalCount, raw: text };
+        } catch (error: any) {
+            return { success: false, message: error.message, products: [] };
         }
     }
 }

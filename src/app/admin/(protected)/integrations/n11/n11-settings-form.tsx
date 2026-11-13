@@ -69,6 +69,34 @@ export function N11SettingsForm({ initialData }: Props) {
                         />
                     </div>
 
+                    <div className="space-y-2">
+                        <Label htmlFor="shipmentTemplate">Varsayılan Kargo Şablon Adı</Label>
+                        <Input
+                            id="shipmentTemplate"
+                            name="shipmentTemplate"
+                            defaultValue={initialData?.shipmentTemplate || "Karaaslan"}
+                            placeholder="N11 Kargo Şablon Adı (Örn: Standart)"
+                            required
+                        />
+                        <p className="text-xs text-gray-500">
+                            N11 panelinizdeki ("Hesabım &gt; Teslimat Bilgilerim") kargo şablon adı ile birebir aynı olmalıdır.
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="integratorName">Entegratör Adı</Label>
+                        <Input
+                            id="integratorName"
+                            name="integratorName"
+                            defaultValue={initialData?.integratorName || "SRN_Entegrasyon"}
+                            placeholder="Entegratör adı (Örn: SRN_Entegrasyon)"
+                            required
+                        />
+                        <p className="text-xs text-gray-500">
+                            N11 API&apos;sine gönderilen entegratör tanımlayıcı adı. Mağaza adınızı yazabilirsiniz.
+                        </p>
+                    </div>
+
                     <div className="flex items-center space-x-2 pt-2">
                         <Switch
                             id="isActive"

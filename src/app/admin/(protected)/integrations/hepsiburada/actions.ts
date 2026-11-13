@@ -1,12 +1,16 @@
 
 "use server";
+import { requireAdmin } from "@/lib/admin-guard";
+import { fillEmptyPriceOnSend } from "@/lib/marketplace-price-send";
 
 import { prisma } from "@/lib/db";
 import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
+import { isListingLive, formatListingReport } from "@/lib/marketplace-report";
 import { getSiteSettings } from "@/app/admin/(protected)/settings/actions";
 import { HepsiburadaClient } from "@/services/hepsiburada/api";
 
 export async function getHepsiburadaConfig() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst();
         return { success: true, data: config };
@@ -16,6 +20,7 @@ export async function getHepsiburadaConfig() {
 }
 
 export async function saveHepsiburadaConfig(prevState: any, formData: FormData) {
+    await requireAdmin();
     try {
         const username = formData.get("username") as string; // Merchant ID
         const password = formData.get("password") as string; // Secret Key
@@ -53,6 +58,7 @@ export async function saveHepsiburadaConfig(prevState: any, formData: FormData) 
 }
 
 export async function testHepsiburadaConnection() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst();
         if (!config) return { success: false, message: "Ayarlar bulunamadı." };
@@ -82,6 +88,7 @@ export async function testHepsiburadaConnection() {
 import { addMarketplaceSyncJob } from "@/lib/queue/producer";
 
 export async function enqueueHepsiburadaSync() {
+    await requireAdmin();
     try {
         await addMarketplaceSyncJob({ marketplace: "hepsiburada", type: "products" });
         return { success: true, message: "Senkronizasyon işlemi kuyruğa alındı. Arka planda işlenecektir." };
@@ -104,6 +111,7 @@ export async function enqueueHepsiburadaOrderSync() {
 }
 
 export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -270,6 +278,8 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                                         // Kargo
                                         cargoCompany: pkg.cargoCompany || lineItem.cargoCompany,
                                         packageNumber: pkg.packageNumber,
+                                        // HB'nin kargo barkodu (etikette basılan barkod; sipariş numarası değil)
+                                        cargoBarcode: pkg.barcode ? String(pkg.barcode) : null,
                                         // Kaynak bilgisi (orders vs packages ayırmak için)
                                         _source: "packages",
                                     });
@@ -337,16 +347,25 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                         // Kısmen eklenmiş (örneğin sadece 1 ürünü gelmiş, diğeri eşleşmediği için alınmamış)
                         // Henüz faturası da kesilmemişse, silip eksiksiz şekilde tekrar oluşturalım.
                         
-                        // Önce eski siparişin düştüğü stokları geri verelim (mükerrer stok düşmesini engellemek için)
-                        for (const oldItem of existing.items) {
-                            await prisma.product.update({
-                                where: { id: oldItem.productId },
-                                data: { stock: { increment: oldItem.quantity } }
+                        // Önce eski siparişin düştüğü stokları geri verelim (mükerrer stok düşmesini engellemek için).
+                        // restoreOrderStock varyant/paketi doğru işler, "Tanımsız Ürün"e bağlı kalemleri atlar.
+                        const { restoreOrderStock } = await import("@/lib/stock-sync");
+                        await prisma.$transaction(async (tx) => {
+                            await restoreOrderStock(tx, existing.items);
+                            await tx.order.delete({ where: { id: existing.id } });
+                        });
+                    } else {
+                        // Sipariş paketlendiyse HB kargo barkodunu ve paket numarasını kaydet (etikette sipariş no yerine bu basılır)
+                        const pkgItem = items.find((i: any) => i.cargoBarcode);
+                        if (pkgItem && !existing.cargoTrackingNumber) {
+                            await prisma.order.update({
+                                where: { id: existing.id },
+                                data: {
+                                    cargoTrackingNumber: pkgItem.cargoBarcode,
+                                    ...(pkgItem.packageNumber ? { shipmentPackageId: String(pkgItem.packageNumber) } : {}),
+                                },
                             });
                         }
-                        // Siparişi silelim
-                        await prisma.order.delete({ where: { id: existing.id } });
-                    } else {
                         skippedCount++;
                         continue;
                     }
@@ -364,11 +383,14 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 let cargoCompany = items[0].cargoCompany || (items[0].cargoCompanyModel && items[0].cargoCompanyModel.name) || items[0].shippingCompanyName || null;
                 let packageId = String(items[0].packageNumber || items[0].id || "");
 
-                const stockUpdates: {id: string, variantId?: string | null, qty: number}[] = [];
+                const stockUpdates: {id: string, qty: number}[] = [];
+                const unmatchedNames: string[] = [];
 
                 for (const item of items) {
                     let product = null;
-                    let variant = null;
+                    // Eşleşen varyant: kalem varyanta bağlanır, stok varyanttan düşer (ana stok varyant toplamı)
+                    let variant: any = null;
+                    let isFallback = false;
                     const merchantSkuVal = item.merchantSku || item.merchantSKU;
 
                     // 1. Önce HepsiburadaProduct tablosundaki özel sihirbaz eşleşmelerine bakalım
@@ -409,54 +431,80 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                         }
                     }
 
-                    // 3. Varyant bulunamazsa, doğrudan Product tablosunda ara
-                    if (!product && searchConditions.length > 0) {
-                        product = await prisma.product.findFirst({
-                            where: { OR: searchConditions }
-                        });
+                    // 3. ProductVariant tablosuna bakalım
+                    if (!product) {
+                        const searchConditions: any[] = [];
+                        if (merchantSkuVal) searchConditions.push({ sku: String(merchantSkuVal) });
+                        if (item.sku) searchConditions.push({ sku: String(item.sku) });
+                        if (item.barcode) searchConditions.push({ barcode: String(item.barcode) });
+
+                        if (searchConditions.length > 0) {
+                            variant = await prisma.productVariant.findFirst({
+                                where: { OR: searchConditions },
+                                include: { product: true }
+                            });
+                            if (variant && variant.product) {
+                                product = variant.product;
+                            }
+                        }
+                    }
+
+                    // 4. Sitede tanımlı olmayan ürünler için fallback (varsayılan) ürün kullanalım ki sipariş kaybolmasın
+                    if (!product) {
+                        const fallbackProd = await (await import("@/lib/unmatched-product")).getUnmatchedProduct();
+                        if (fallbackProd) {
+                            product = fallbackProd;
+                            isFallback = true;
+                            console.log(`ℹ️ HB Sipariş ${orderNumber}: Ürün sitede bulunamadı, fallback ürün ile aktarılıyor (SKU: ${merchantSkuVal || item.sku})`);
+                        }
                     }
 
                     if (!product) {
-                        console.warn(`⚠️ HB Sipariş ${orderNumber}: Ürün eşleşmedi (SKU: ${merchantSkuVal})`);
+                        console.warn(`⚠️ HB Sipariş ${orderNumber}: Hiç ürün bulunamadığı için aktarılamadı (SKU: ${merchantSkuVal})`);
                         continue;
                     }
 
-                    const qty = item.quantity || 1;
+                    const quantity = item.quantity || 1;
                     let price = 0;
                     if (item.unitPrice != null) {
-                        price = Number(item.unitPrice);
+                        price = Number(item.unitPrice?.amount ?? item.unitPrice);
                     } else if (item.price?.amount != null) {
                         price = Number(item.price.amount);
                     } else if (item.totalPrice?.amount != null) {
-                        price = Number(item.totalPrice.amount) / qty;
+                        price = Number(item.totalPrice.amount) / quantity;
                     } else {
                         if (product) {
                             price = Number((product as any).hepsiburadaPrice) || Number(product.listPrice) || 0;
                         }
                     }
-                    const lineTotal = price * qty;
+                    const lineTotal = price * quantity;
                     const vatRate = item.vatRate || item.vat || 20;
+
+                    const productName = item.name || item.productName || item.merchantSku || item.sku || product.name || "Hepsiburada Ürünü";
 
                     orderItemsToCreate.push({
                         productId: product.id,
-                        variantId: variant ? variant.id : undefined,
-                        quantity: qty,
+                        variantId: !isFallback && variant ? variant.id : undefined,
+                        quantity: quantity,
                         unitPrice: price,
-                        productName: item.name || item.productName || "HB Ürün",
+                        productName: productName,
                         lineTotal: lineTotal,
                         vatRate: vatRate,
-                        discountRate: 0
+                        discountRate: 0,
                     });
+                    if (isFallback) unmatchedNames.push(`${productName} (kod: ${merchantSkuVal || item.sku || item.barcode || "-"})`);
 
                     totalOrderLineTotal += lineTotal;
                     vatAmountTotal += lineTotal * (vatRate / (100 + vatRate));
                     discountTotal += item.hbDiscount?.amount || item.discountPriceToBeInvoicedHb || 0;
                     
-                    stockUpdates.push({id: product.id, variantId: variant ? variant.id : null, qty: qty});
+                    if (!isFallback) {
+                        stockUpdates.push({id: product.id, qty: quantity});
+                    }
                 }
 
                 if (orderItemsToCreate.length === 0) {
-                    console.log(`⚠️ HB Sipariş ${orderNumber}: Eşleşen ürün bulunamadığı için aktarılmadı.`);
+                    console.log(`⚠️ HB Sipariş ${orderNumber}: Ürün eklenemediği için sipariş aktarılmadı.`);
                     continue;
                 }
 
@@ -464,8 +512,8 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                 const taxOffice = invoiceInfo.taxOffice || "";
 
                 // Use $transaction to atomically create order AND decrement stock
-                let hbAffectedIds: string[] = [];
-                await prisma.$transaction(async (tx) => {
+                // Transaction stok düşülen ürün ID'lerini döner; diğer pazaryerlerine stok senkronu bunlarla tetiklenir
+                const affectedProductIds: string[] = await prisma.$transaction(async (tx) => {
                     await tx.order.create({
                         data: {
                             orderNumber: orderNumber,
@@ -488,25 +536,30 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
                             items: {
                                 create: orderItemsToCreate
                             },
+                            notes: unmatchedNames.length ? `DİKKAT: Sitede bulunamayan ürün, stok düşülmedi: ${unmatchedNames.join("; ")}` : undefined,
                             source: "HEPSIBURADA",
                             cargoCompany: cargoCompany,
                             shipmentPackageId: packageId,
+                            cargoTrackingNumber: items.find((i: any) => i.cargoBarcode)?.cargoBarcode || null,
                         }
                     });
 
-                    // Stok düş (paket alt ürünleri, varyant + ana stok toplamı; lib/stock-sync ortak kuralı)
+                    // Stok düş (varyant + ana stok toplamı, paket alt ürünleri; "Tanımsız Ürün" atlanır — lib/stock-sync ortak kuralı)
                     const { decrementOrderStock } = await import("@/lib/stock-sync");
-                    hbAffectedIds = await decrementOrderStock(
+                    return decrementOrderStock(
                         tx,
-                        stockUpdates.map((u) => ({ productId: u.id, variantId: u.variantId, quantity: u.qty }))
+                        orderItemsToCreate.map(item => ({
+                            productId: item.productId,
+                            variantId: item.variantId,
+                            quantity: item.quantity,
+                        }))
                     );
                 });
 
-                // Trigger stock sync to ALL marketplaces (including HB itself)
-                // If stock reached critical level, this will push stock=0 immediately
-                if (hbAffectedIds.length > 0) {
+                // Trigger stock sync to ALL marketplaces
+                if (affectedProductIds.length > 0) {
                     const { handlePostOrderStockSync } = await import("@/lib/stock-sync");
-                    handlePostOrderStockSync(hbAffectedIds, "hepsiburada").catch(console.error);
+                    handlePostOrderStockSync(affectedProductIds, "hepsiburada").catch(console.error);
                 }
 
                 importedCount++;
@@ -527,6 +580,7 @@ export async function syncOrdersFromHepsiburada(specificOrderNumber?: string) {
 }
 
 export async function syncProductsToHepsiburada(productIds?: string[]) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -562,6 +616,9 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
         });
 
         let hbSkuMap: Record<string, string> = {};
+        // Ters eşleme: HB SKU -> HB'deki ilanın satıcı stok kodu. Entegra'dan farklı stok koduyla açılmış ilanlarda
+        // (ör. YNT115) sadece HB SKU'su girilse de güncelleme ilandaki satıcı koduyla gönderilir; HB iki kod uyuşmazsa reddediyordu.
+        const merchantByHbSku: Record<string, string> = {};
         try {
             let offset = 0;
             let limit = 100;
@@ -575,17 +632,11 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     hasMore = false;
                 } else {
                     for (const l of listingsArray) {
-                        // HAM VERİ ARAMASI (Hiçbir filtreye takılmadan)
-                        const rawStr = JSON.stringify(l);
-                        if (rawStr.includes("HBCV000007MQETQ")) {
-                            console.log(`🔍 DEBUG - RAW MATCH FOUND IN LISTINGS:`, rawStr);
-                        }
-
                         if (l.merchantSku && l.hepsiburadaSku) {
                             hbSkuMap[l.merchantSku] = l.hepsiburadaSku;
+                            merchantByHbSku[String(l.hepsiburadaSku).toUpperCase()] = l.merchantSku;
                         }
                     }
-                    console.log(`   📄 HB Sayfa ${pageNum} çekildi: ${listingsArray.length} ürün geldi.`);
                     if (listingsArray.length < limit) {
                         hasMore = false;
                     } else {
@@ -595,16 +646,6 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                 }
             }
             console.log(`📋 HB Toplam Eşleşen Listing: ${Object.keys(hbSkuMap).length} ürün bulundu`);
-            const target = "HBCV000007MQETQ";
-            const foundKeys = Object.entries(hbSkuMap).filter(([k, v]) => k.includes(target) || v.includes(target));
-            if (foundKeys.length > 0) {
-                console.log(`🔍 DEBUG - Target '${target}' eşleşmeleri:`, JSON.stringify(foundKeys));
-            } else {
-                console.log(`🔍 DEBUG - Target '${target}' HB Listing Map içinde bulunamadı!`);
-            }
-            // İlk 30 ilanın stok ve katalog kodlarını yazdır
-            const samples = Object.entries(hbSkuMap).slice(0, 30);
-            console.log(`🔍 DEBUG - Hepsiburada'dan Dönen Örnek İlk 30 İlan:`, JSON.stringify(samples));
         } catch (e: any) {
             console.error(`⚠️ HB Listing çekilemedi: ${e.message}`);
         }
@@ -626,12 +667,13 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                 for (const v of (p as any).variants) {
                     if (!v.sku && !v.barcode) continue;
 
-                    const merchantSku = v.sku || v.barcode;
+                    let merchantSku = v.sku || v.barcode;
                     const hepsiburadaSku = hbSkuMap[merchantSku] || hbSkuMap[hbMerchantSku] || (p as any).hepsiburadaProduct?.hbSku;
                     if (!hepsiburadaSku) {
                         console.log(`⚠️ HB SKU bulunamadı: ${merchantSku} - atlanıyor`);
                         continue;
                     }
+                    merchantSku = merchantByHbSku[String(hepsiburadaSku).toUpperCase()] || merchantSku;
 
                     const varPrice = basePrice + Number(v.priceAdjustment || 0);
                     const availableStock = isSellableOnHb ? Math.max(0, v.stock - criticalStock) : 0;
@@ -645,16 +687,16 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                         cargoCompany1: "Yurtiçi Kargo",
                         maximumPurchasableQuantity: 100
                     };
-                    console.log(`📦 HB Inventory Item (Variant):`, hbItem);
                     hbItems.push(hbItem);
                 }
             } else {
-                const merchantSku = hbMerchantSku;
+                let merchantSku = hbMerchantSku;
                 const hepsiburadaSku = hbSkuMap[merchantSku] || (p as any).hepsiburadaProduct?.hbSku;
                 if (!hepsiburadaSku) {
                     console.log(`⚠️ HB SKU bulunamadı: ${merchantSku} (ürün: ${p.name}) - atlanıyor`);
                     continue;
                 }
+                merchantSku = merchantByHbSku[String(hepsiburadaSku).toUpperCase()] || merchantSku;
 
                 const availableStock = isSellableOnHb ? Math.max(0, p.stock - criticalStock) : 0;
                 
@@ -667,7 +709,6 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
                     cargoCompany1: "Yurtiçi Kargo",
                     maximumPurchasableQuantity: 100
                 };
-                console.log(`📦 HB Inventory Item:`, hbItem);
                 hbItems.push(hbItem);
             }
         }
@@ -721,6 +762,7 @@ export async function syncProductsToHepsiburada(productIds?: string[]) {
 
 
 export async function getHepsiburadaCategories() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -768,6 +810,7 @@ async function getHBCategoriesCached(): Promise<any[]> {
 }
 
 export async function searchHepsiburadaCategories(query: string) {
+    await requireAdmin();
     try {
         if (!query || query.length < 2) return { success: true, data: [] };
 
@@ -798,6 +841,7 @@ export async function searchHepsiburadaCategories(query: string) {
 }
 
 export async function getHepsiburadaCategoryAttributes(categoryId: string) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -810,10 +854,38 @@ export async function getHepsiburadaCategoryAttributes(categoryId: string) {
         });
 
         const data = await client.getCategoryAttributes(categoryId);
+        // HB hata durumunda da 200 dönüp success:false + kod gönderebiliyor (1001 leaf değil, 1002 aktif değil, 1004 bulunamadı...).
+        // Önceden bu sessizce "özellik yok" sayılıyordu; form boş açılıyor, uyarı çıkmıyordu.
+        if (data?.success === false || !data?.data) {
+            return {
+                success: false,
+                message: `Hepsiburada ${categoryId} numaralı kategori için özellik vermedi${data?.message ? `: ${data.message}` : ""}${data?.code ? ` (kod ${data.code})` : ""}. Kategori, ürün açılabilen en alt kategori olmalı; HB kategori numarasını kontrol edin.`,
+            };
+        }
         const attrs: any[] = [];
         if (data.data) {
-            // Sadece kategoriye özel dinamik özellikleri ve varyant özelliklerini ekliyoruz
-            // baseAttributes (fiyat, stok, görsel vs) arka planda otomatik gönderiliyor
+            // Temel özelliklerden sistemin otomatik doldurdukları (ad, barkod, marka, fiyat, stok, görsel, garanti, ağırlık)
+            // gizlenir; kalanlar (ör. üretici / ithalatçı / sorumlu kişi bilgileri) formda gösterilir.
+            // Önceden baseAttributes tamamen atlanıyordu; bazı kategorilerde yasal üretici/ithalatçı alanları orada geldiği için
+            // formda hiç görünmüyordu.
+            const AUTO_FILLED = new Set([
+                "merchantsku", "varyantgroupid", "barcode", "urunadi", "urunaciklamasi", "marka", "garantisuresi",
+                "kg", "price", "stock", "image1", "image2", "image3", "image4", "image5", "video1",
+            ]);
+            // KDV ürünün KDV oranından (tax_vat_rate), Görsel1-10 ürün fotoğraflarından otomatik gönderiliyor
+            const isAutoFilled = (a: any) => {
+                const id = String(a?.id || "").toLocaleLowerCase("tr-TR");
+                const name = String(a?.name || "").toLocaleLowerCase("tr-TR").replace(/\s+/g, "");
+                if (AUTO_FILLED.has(id) || AUTO_FILLED.has(name)) return true;
+                if (/^(image|görsel|gorsel)\d+$/.test(id) || /^(image|görsel|gorsel)\d+$/.test(name)) return true;
+                if (id.includes("vat") || name === "kdv") return true;
+                return false;
+            };
+            if (Array.isArray(data.data.baseAttributes)) {
+                for (const a of data.data.baseAttributes) {
+                    if (!isAutoFilled(a)) attrs.push(a);
+                }
+            }
             if (Array.isArray(data.data.attributes)) {
                 attrs.push(...data.data.attributes);
             }
@@ -821,13 +893,36 @@ export async function getHepsiburadaCategoryAttributes(categoryId: string) {
                 attrs.push(...data.data.variantAttributes);
             }
         }
-        return { success: true, data: attrs };
+        // Aynı özellik birden fazla grupta gelirse bir kez göster
+        const seen = new Set<string>();
+        const unique = attrs.filter((a) => {
+            const k = String(a?.id || a?.name || "");
+            if (!k || seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+        // Varyant özellikleri (renk, beden vb.): varyantlı üründe her varyant için ayrı sorulur
+        const variantIds = new Set(
+            (Array.isArray(data?.data?.variantAttributes) ? data.data.variantAttributes : []).map((a: any) => String(a?.id || a?.name || ""))
+        );
+        for (const a of unique) {
+            if (variantIds.has(String(a?.id || a?.name || ""))) a.isVariant = true;
+        }
+        if (unique.length === 0) {
+            return {
+                success: true,
+                data: [],
+                message: `Hepsiburada ${categoryId} numaralı kategori için hiç özellik döndürmedi. Kategori numarası yanlış ya da üst kategori olabilir; ürünün HB kategorisini kontrol edin.`,
+            };
+        }
+        return { success: true, data: unique };
     } catch (error: any) {
         return { success: false, message: "Hata: " + error.message };
     }
 }
 
 export async function getHepsiburadaAttributeValues(categoryId: string, attributeId: string) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
@@ -874,6 +969,7 @@ export async function getHepsiburadaAttributeValues(categoryId: string, attribut
 }
 
 export async function updateHepsiburadaSku(productId: string, hbSku: string, hbMerchantSku?: string) {
+    await requireAdmin();
     try {
         const updateData: any = {
             hbSku: hbSku || "",
@@ -908,7 +1004,7 @@ function getAbsoluteImageUrl(url: string): string {
     if (url.startsWith("http://") || url.startsWith("https://")) {
         return url;
     }
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://serinmotor.com";
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.serinmotor.com";
     if (baseUrl.endsWith("/")) {
         baseUrl = baseUrl.slice(0, -1);
     }
@@ -920,10 +1016,18 @@ function getAbsoluteImageUrl(url: string): string {
     return absoluteUrl;
 }
 
-export async function sendProductToHepsiburada(productId: string, attributes: any[]) {
+export async function sendProductToHepsiburada(
+    productId: string,
+    attributes: any[],
+    // Varyantlı ürün: varyant ID -> { HB varyant özellik ID'si -> değer } (ör. renk_variant_property: "Siyah")
+    variantAttributes?: Record<string, Record<string, string>>
+) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
+
+        const priceNote = await fillEmptyPriceOnSend("hepsiburada", [productId]);
 
         const product = await prisma.product.findUnique({
             where: { id: productId },
@@ -944,7 +1048,14 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
             isTestMode: config.isTestMode ?? true,
         });
 
-        const mappedCat = product.categories.find((c: any) => c.hbCategoryId !== null && c.hbCategoryId !== undefined);
+        // Öncelik: 1) Ürüne özel HB kategori override → 2) Site kategori eşleşmesi
+        const productOverrideCatId = (product as any).hepsiburadaProduct?.hbCategoryId;
+        let mappedCat;
+        if (productOverrideCatId) {
+            mappedCat = { hbCategoryId: productOverrideCatId };
+        } else {
+            mappedCat = product.categories.find((c: any) => c.hbCategoryId !== null && c.hbCategoryId !== undefined);
+        }
         if (!mappedCat) return { success: false, message: "Ürünün kategorisi Hepsiburada ile eşleşmemiş." };
 
         const merchantId = config.merchantId || config.username;
@@ -973,6 +1084,10 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                 ...(product.images[2] ? { Image3: getAbsoluteImageUrl(product.images[2]) } : {}),
                 ...(product.images[3] ? { Image4: getAbsoluteImageUrl(product.images[3]) } : {}),
                 ...(product.images[4] ? { Image5: getAbsoluteImageUrl(product.images[4]) } : {}),
+                // HB 10 görsele kadar kabul ediyor (form artık Görsel6+ sormuyor)
+                ...Object.fromEntries(
+                    product.images.slice(5, 10).map((img, i) => [`Image${i + 6}`, getAbsoluteImageUrl(img)])
+                ),
                 // HB SKU (Katalog Kodu) varsa ekle (Buybox eşleşmesi için)
                 ...((product as any).hepsiburadaProduct?.hbSku ? { hbSku: (product as any).hepsiburadaProduct.hbSku } : {}),
                 // Kullanıcının girdiği dinamik kategori özellikleri (ID bazlı gönderim)
@@ -981,6 +1096,49 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
                     .reduce((acc: any, curr: any) => ({ ...acc, [curr.id]: curr.value }), {}),
             }
         }];
+
+        // Varyantlı ürün: HB'de her varyant ayrı ürün olarak, aynı VaryantGroupID ile gönderilir
+        // (resmi doküman: VaryantGroupID aynı + varyant özelliklerinden en az biri dolu).
+        const variantRows = (product.variants || []).filter((v: any) => v.barcode);
+        let sentVariantCount = 0;
+        if (variantRows.length > 0) {
+            const common: any = { ...payload[0].attributes };
+            // Ürün geneline ait alanlar varyant başına yeniden yazılır
+            for (const k of Object.keys(common)) {
+                if (/^Image\d+$/.test(k) || ["merchantSku", "Barcode", "price", "stock", "hbSku"].includes(k)) delete common[k];
+            }
+            const variantKeys = new Set<string>();
+            for (const m of Object.values(variantAttributes || {})) for (const k of Object.keys(m || {})) variantKeys.add(k);
+            for (const k of variantKeys) delete common[k];
+
+            const criticalStock = product.criticalStock || 0;
+            const variantPayload = variantRows.map((v: any) => {
+                const vImgs: string[] = (v.images && v.images.length > 0 ? v.images : product.images).slice(0, 10);
+                const vPrice = hbPrice + Number(v.priceAdjustment || 0);
+                const vAttrs = Object.fromEntries(
+                    Object.entries((variantAttributes || {})[v.id] || {}).filter(([, val]) => val !== undefined && String(val).trim() !== "")
+                );
+                return {
+                    categoryId: payload[0].categoryId,
+                    merchant: payload[0].merchant,
+                    attributes: {
+                        ...common,
+                        merchantSku: v.sku || v.barcode,
+                        Barcode: v.barcode,
+                        price: vPrice.toFixed(2).replace(".", ","),
+                        stock: String(Math.max(0, v.stock - criticalStock)),
+                        ...Object.fromEntries(vImgs.map((img: string, i: number) => [`Image${i + 1}`, getAbsoluteImageUrl(img)])),
+                        ...vAttrs,
+                    },
+                };
+            });
+            const missingVariantAttr = variantPayload.filter((it: any) => !Array.from(variantKeys).some((k) => it.attributes[k]));
+            if (variantKeys.size === 0 || missingVariantAttr.length > 0) {
+                return { success: false, message: "Varyantlı ürün: her varyant için en az bir varyant özelliği (renk, beden vb.) doldurulmalı." };
+            }
+            payload.splice(0, payload.length, ...variantPayload);
+            sentVariantCount = variantPayload.length;
+        }
 
         console.log("📡 HB Product Payload (FULL):", JSON.stringify(payload, null, 2));
 
@@ -991,44 +1149,75 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
         console.log("📡 HB Product Upload Result:", JSON.stringify(result));
 
         // Tracking ID varsa 5 saniye sonra durumu kontrol et
-        let trackingStatus = null;
+        let trackingResult: ReturnType<typeof readHbProductStatus> = null;
         if (trackingId) {
             await new Promise(resolve => setTimeout(resolve, 5000));
             try {
-                const sitSuffix = (config.isTestMode ?? true) ? "-sit" : "";
-                const statusUrl = `https://mpop${sitSuffix}.hepsiburada.com/product/api/products/status/${trackingId}`;
-                const statusRes = await fetch(statusUrl, {
-                    headers: {
-                        "Authorization": `Basic ${Buffer.from(`${config.merchantId || config.username}:${config.password}`).toString("base64")}`,
-                        "User-Agent": "serinmotor_dev",
-                        "Accept": "application/json"
-                    }
-                });
-                trackingStatus = await statusRes.text();
-                console.log("📊 HB Product Tracking Status:", trackingStatus);
+                trackingResult = readHbProductStatus(await client.getProductStatus(String(trackingId)));
             } catch (e: any) {
                 console.log("⚠️ Tracking check failed:", e.message);
             }
         }
 
+        // Ayrıca envanter güncellemesini de gönder (Stok ve fiyatın açılması için)
+        // Varyantlı üründe her varyantın kendi HB SKU'su olur; envanter normal stok senkronuyla gider
+        const hepsiburadaSku = sentVariantCount > 0 ? null : product.hepsiburadaProduct?.hbSku;
+        if (hepsiburadaSku) {
+            try {
+                const generalSettings = await getSiteSettings("general");
+                const defaultCritical = Number(generalSettings?.defaultCriticalStock || 10);
+                const criticalStock = product.criticalStock ?? defaultCritical;
+                const availableStock = Math.max(0, product.stock - criticalStock);
+
+                const hbItem = {
+                    hepsiburadaSku,
+                    merchantSku: product.hepsiburadaProduct?.merchantSku || product.sku || product.barcode || '',
+                    availableStock: Math.round(availableStock),
+                    price: Number(hbPrice.toFixed(2)),
+                    dispatchTime: 1,
+                    cargoCompany1: "Yurtiçi Kargo",
+                    maximumPurchasableQuantity: 100
+                };
+                
+                console.log("📡 HB Eşleşen Ürün İçin Envanter Güncelleniyor:", JSON.stringify(hbItem));
+                const uploadResult = await client.uploadInventory([hbItem]);
+                console.log("📡 Envanter Güncelleme Sonucu:", JSON.stringify(uploadResult));
+            } catch (e: any) {
+                console.error("⚠️ Envanter güncellenirken hata oluştu:", e.message);
+            }
+        }
+
+        const rejected = trackingResult?.batchStatus === "FAILED";
+        const batchFields = trackingId ? { batchRequestId: String(trackingId), batchStatus: trackingResult?.batchStatus || "PENDING" } : {};
         await (prisma as any).hepsiburadaProduct.upsert({
             where: { productId: product.id },
-            update: { 
-                isSynced: true, 
-                lastSyncedAt: new Date(), 
-                lastSyncError: null,
-            },
-            create: { 
-                productId: product.id, 
-                isSynced: true, 
+            update: {
+                isSynced: !rejected,
                 lastSyncedAt: new Date(),
+                lastSyncError: rejected ? trackingResult?.detail : null,
+                ...batchFields,
+            },
+            create: {
+                productId: product.id,
+                isSynced: !rejected,
+                lastSyncedAt: new Date(),
+                lastSyncError: rejected ? trackingResult?.detail : null,
                 merchantSku: product.sku || product.barcode || product.id,
+                ...batchFields,
             }
         });
 
-        return { 
+        if (rejected) return { success: false, message: `Hepsiburada reddetti: ${trackingResult?.detail}` };
+
+        // Ürünü pazaryerinde aktif olarak işaretle (Trendyol ile aynı); tik kapalıyken stok senkronu HB'ye stok 0 gönderir
+        await prisma.product.update({
+            where: { id: product.id },
+            data: { isHepsiburadaActive: true }
+        });
+
+        return {  
             success: true, 
-            message: `Ürün Hepsiburada'ya gönderildi! ${trackingId ? `Tracking ID: ${trackingId}` : ""}` 
+            message: `Ürün Hepsiburada'ya gönderildi${sentVariantCount > 0 ? ` (${sentVariantCount} varyant)` : ""}! ${trackingId ? `Tracking ID: ${trackingId}` : ""}${priceNote}` 
         };
 
     } catch (error: any) {
@@ -1042,11 +1231,14 @@ export async function sendProductToHepsiburada(productId: string, attributes: an
  * Sadece isTestMode true iken çalışır
  */
 export async function createHepsiburadaTestOrder() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
         if (!config) return { success: false, message: "Aktif bir SIT (Test) bağlantısı bulunamadı." };
+        
+        const merchantId = config.merchantId || config.username;
         // SIT Test Sipariş Oluşturma - stub endpoint (sadece bu POST kabul eder)
-        const sitUrl = `https://oms-stub-external-sit.hepsiburada.com/orders/merchantid/${config.merchantId}`;
+        const sitUrl = `https://oms-stub-external-sit.hepsiburada.com/orders/merchantid/${merchantId}`;
 
         // Aktif listing'den gerçek SKU bilgilerini çek
         const client = new HepsiburadaClient({
@@ -1081,7 +1273,6 @@ export async function createHepsiburadaTestOrder() {
         }
 
         const orderId = `HB${Date.now()}`;
-        const merchantId = config.merchantId || config.username;
 
         // HB SIT sipariş - resmi dokümantasyona tam uygun payload
         // https://developers.hepsiburada.com/hepsiburada/reference/post_orders-merchantid-merchantid
@@ -1154,6 +1345,7 @@ export async function createHepsiburadaTestOrder() {
  * SIT Siparişlerini Listele
  */
 export async function getHepsiburadaSitOrders() {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
         if (!config) return { success: false, message: "Aktif SIT bağlantısı bulunamadı.", orders: [] };
@@ -1209,6 +1401,7 @@ export async function getHepsiburadaSitOrders() {
  * Adım 2: Siparişteki kalemleri paketler
  */
 export async function packageHepsiburadaOrder(orderNumber: string, lineItemIds: string[]) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
         if (!config) return { success: false, message: "Aktif SIT bağlantısı bulunamadı." };
@@ -1238,6 +1431,7 @@ export async function packageHepsiburadaOrder(orderNumber: string, lineItemIds: 
  * Adım 3: Paketlenmiş siparişe fatura linki iletir
  */
 export async function sendHepsiburadaInvoiceLink(packageNumber: string, orderNumber: string, invoiceUrl?: string) {
+    await requireAdmin();
     try {
         const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true, isTestMode: true } });
         if (!config) return { success: false, message: "Aktif SIT bağlantısı bulunamadı." };
@@ -1249,7 +1443,11 @@ export async function sendHepsiburadaInvoiceLink(packageNumber: string, orderNum
             isTestMode: true,
         });
 
-        const fakeInvoiceUrl = invoiceUrl || `https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf`;
+        let baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.serinmotor.com";
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.slice(0, -1);
+        }
+        const fakeInvoiceUrl = invoiceUrl || `${baseUrl}/mock-invoice.pdf`;
         
         console.log(`🧾 Fatura Linki: Package ${packageNumber}, Order ${orderNumber}, URL: ${fakeInvoiceUrl}`);
         
@@ -1260,5 +1458,238 @@ export async function sendHepsiburadaInvoiceLink(packageNumber: string, orderNum
     } catch (error: any) {
         console.error("❌ Fatura Hatası:", error);
         return { success: false, message: "Fatura Hatası: " + error.message };
+    }
+}
+
+// ==================== ÜRÜN BAZLI KATEGORİ OVERRIDE ====================
+
+/**
+ * Tekli ürüne Hepsiburada kategori override set etme
+ * null geçilirse override kaldırılır, site kategori eşleşmesine düşer
+ */
+export async function setHepsiburadaProductCategory(productId: string, hbCategoryId: string | null) {
+    await requireAdmin();
+    try {
+        await (prisma as any).hepsiburadaProduct.upsert({
+            where: { productId },
+            update: { hbCategoryId: hbCategoryId?.trim() || null },
+            create: {
+                productId,
+                hbCategoryId: hbCategoryId?.trim() || null,
+            },
+        });
+        revalidatePath("/admin/integrations/hepsiburada");
+        return { success: true, message: hbCategoryId ? `Ürüne özel Hepsiburada kategorisi atandı: ${hbCategoryId}` : "Ürüne özel kategori kaldırıldı, site eşleşmesi kullanılacak." };
+    } catch (error: any) {
+        console.error("setHepsiburadaProductCategory error:", error);
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+/**
+ * Toplu ürünlere Hepsiburada kategori override set etme
+ */
+export async function setBulkHepsiburadaProductCategory(productIds: string[], hbCategoryId: string) {
+    await requireAdmin();
+    try {
+        for (const productId of productIds) {
+            await (prisma as any).hepsiburadaProduct.upsert({
+                where: { productId },
+                update: { hbCategoryId: hbCategoryId.trim() },
+                create: {
+                    productId,
+                    hbCategoryId: hbCategoryId.trim(),
+                },
+            });
+        }
+        revalidatePath("/admin/integrations/hepsiburada");
+        return { success: true, message: `${productIds.length} ürüne Hepsiburada kategori override atandı: ${hbCategoryId}` };
+    } catch (error: any) {
+        console.error("setBulkHepsiburadaProductCategory error:", error);
+        return { success: false, message: "Hata: " + error.message };
+    }
+}
+
+// ==================== HB İLAN EŞLEŞTİRME ====================
+
+/**
+ * HB'deki tüm ilanları çekip satıcı stok kodu (merchantSku) eşleşen site ürünlerini "senkron" işaretler ve HB SKU'sunu kaydeder.
+ * Entegra veya HB panelinden eklenmiş ürünler HB'de olduğu halde listede "Bekliyor" görünüyordu.
+ * Sadece eşleştirme kaydını düzeltir; ürünün "HB'de açık" ayarına dokunmaz.
+ */
+const HB_STATUS_LABELS: Record<string, string> = {
+    WAITING: "İncelemede",
+    MISSING_INFO: "Ürün bilgileri eksik",
+    MATCHED: "Eşleşen (HB panelinde onay gerekir)",
+    PRE_MATCHED: "Ön katalog eşleşen",
+    MATCHED_WITH_STAGED: "Eşleşen",
+    REJECTED: "Reddedildi",
+    CREATED: "Oluşturuldu",
+};
+
+/** HB trackingId cevabını okur; durum alanı bulunamazsa null (kayıt olduğu gibi kalır) */
+function readHbProductStatus(body: any): { batchStatus: "SUCCESS" | "PENDING" | "FAILED"; detail: string } | null {
+    const data = body?.data;
+    const rows: any[] = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : Array.isArray(body?.content) ? body.content : data ? [data] : [];
+    const items = rows.filter((r) => r?.productStatus);
+    if (items.length === 0) return null;
+
+    const statuses = items.map((r) => String(r.productStatus).toUpperCase());
+    const reasons = items.flatMap((r) => r.validationResults || []).map((v: any) =>
+        typeof v === "string" ? v : [v?.attributeName, v?.message].filter(Boolean).join(": ")
+    ).filter(Boolean);
+    const labels = [...new Set(statuses)].map((st) => HB_STATUS_LABELS[st] || st).join(", ");
+    return {
+        batchStatus: statuses.some((st) => st === "REJECTED" || st === "MISSING_INFO") ? "FAILED" : statuses.every((st) => st === "CREATED") ? "SUCCESS" : "PENDING",
+        detail: [labels, ...reasons].join(" | ").slice(0, 900),
+    };
+}
+
+async function getHepsiburadaClient() {
+    const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
+    if (!config) return null;
+    return new HepsiburadaClient({
+        username: config.username,
+        password: config.password,
+        merchantId: config.merchantId || config.username,
+        isTestMode: config.isTestMode ?? true,
+    });
+}
+
+async function applyHbTrackingResult(trackingId: string, result: NonNullable<ReturnType<typeof readHbProductStatus>>) {
+    await (prisma as any).hepsiburadaProduct.updateMany({
+        where: { batchRequestId: trackingId },
+        data: {
+            batchStatus: result.batchStatus,
+            lastSyncError: result.batchStatus === "FAILED" ? result.detail : null,
+            ...(result.batchStatus === "PENDING" ? {} : { isSynced: result.batchStatus === "SUCCESS" }),
+        },
+    });
+}
+
+/** Tek ürünün son gönderiminin HB'deki sonucu (liste ve İşlem Geçmişi için) */
+export async function checkHepsiburadaProductStatus(productId: string) {
+    await requireAdmin();
+    try {
+        const link = await (prisma as any).hepsiburadaProduct.findUnique({ where: { productId } });
+        if (!link?.batchRequestId) return { success: false, message: "Bu ürün için kayıtlı bir Hepsiburada gönderim numarası yok." };
+        const client = await getHepsiburadaClient();
+        if (!client) return { success: false, message: "Aktif Hepsiburada entegrasyonu yok." };
+
+        const result = readHbProductStatus(await client.getProductStatus(link.batchRequestId));
+        if (!result) return { success: false, message: "Hepsiburada henüz durum bilgisi döndürmedi." };
+        await applyHbTrackingResult(link.batchRequestId, result);
+        return { success: true, message: `Hepsiburada: ${result.detail}`, batchStatus: result.batchStatus, error: result.batchStatus === "FAILED" ? result.detail : null };
+    } catch (error: any) {
+        return { success: false, message: "HB hatası: " + error.message };
+    }
+}
+
+/** Sonucu beklenen tüm HB gönderimlerini sorgular */
+export async function syncHepsiburadaBatchStatuses() {
+    await requireAdmin();
+    try {
+        const pending = await (prisma as any).hepsiburadaProduct.findMany({
+            where: { batchRequestId: { not: null }, batchStatus: "PENDING" },
+            select: { batchRequestId: true },
+            take: 100,
+        });
+        if (pending.length === 0) return { success: true, message: "Kontrol edilecek işlem yok." };
+        const client = await getHepsiburadaClient();
+        if (!client) return { success: false, message: "Aktif Hepsiburada entegrasyonu yok." };
+
+        let updated = 0;
+        for (const trackingId of new Set<string>(pending.map((p: any) => p.batchRequestId))) {
+            const result = await client.getProductStatus(trackingId).then(readHbProductStatus).catch(() => null);
+            if (!result) continue;
+            await applyHbTrackingResult(trackingId, result);
+            updated++;
+        }
+        revalidatePath("/admin/integrations/hepsiburada/products");
+        return { success: true, message: `${updated} işlem güncellendi.` };
+    } catch (error: any) {
+        return { success: false, message: "HB hatası: " + error.message };
+    }
+}
+
+export async function matchHepsiburadaListings() {
+    await requireAdmin();
+    try {
+        const config = await (prisma as any).hepsiburadaConfig.findFirst({ where: { isActive: true } });
+        if (!config) return { success: false, message: "Aktif Hepsiburada entegrasyonu yok." };
+
+        const client = new HepsiburadaClient({
+            username: config.username,
+            password: config.password,
+            merchantId: config.merchantId || config.username,
+            isTestMode: config.isTestMode ?? true,
+        });
+
+        const hbSkuMap = new Map<string, string>(); // merchantSku -> hepsiburadaSku
+        const liveSkus = new Set<string>(); // satışta ve stoklu ilanlar
+        let stockKnown = true;
+        const LIMIT = 100;
+        for (let offset = 0, page = 0; page < 500; page++, offset += LIMIT) {
+            const res = await client.getListings(LIMIT, offset);
+            const arr = res?.listings || res?.items || (Array.isArray(res) ? res : []);
+            for (const l of arr) {
+                if (l.merchantSku && l.hepsiburadaSku) {
+                    hbSkuMap.set(String(l.merchantSku), String(l.hepsiburadaSku));
+                    const lv = isListingLive(l);
+                    if (!lv.stockKnown) stockKnown = false;
+                    if (lv.live) liveSkus.add(String(l.merchantSku));
+                }
+            }
+            if (arr.length < LIMIT) break;
+        }
+        if (hbSkuMap.size === 0) return { success: false, message: "HB'den ilan alınamadı." };
+
+        const products: any[] = await prisma.product.findMany({
+            select: {
+                id: true, sku: true, barcode: true, isActive: true, isHepsiburadaActive: true,
+                variants: { select: { sku: true, barcode: true } },
+                hepsiburadaProduct: { select: { isSynced: true, merchantSku: true, batchStatus: true } },
+            },
+        });
+
+        let matched = 0;
+        let alreadySynced = 0;
+        const matchedRemote = new Set<string>();
+        const liveButClosed: string[] = [];
+        for (const p of products) {
+            const codes = [
+                p.hepsiburadaProduct?.merchantSku, p.sku, p.barcode,
+                ...(p.variants || []).flatMap((v: any) => [v.sku, v.barcode]),
+            ].filter(Boolean) as string[];
+            const hits = codes.filter((code) => hbSkuMap.has(code));
+            hits.forEach((c) => matchedRemote.add(c));
+            const hit = hits[0];
+            if (!hit) continue;
+            if (hits.some((c) => liveSkus.has(c)) && !(p.isActive && p.isHepsiburadaActive)) liveButClosed.push(p.sku || hit);
+            if (p.hepsiburadaProduct?.isSynced) {
+                // HB'de ilanı bulundu: gönderim sonucu beklemeye gerek kalmadı
+                if (p.hepsiburadaProduct.batchStatus === "PENDING") {
+                    await (prisma as any).hepsiburadaProduct.update({ where: { productId: p.id }, data: { batchStatus: "SUCCESS" } });
+                }
+                alreadySynced++;
+                continue;
+            }
+            await (prisma as any).hepsiburadaProduct.upsert({
+                where: { productId: p.id },
+                update: { isSynced: true, hbSku: hbSkuMap.get(hit), merchantSku: hit, lastSyncError: null, lastSyncedAt: new Date() },
+                create: { productId: p.id, isSynced: true, hbSku: hbSkuMap.get(hit), merchantSku: hit, lastSyncedAt: new Date() },
+            });
+            matched++;
+        }
+
+        revalidatePath("/admin/integrations/hepsiburada/products");
+        return {
+            success: true,
+            message: `HB'de ${hbSkuMap.size} ilan bulundu. ${matched} ürün eşleştirilip "Senkronize" işaretlendi${alreadySynced ? `, ${alreadySynced} ürün zaten eşleşmişti` : ""}.` +
+                formatListingReport([...liveSkus].filter((s) => !matchedRemote.has(s)), liveButClosed, stockKnown),
+        };
+    } catch (error: any) {
+        console.error("matchHepsiburadaListings error:", error);
+        return { success: false, message: "HB hatası: " + error.message };
     }
 }
