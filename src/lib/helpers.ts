@@ -249,6 +249,8 @@ export function getOrderStatusLabel(status: string, paymentMethod?: string) {
             return "Tamamlandı";
         case "CANCELLED":
             return "İptal Edildi";
+        case "RETURNED":
+            return "İade Edildi";
         default:
             return status;
     }
@@ -266,6 +268,7 @@ export function getOrderStatusColor(status: string): string {
         SHIPPED: "bg-indigo-600 text-white font-semibold",
         DELIVERED: "bg-emerald-600 text-white font-semibold",
         CANCELLED: "bg-rose-600 text-white font-semibold",
+        RETURNED: "bg-orange-600 text-white font-semibold",
     };
     return statusColors[status] || "bg-slate-500 text-white";
 }

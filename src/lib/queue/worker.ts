@@ -81,6 +81,9 @@ export function initializeWorker() {
                     console.log(`✅ Trendyol durum güncelleme:`, await runTrendyolStatusCatchUp().catch((e: any) => ({ error: e.message })));
                     // Tek seferlik: aktarım anı yazılmış sipariş tarihlerini Trendyol'daki gerçek tarihle düzelt
                     console.log(`✅ Trendyol tarih onarımı:`, await repairTrendyolOrderDates().catch((e: any) => ({ error: e.message })));
+                    // Onaylanan iadeler: tam iade → İade Edildi, kısmi → iade tutarı (stoğa dokunulmaz)
+                    const { runTrendyolReturnSync } = await import("@/lib/marketplace-returns");
+                    console.log(`✅ Trendyol iade:`, await runTrendyolReturnSync().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 
@@ -92,6 +95,9 @@ export function initializeWorker() {
                     // Durumu takılı kalan siparişleri HB'ye sorup ileri taşı (sadece ileri)
                     const { runHepsiburadaStatusCatchUp } = await import("@/lib/order-status-runners");
                     console.log(`✅ HB durum güncelleme:`, await runHepsiburadaStatusCatchUp().catch((e: any) => ({ error: e.message })));
+                    // Kabul edilen / parası iade edilen talepler (stoğa dokunulmaz)
+                    const { runHepsiburadaReturnSync } = await import("@/lib/marketplace-returns");
+                    console.log(`✅ HB iade:`, await runHepsiburadaReturnSync().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 
@@ -106,6 +112,9 @@ export function initializeWorker() {
                     // Import mevcut siparişlere dokunmuyor; durumu takılı kalanları N11'e sorup ileri taşı
                     const { runN11StatusCatchUp } = await import("@/lib/order-status-runners");
                     console.log(`✅ N11 durum güncelleme:`, await runN11StatusCatchUp().catch((e: any) => ({ error: e.message })));
+                    // Onaylanan iadeler (stoğa dokunulmaz)
+                    const { runN11ReturnSync } = await import("@/lib/marketplace-returns");
+                    console.log(`✅ N11 iade:`, await runN11ReturnSync().catch((e: any) => ({ error: e.message })));
                     return;
                 }
 

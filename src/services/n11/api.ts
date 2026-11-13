@@ -164,6 +164,74 @@ export class N11Client {
     }
 
     /**
+     * İade talepleri (SOAP ReturnService - ClaimReturnList). Sayfa başına 20 talep, currentPage 0'dan başlar.
+     * status: REQUESTED | CANCELLED | DENIED | PENDING | PENDED | APPROVED | MANUAL_REFUND | ALL
+     * Tarihler talep tarihi, "dd/MM/yyyy". orderNumber verilirse sipariş numarasıyla arar (searchInfoType ORDERID).
+     * Doküman: https://developer.n11.com/documentation/iade-entgrasyonu/iade-talepleri-servisi/
+     */
+    async getClaimReturns(params: { status?: string; page?: number; startDate?: string; endDate?: string; orderNumber?: string }) {
+        if (!this.creds) await this.init();
+        const x = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const envelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sch="http://www.n11.com/ws/schemas">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <sch:ClaimReturnListRequest>
+         <auth>
+            <appKey>${x(this.creds!.apiKey)}</appKey>
+            <appSecret>${x(this.creds!.apiSecret)}</appSecret>
+         </auth>
+         <searchData>
+            <status>${x(params.status || "ALL")}</status>
+            <executer></executer>
+            <searchInfoType>${params.orderNumber ? "ORDERID" : ""}</searchInfoType>
+            <searchQuery>${params.orderNumber ? x(params.orderNumber) : ""}</searchQuery>
+            <sender>ALL</sender>
+            <period>
+               <startDate>${x(params.startDate || "")}</startDate>
+               <endDate>${x(params.endDate || "")}</endDate>
+            </period>
+         </searchData>
+         <pagingData>
+            <currentPage>${params.page ?? 0}</currentPage>
+         </pagingData>
+      </sch:ClaimReturnListRequest>
+   </soapenv:Body>
+</soapenv:Envelope>`;
+
+        let text = "";
+        for (const path of ["ReturnService", "returnService"]) {
+            const response = await fetch(`https://api.n11.com/ws/${path}/`, {
+                method: "POST",
+                headers: { "Content-Type": "text/xml;charset=UTF-8", "SOAPAction": "" },
+                body: envelope,
+            });
+            text = await response.text();
+            if (response.status !== 404) break;
+        }
+        if (!/<status>\s*success\s*<\/status>/i.test(text)) {
+            const err = text.match(/<errorMessage>([\s\S]*?)<\/errorMessage>/)?.[1] || text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || text.slice(0, 200);
+            throw new Error(`N11 iade listesi alınamadı: ${err}`);
+        }
+        const tag = (block: string, name: string) => (block.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1] ?? "").trim();
+        const claims = Array.from(text.matchAll(/<claimReturn>([\s\S]*?)<\/claimReturn>/g)).map((m) => {
+            const b = m[1];
+            return {
+                claimReturnId: tag(b, "claimReturnId"),
+                status: tag(b, "status").toUpperCase(),
+                orderNumber: tag(b, "orderNumber"),
+                productName: tag(b, "productName"),
+                quantity: Number(tag(b, "quantity")) || 1,
+                unitPrice: Number(tag(b, "unitPrice")) || 0,
+                finalPrice: Number(tag(b, "finalPrice")) || 0,
+                returnReasonType: tag(b, "returnReasonType"),
+            };
+        });
+        const pageCount = Number(text.match(/<pageCount>(\d+)<\/pageCount>/)?.[1] || 1);
+        return { claims, pageCount };
+    }
+
+    /**
      * Sipariş numarasıyla paket sorgusu (GetShipmentPackages ?orderNumber=).
      * Doküman: tarih verilmezse sadece son 15 gün listelenir; bu yüzden siparişin tarihi etrafında
      * en fazla 15 günlük aralık verilir (ms timestamp). Dönen paketlerde durum shipmentPackageStatus'tadır.

@@ -84,7 +84,7 @@ async function loadDashboardData(): Promise<DashboardData> {
                    COALESCE(SUM(total), 0)::float AS revenue,
                    COUNT(*) AS orders
             FROM orders
-            WHERE "createdAt" >= ${from30} AND status NOT IN ('CANCELLED', 'WAITING_FOR_PAYMENT')
+            WHERE "createdAt" >= ${from30} AND status NOT IN ('CANCELLED', 'WAITING_FOR_PAYMENT', 'RETURNED')
             GROUP BY d
         `,
         prisma.order.groupBy({

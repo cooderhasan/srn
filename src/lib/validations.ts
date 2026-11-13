@@ -100,7 +100,7 @@ export const orderSchema = z.object({
 });
 
 export const updateOrderStatusSchema = z.object({
-    status: z.enum(["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]),
+    status: z.enum(["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"]),
 });
 
 // ==================== DISCOUNT GROUP VALIDATIONS ====================

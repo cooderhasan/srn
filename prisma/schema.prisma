@@ -36,6 +36,7 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
+  RETURNED // İade Edildi: siparişin tamamı iade; stoğa otomatik dokunulmaz, ciroya sayılmaz
 }
 
 enum PaymentMethod {
@@ -336,6 +337,9 @@ model Order {
   // Yazdırma Takibi
   isPrinted            Boolean       @default(false) // Yazdırıldı mı?
   printedAt            DateTime?     // İlk yazdırılma zamanı
+  // İade: durum RETURNED ise siparişin tamamı iadedir; kısmi iadede durum değişmez, iade edilen tutar buraya yazılır
+  returnedAmount       Decimal       @default(0) @db.Decimal(12, 2)
+  returnedAt           DateTime?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 

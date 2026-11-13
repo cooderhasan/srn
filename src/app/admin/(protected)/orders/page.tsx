@@ -168,6 +168,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     const summary = {
         count: 0, total: 0,
         cancelledCount: 0, cancelledTotal: 0,
+        returnedCount: 0, returnedTotal: 0,
         unpaidCount: 0, unpaidTotal: 0,
         bySource: new Map<string, { count: number; total: number }>(),
     };
@@ -175,6 +176,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         const n = g._count?._all || 0;
         const t = Number(g._sum?.total || 0);
         if (g.status === "CANCELLED") { summary.cancelledCount += n; summary.cancelledTotal += t; continue; }
+        if (g.status === "RETURNED") { summary.returnedCount += n; summary.returnedTotal += t; continue; }
         if (g.status === "WAITING_FOR_PAYMENT") { summary.unpaidCount += n; summary.unpaidTotal += t; continue; }
         summary.count += n;
         summary.total += t;
@@ -251,12 +253,14 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                         ))}
                     </div>
                 )}
-                {(summary.cancelledCount > 0 || summary.unpaidCount > 0) && (
+                {(summary.cancelledCount > 0 || summary.unpaidCount > 0 || summary.returnedCount > 0) && (
                     <p className="mt-2 text-xs text-gray-500">
-                        Toplama dahil değil:
-                        {summary.cancelledCount > 0 ? ` ${summary.cancelledCount} iptal (${formatPrice(summary.cancelledTotal)})` : ""}
-                        {summary.cancelledCount > 0 && summary.unpaidCount > 0 ? "," : ""}
-                        {summary.unpaidCount > 0 ? ` ${summary.unpaidCount} ödeme bekleyen (${formatPrice(summary.unpaidTotal)})` : ""}
+                        Toplama dahil değil:{" "}
+                        {[
+                            summary.cancelledCount > 0 ? `${summary.cancelledCount} iptal (${formatPrice(summary.cancelledTotal)})` : "",
+                            summary.returnedCount > 0 ? `${summary.returnedCount} iade (${formatPrice(summary.returnedTotal)})` : "",
+                            summary.unpaidCount > 0 ? `${summary.unpaidCount} ödeme bekleyen (${formatPrice(summary.unpaidTotal)})` : "",
+                        ].filter(Boolean).join(", ")}
                     </p>
                 )}
             </div>

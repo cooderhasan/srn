@@ -82,7 +82,7 @@ type Marketplace = "trendyol" | "n11" | "hepsiburada";
  */
 export async function catchUpStaleOrders(
     source: string,
-    resolve: (order: { orderNumber: string; shipmentPackageId: string | null; createdAt: Date }) => Promise<MarketplaceStatus | null>,
+    resolve: (order: { id: string; orderNumber: string; shipmentPackageId: string | null; createdAt: Date }) => Promise<MarketplaceStatus | null>,
     opts: { limit?: number; delayMs?: number } = {},
 ): Promise<{ checked: number; advanced: number }> {
     let checked = 0;
@@ -91,7 +91,7 @@ export async function catchUpStaleOrders(
         const stale = await getStaleOrders(source, opts.limit ?? 25);
         for (const o of stale) {
             try {
-                const next = await resolve({ orderNumber: o.orderNumber, shipmentPackageId: o.shipmentPackageId, createdAt: o.createdAt });
+                const next = await resolve({ id: o.id, orderNumber: o.orderNumber, shipmentPackageId: o.shipmentPackageId, createdAt: o.createdAt });
                 checked++;
                 if (next === "CANCELLED") {
                     if (await cancelOrderFromMarketplace(o.id, source.toLowerCase() as Marketplace)) advanced++;

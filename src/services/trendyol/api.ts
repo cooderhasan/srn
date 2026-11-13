@@ -52,6 +52,17 @@ export class TrendyolClient {
     }
 
     /**
+     * Sipariş istekleri için başlıklar: storeFrontCode GÖNDERİLMEZ. "TR" gönderilince sadece Türkiye mağazası siparişleri
+     * geliyor, mikro ihracat siparişleri (BAE, Azerbaycan, Suudi Arabistan, Balkanlar...) hiç gelmiyordu.
+     * Başlıksız istek bütün mağazaların siparişlerini döner (Bardakçı'da canlıda TR ve AE siparişiyle doğrulandı).
+     */
+    private orderHeaders(): Record<string, string> {
+        const h = this.getHeaders();
+        delete h.storeFrontCode;
+        return h;
+    }
+
+    /**
      * Test connection with detailed error reporting (Trendyol V2 Approved Products)
      * GET /integration/product/sellers/{sellerId}/products/approved?page=0&size=1
      */
@@ -239,7 +250,7 @@ export class TrendyolClient {
         const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/orders${queryParams}`;
 
         const response = await fetch(url, {
-            headers: this.getHeaders()
+            headers: this.orderHeaders()
         });
 
         if (!response.ok) {
@@ -260,7 +271,7 @@ export class TrendyolClient {
 
         const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/orders?orderNumber=${orderNumber}`;
         const response = await fetch(url, {
-            headers: this.getHeaders()
+            headers: this.orderHeaders()
         });
 
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
@@ -276,12 +287,45 @@ export class TrendyolClient {
         await this.init();
         if (!this.creds) throw new Error("No creds");
         const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/orders?orderNumber=${encodeURIComponent(orderNumber)}&size=50`;
-        const response = await fetch(url, { headers: this.getHeaders() });
+        const response = await fetch(url, { headers: this.orderHeaders() });
         if (!response.ok) throw new Error(`Trendyol API Error: ${response.statusText}`);
         const data = await response.json();
         return Array.isArray(data?.content) ? data.content : [];
     }
 
+
+    /**
+     * İade talepleri (claims). GET /integration/order/sellers/{sellerId}/claims
+     * startDate/endDate talebin son değişiklik zamanına (lastModifiedDate, epoch ms) göre süzer; size en çok 200.
+     * claimItemStatus: Created | WaitingInAction | WaitingFraudCheck | Accepted | Unresolved | Rejected | Cancelled | InAnalysis
+     * Sipariş istekleri gibi önce storeFrontCode'suz (mikro ihracat dahil bütün mağazalar); reddedilirse TR ile tekrar dener.
+     */
+    async getClaims(params: { claimItemStatus?: string; startDate?: number; endDate?: number; orderNumber?: string; page?: number; size?: number }) {
+        await this.init();
+        if (!this.creds) throw new Error("No creds");
+        const q = new URLSearchParams();
+        if (params.claimItemStatus) q.set("claimItemStatus", params.claimItemStatus);
+        if (params.startDate) q.set("startDate", String(params.startDate));
+        if (params.endDate) q.set("endDate", String(params.endDate));
+        if (params.orderNumber) q.set("orderNumber", params.orderNumber);
+        q.set("page", String(params.page ?? 0));
+        q.set("size", String(params.size ?? 200));
+        const url = `${this.gatewayUrl}/integration/order/sellers/${this.creds.supplierId}/claims?${q.toString()}`;
+
+        let response = await fetch(url, { headers: this.orderHeaders() });
+        if (!response.ok && (response.status === 400 || response.status === 403)) {
+            response = await fetch(url, { headers: this.getHeaders() });
+        }
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Trendyol iade API ${response.status}: ${errorData?.message || errorData?.errors?.[0]?.message || response.statusText}`);
+        }
+        const data = await response.json();
+        return {
+            content: (Array.isArray(data?.content) ? data.content : []) as any[],
+            totalPages: Number(data?.totalPages || 0),
+        };
+    }
 
     /**
      * Get Default Cargo and Addresses

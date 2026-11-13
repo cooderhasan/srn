@@ -78,13 +78,14 @@ async function getSalesStats() {
         return { start, end: new Date(start.getTime() + DAY_MS) };
     });
 
-    const [periodTotals, periodSources, lastMonthSame, cancelled, unpaid, last7] = await Promise.all([
+    const [periodTotals, periodSources, lastMonthSame, cancelled, unpaid, last7, returned] = await Promise.all([
         Promise.all(periods.map((p) => sumRange(p.gte, p.lt))),
         Promise.all(periods.map((p) => bySourceRange(p.gte, p.lt))),
         sumRange(lastMonthStart, lastMonthSamePeriodEnd),
         prisma.order.aggregate({ where: { status: "CANCELLED" }, _sum: { total: true }, _count: { _all: true } }),
         prisma.order.aggregate({ where: { status: "WAITING_FOR_PAYMENT" }, _sum: { total: true }, _count: { _all: true } }),
         Promise.all(last7Ranges.map((r) => sumRange(r.start, r.end))),
+        prisma.order.aggregate({ where: { status: "RETURNED" }, _sum: { total: true }, _count: { _all: true } }),
     ]);
 
     const byKey = Object.fromEntries(periods.map((p, i) => [p.key, periodTotals[i]])) as Record<string, Totals>;
@@ -105,6 +106,7 @@ async function getSalesStats() {
         sourceRows,
         cancelled: { total: Number(cancelled._sum.total || 0), count: cancelled._count._all },
         unpaid: { total: Number(unpaid._sum.total || 0), count: unpaid._count._all },
+        returned: { total: Number(returned._sum.total || 0), count: returned._count._all },
         last7Days: last7Ranges.map((r, i) => ({
             date: r.start.toLocaleDateString("tr-TR", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Istanbul" }),
             ...last7[i],
@@ -132,7 +134,7 @@ export default async function SalesReportPage() {
                         Satış Özeti
                     </h2>
                     <p className="text-gray-500 dark:text-gray-400">
-                        Dönemsel satış analizi · iptal ve ödeme bekleyen siparişler hariç, Türkiye saatine göre
+                        Dönemsel satış analizi · iptal, iade ve ödeme bekleyen siparişler hariç, Türkiye saatine göre
                     </p>
                 </div>
                 <Link href="/admin/reports">
@@ -208,12 +210,14 @@ export default async function SalesReportPage() {
                         <div>
                             <p className="text-blue-100 text-sm">Toplam Ciro</p>
                             <p className="text-4xl font-bold">{formatPrice(all.total)}</p>
-                            {(stats.cancelled.count > 0 || stats.unpaid.count > 0) && (
+                            {(stats.cancelled.count > 0 || stats.unpaid.count > 0 || stats.returned.count > 0) && (
                                 <p className="text-blue-100 text-xs mt-1">
-                                    Dahil değil:
-                                    {stats.cancelled.count > 0 ? ` ${stats.cancelled.count} iptal (${formatPrice(stats.cancelled.total)})` : ""}
-                                    {stats.cancelled.count > 0 && stats.unpaid.count > 0 ? "," : ""}
-                                    {stats.unpaid.count > 0 ? ` ${stats.unpaid.count} ödeme bekleyen (${formatPrice(stats.unpaid.total)})` : ""}
+                                    Dahil değil:{" "}
+                                    {[
+                                        stats.cancelled.count > 0 ? `${stats.cancelled.count} iptal (${formatPrice(stats.cancelled.total)})` : "",
+                                        stats.returned.count > 0 ? `${stats.returned.count} iade (${formatPrice(stats.returned.total)})` : "",
+                                        stats.unpaid.count > 0 ? `${stats.unpaid.count} ödeme bekleyen (${formatPrice(stats.unpaid.total)})` : "",
+                                    ].filter(Boolean).join(", ")}
                                 </p>
                             )}
                         </div>

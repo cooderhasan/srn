@@ -469,6 +469,18 @@ export async function syncOrdersFromTrendyol() {
         let skippedCount = 0;
         let skippedBarcodes: string[] = [];
 
+        // Aynı sipariş numarasının paketleri birlikte işlenir. Trendyol kısmi iptalde siparişi böler (İptal paketi + aktif paket);
+        // paketler tek tek işlenince sipariş tamamen iptal ediliyor, bütün adetlerin stoğu geri ekleniyordu (lib/trendyol-order-packages.ts).
+        const packagesByOrder = new Map<string, any[]>();
+        for (const o of orders) {
+            const key = String(o.orderNumber);
+            const list = packagesByOrder.get(key) || [];
+            if (!list.some((p) => String(p.id) === String(o.id))) list.push(o);
+            packagesByOrder.set(key, list);
+        }
+        const handledExisting = new Set<string>();
+        const isCancelPkg = (p: any) => ["cancelled", "unsupplied"].includes(String(p?.status || "").toLowerCase());
+
         for (const tOrder of orders) {
             // Check if exists
             const existing = await prisma.order.findUnique({
@@ -489,43 +501,32 @@ export async function syncOrdersFromTrendyol() {
             const orderDate = parseTrendyolDate(tOrder.orderDate);
 
             if (existing) {
-                const updates: any = {};
+                if (handledExisting.has(existing.id)) continue;
+                handledExisting.add(existing.id);
+                let changed = false;
                 if (orderDate && Math.abs(existing.createdAt.getTime() - orderDate.getTime()) > 10 * 60 * 1000) {
-                    updates.createdAt = orderDate;
+                    await prisma.order.update({ where: { id: existing.id }, data: { createdAt: orderDate } });
+                    changed = true;
                 }
-                if (newStatus === "CANCELLED") {
-                    // Henüz kargolanmamış sipariş Trendyol'da iptal: ortak iptal (yeni siparişlerde stok geri eklenir).
-                    // Önceden durum doğrudan İptal yapılıyordu, stok geri eklenmiyordu
-                    const { cancelOrderFromMarketplace } = await import("@/lib/order-status-sync");
-                    if (await cancelOrderFromMarketplace(existing.id, "trendyol")) updatedCount++;
-                } else {
-                    // Durum sadece ileri gider (elle Kargolandı yapılmış sipariş Trendyol gecikmesiyle geri dönmesin)
-                    const { orderStatusRank } = await import("@/lib/order-status-sync");
-                    const cur = orderStatusRank(String(existing.status));
-                    const next = orderStatusRank(newStatus);
-                    if (cur !== undefined && next !== undefined && next > cur) updates.status = newStatus;
+                let pkgs = packagesByOrder.get(String(tOrder.orderNumber)) || [tOrder];
+                // İptal paketi varsa siparişin bütün paketleri ayrıca sorulur: senkron "Faturalandı" vb. listeleri çekmiyor,
+                // aktif paket görünmezse kısmi iptal tam iptal sanılır
+                if (pkgs.some(isCancelPkg)) {
+                    const all = await client.getOrderPackages(String(tOrder.orderNumber)).catch(() => null);
+                    const mine = (all || []).filter((p: any) => String(p?.orderNumber || "") === String(tOrder.orderNumber));
+                    if (mine.length > 0) pkgs = mine;
                 }
-
-                const cargoTrackingNumber = tOrder.cargoTrackingNumber?.toString();
-                const shipmentPackageId = tOrder.id?.toString();
-
-                if (cargoTrackingNumber && existing.cargoTrackingNumber !== cargoTrackingNumber) {
-                    updates.cargoTrackingNumber = cargoTrackingNumber;
-                    updates.cargoCompany = tOrder.cargoProviderName;
-                }
-                if (shipmentPackageId && existing.shipmentPackageId !== shipmentPackageId) {
-                    updates.shipmentPackageId = shipmentPackageId;
-                }
-
-                if (Object.keys(updates).length > 0) {
-                    await prisma.order.update({
-                        where: { id: existing.id },
-                        data: updates
-                    });
-                    updatedCount++;
-                }
+                // Tam iptal (kargolanmamışsa, stok bir kez), kısmi iptal (sadece iptal edilen adet), durum sadece ileri, kargo bilgisi
+                const { applyTrendyolPackages } = await import("@/lib/trendyol-order-packages");
+                if (await applyTrendyolPackages(existing, pkgs)) changed = true;
+                if (changed) updatedCount++;
                 continue;
             }
+
+            // Yeni sipariş: kısmi iptal varsa sipariş aktif paketten oluşturulur, iptal paketi işlenmiş sayılır (stok zaten düşülmeyecek)
+            const orderGroup = packagesByOrder.get(String(tOrder.orderNumber)) || [tOrder];
+            if (isCancelPkg(tOrder) && orderGroup.some((p) => !isCancelPkg(p))) continue;
+            const preCancelledMarks = isCancelPkg(tOrder) ? "" : orderGroup.filter(isCancelPkg).map((p) => `[TY-IPTAL-PAKET:${p.id}]`).join(" ");
 
             // Resolve order items and find matching products/variants by barcode
             const resolvedItems: Array<{
@@ -617,7 +618,12 @@ export async function syncOrdersFromTrendyol() {
                             cargoCompany: tOrder.cargoProviderName,
                             cargoTrackingNumber: tOrder.cargoTrackingNumber?.toString(),
                             shipmentPackageId: tOrder.id?.toString(),
-                            notes: unmatchedNames.length ? `DİKKAT: Sitede bulunamayan ürün, stok düşülmedi: ${unmatchedNames.join("; ")}` : undefined,
+                            notes: [
+                                // Mikro ihracat (yurt dışı mağazası) siparişi: fatura mikro ihracat faturası olmalı
+                                tOrder.micro ? `MİKRO İHRACAT (${tOrder.orderCountryCode || "yurt dışı"}): mikro ihracat faturası kesilmeli${tOrder.etgbNo ? `, ETGB ${tOrder.etgbNo}` : ""}` : "",
+                                unmatchedNames.length ? `DİKKAT: Sitede bulunamayan ürün, stok düşülmedi: ${unmatchedNames.join("; ")}` : "",
+                                preCancelledMarks ? `Trendyol'da kısmi iptal sipariş aktarılmadan önce yapılmış; sadece aktif paket aktarıldı ${preCancelledMarks}` : "",
+                            ].filter(Boolean).join(" | ") || undefined,
                             shippingAddress: {
                                 fullName: tOrder.shipmentAddress?.fullName ?? tOrder.customerFirstName + " " + tOrder.customerLastName,
                                 address: tOrder.shipmentAddress?.fullAddress ?? "",

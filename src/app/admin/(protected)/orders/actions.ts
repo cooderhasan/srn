@@ -12,9 +12,18 @@ import {
     type YKCredentials,
 } from "@/services/yurtici/api";
 
+type AdminOrderStatus = "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED" | "RETURNED";
+
+/** İade Edildi'ye geçişte iade zamanı yazılır; iadeden çıkarken silinir. Stoğa dokunulmaz (ürün bozuk dönebilir, kullanıcı elle ekler). */
+function returnFields(next: AdminOrderStatus, prev: string | null | undefined) {
+    if (next === "RETURNED" && prev !== "RETURNED") return { returnedAt: new Date() };
+    if (next !== "RETURNED" && prev === "RETURNED") return { returnedAt: null };
+    return {};
+}
+
 export async function updateOrderStatus(
     orderId: string,
-    status: "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED"
+    status: AdminOrderStatus
 ) {
     try {
         const session = await auth();
@@ -50,7 +59,7 @@ export async function updateOrderStatus(
             // Normal status update (non-cancellation)
             await prisma.order.update({
                 where: { id: orderId },
-                data: { status },
+                data: { status, ...returnFields(status, order?.status) },
             });
         }
 
@@ -193,7 +202,7 @@ export async function updateOrderTracking(orderId: string, trackingUrl: string) 
 
 export async function bulkUpdateOrderStatus(
     orderIds: string[],
-    status: "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED"
+    status: AdminOrderStatus
 ) {
     try {
         const session = await auth();
@@ -219,7 +228,11 @@ export async function bulkUpdateOrderStatus(
                 ids.forEach((id) => affected.add(id));
             }
             if (affected.size > 0) handlePostOrderStockSync(Array.from(affected), "site").catch(console.error);
+        } else if (status === "RETURNED") {
+            // Zaten iade olanların iade tarihi korunur; stoğa dokunulmaz
+            await prisma.order.updateMany({ where: { id: { in: orderIds }, status: { not: "RETURNED" } }, data: { status, returnedAt: new Date() } });
         } else {
+            await prisma.order.updateMany({ where: { id: { in: orderIds }, status: "RETURNED" }, data: { returnedAt: null } });
             await prisma.order.updateMany({
                 where: {
                     id: { in: orderIds },
@@ -443,7 +456,7 @@ export async function queryYKOrder(orderId: string) {
 
         const order = await prisma.order.findUnique({
             where: { id: orderId },
-            select: { ykCargoKey: true, ykSyncedAt: true },
+            select: { ykCargoKey: true, ykSyncedAt: true, status: true },
         });
 
         if (!order?.ykCargoKey) return { success: false, error: "Bu sipariş YK sistemine gönderilmemiş." };
@@ -467,6 +480,8 @@ export async function queryYKOrder(orderId: string) {
         } else if (result.operationStatus === "CNL" || result.operationStatus === "ISC" || result.operationStatus === "BI") {
             newOrderStatus = "CANCELLED";
         }
+        // İade edilmiş siparişin durumu kargo sorgusuyla değişmez
+        if (order.status === "RETURNED") newOrderStatus = undefined;
 
         await prisma.order.update({
             where: { id: orderId },
@@ -527,7 +542,7 @@ export async function syncAllYKOrders() {
             where: {
                 ykCargoKey: { not: null },
                 status: {
-                    notIn: ["DELIVERED", "CANCELLED"]
+                    notIn: ["DELIVERED", "CANCELLED", "RETURNED"]
                 },
                 createdAt: {
                     gte: fourteenDaysAgo

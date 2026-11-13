@@ -59,6 +59,7 @@ const orderStatuses = [
     { value: "SHIPPED", label: "Kargolandı" },
     { value: "DELIVERED", label: "Tamamlandı" },
     { value: "CANCELLED", label: "İptal Edildi" },
+    { value: "RETURNED", label: "İade Edildi" },
 ];
 
 // Yalnızca filtrede: Onaylandı + Hazırlanıyor birlikte (Genel Bakış'taki "Kargolanacak" kutuları bu filtreyle açar)
@@ -186,7 +187,9 @@ export function OrdersTable({ orders: initialOrders, pagination }: OrdersTablePr
                         order.id === orderId ? { ...order, status: newStatus } : order
                     )
                 );
-                toast.success("Sipariş durumu güncellendi");
+                toast.success(newStatus === "RETURNED"
+                    ? "İade edildi olarak işaretlendi. Stok değişmedi; ürün sağlamsa stoğa elle ekleyin."
+                    : "Sipariş durumu güncellendi", { duration: newStatus === "RETURNED" ? 7000 : undefined });
             } else {
                 toast.error(result.error || "Güncelleme başarısız oldu");
             }

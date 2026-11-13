@@ -525,6 +525,30 @@ export class HepsiburadaClient {
     }
 
     /**
+     * Talepler (iade/değişim) duruma göre. GET /claims/merchantId/{merchantId}/status/{status}
+     * status: NewRequest | Accepted | AwaitingAction | InDispute | Rejected | Refunded | Cancelled | AwaitingPreApproval
+     * statusBeginDate/statusEndDate: durum tarihi (yyyy-MM-dd HH:mm); limit en çok 100.
+     * Alanlar: number, orderNumber, sku, quantity, priceAmount, totalPriceAmount, refundAmount, refundDate, status, finalizedWith
+     */
+    async getClaimsByStatus(status: string, opts: { offset?: number; limit?: number; statusBeginDate?: string; statusEndDate?: string } = {}): Promise<any[]> {
+        await this.init();
+        if (!this.creds?.merchantId) throw new Error("Merchant ID missing");
+        const q = new URLSearchParams({ offset: String(opts.offset ?? 0), limit: String(opts.limit ?? 100) });
+        if (opts.statusBeginDate) q.set("statusBeginDate", opts.statusBeginDate);
+        if (opts.statusEndDate) q.set("statusEndDate", opts.statusEndDate);
+        const url = `${this.orderBaseUrl}/claims/merchantId/${this.creds.merchantId}/status/${status}?${q.toString()}`;
+        const response = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HB talep listesi alınamadı: ${response.status} ${(await response.text().catch(() => "")).slice(0, 200)}`);
+        const data = await response.json();
+        if (Array.isArray(data)) return data;
+        for (const k of ["items", "content", "data", "results", "claims"]) {
+            if (Array.isArray(data?.[k])) return data[k];
+        }
+        return [];
+    }
+
+    /**
      * İptal edilen sipariş kalemleri (son 1 ay). Doküman: limit max 50.
      * GET /orders/merchantid/{merchantId}/cancelled  — alanlar: orderNumber, lineItemId, quantity, cancelDate, cancelledBy
      */
