@@ -53,6 +53,27 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
         setSettings((prev) => ({ ...prev, [key]: value }));
     };
 
+    // Ücretsiz kargo limiti kendi düğmesiyle kaydedilir: kargo sekmesindeki tarife "Kaydet"i sadece desi tarifesini
+    // kaydediyordu, limit sayfanın altındaki "Tüm Ayarları Kaydet"e basılmazsa kaydedilmiyordu
+    const saveFreeShippingLimit = async () => {
+        const limit = Number(String(settings.freeShippingLimit ?? "20000").replace(",", "."));
+        if (!Number.isFinite(limit) || limit <= 0) {
+            toast.error("Geçerli bir tutar girin.");
+            return;
+        }
+        setLoading(true);
+        try {
+            const next = { ...settings, freeShippingLimit: String(limit) };
+            await updateSiteSettings("general", next);
+            setSettings(next);
+            toast.success(`Ücretsiz kargo limiti ${limit.toLocaleString("tr-TR")} TL olarak kaydedildi.`);
+        } catch {
+            toast.error("Kaydedilemedi.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     if (!mounted) {
         return null;
     }
@@ -655,12 +676,18 @@ export function SettingsForm({ initialSettings, cargoCompanies }: SettingsFormPr
                         <CardContent className="space-y-4">
                             <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-800 space-y-2">
                                 <Label>Ücretsiz Kargo Limiti (TL)</Label>
-                                <Input
-                                    type="number"
-                                    placeholder="20000"
-                                    defaultValue={settings.freeShippingLimit || "20000"}
-                                    onChange={(e) => updateField("freeShippingLimit", e.target.value)}
-                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Input
+                                        type="number"
+                                        placeholder="20000"
+                                        value={settings.freeShippingLimit ?? "20000"}
+                                        onChange={(e) => updateField("freeShippingLimit", e.target.value)}
+                                        className="max-w-[200px]"
+                                    />
+                                    <Button type="button" onClick={saveFreeShippingLimit} disabled={loading}>
+                                        {loading ? "Kaydediliyor..." : "Limiti Kaydet"}
+                                    </Button>
+                                </div>
                                 <p className="text-xs text-gray-500">
                                     Sepet tutarı bu limite ulaşırsa sepette ve ödemede kargo ücretsiz olur. Kullanmak istemiyorsanız çok yüksek bir tutar girin (ör. 100000).
                                 </p>
