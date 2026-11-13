@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { formatPrice, calculatePrice, SHIPPING_FREE_LIMIT } from "@/lib/helpers";
+import { formatPrice, calculatePrice, hasFullName, FULL_NAME_ERROR } from "@/lib/helpers";
+import { quoteShipping, type CargoPricing } from "@/lib/shipping";
 import { createOrder } from "@/app/(storefront)/checkout/actions";
 import { toast } from "sonner";
 import { CreditCard, Building2, ArrowLeft, Truck } from "lucide-react";
@@ -22,12 +23,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { getCities, getDistrictsOfCity, getCityNames } from "@/lib/cities";
+import { getDistrictsOfCity, getCityNames } from "@/lib/cities";
 import { SearchablePicker } from "@/components/ui/searchable-picker";
+import { formatPhoneInput, formatPhoneDisplay } from "@/lib/phone";
 
 interface CheckoutFormProps {
     initialData?: {
+        isLoggedIn?: boolean;
         name?: string;
+        taxNumber?: string;
         phone?: string;
         city?: string;
         district?: string;
@@ -38,17 +42,7 @@ interface CheckoutFormProps {
             availableLimit: number;
         };
     };
-    cargoCompanies: {
-        id: string;
-        name: string;
-        isDesiActive: boolean;
-        desiPrices: {
-            minDesi: any;
-            maxDesi: any;
-            price: any;
-            multiplierType: string;
-        }[];
-    }[];
+    cargoCompanies: CargoPricing[];
     freeShippingLimit: number;
     bankTransferDiscount: number;
 }
@@ -60,14 +54,22 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
     const [mounted, setMounted] = useState(false);
     const [loading, setLoading] = useState(false);
     const [selectedCargoId, setSelectedCargoId] = useState<string | null>(cargoCompanies[0]?.id || null);
-    const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD" | "CURRENT_ACCOUNT">("BANK_TRANSFER");
+    // Önceden seçili gelmez: eskiden Havale seçili geliyordu, kartla ödeyeceğini sanan müşteri farkında olmadan
+    // havale siparişi verip sonra kartla ikinci siparişi açıyordu
+    const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD" | "CURRENT_ACCOUNT" | null>(null);
+    const [paymentMissing, setPaymentMissing] = useState(false);
+    // Mesafeli Satış Sözleşmesi / Ön Bilgilendirme onayı (zorunlu onay kutusu)
+    const [agreed, setAgreed] = useState(false);
+    const [agreeMissing, setAgreeMissing] = useState(false);
     const [selectedCity, setSelectedCity] = useState<string>(initialData?.city || "");
     const [selectedDistrict, setSelectedDistrict] = useState<string>(initialData?.district || "");
-    const cities = getCities();
+    const addrDefaults = { name: initialData?.name || "", phone: initialData?.phone || "", address: initialData?.address || "" };
     const orderCompleted = useRef(false);
 
     useEffect(() => {
         setMounted(true);
+        // Önceki sayfanın kaydırma konumu kalmasın (sayfa önce "Yükleniyor" gösteriyor)
+        window.scrollTo(0, 0);
     }, []);
 
     useEffect(() => {
@@ -87,33 +89,34 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
 
     const summary = getSummary();
 
-    // Calculate shipping cost
+    // Kargo ücreti (sepet sayfasıyla aynı hesap: lib/shipping)
     const selectedCargo = cargoCompanies.find(c => c.id === selectedCargoId);
-    let shippingCost = 0;
-    const isFreeShipping = summary.total >= freeShippingLimit;
-
-    if (!isFreeShipping && selectedCargo && selectedCargo.isDesiActive && selectedCargo.desiPrices.length > 0) {
-        // Desi 0 ise en az 1 desi üzerinden hesapla (minimum kargo ücreti için)
-        const totalDesi = Math.max(1, summary.totalDesi || 0);
-        const range = selectedCargo.desiPrices.find(r =>
-            totalDesi >= Number(r.minDesi) && totalDesi <= Number(r.maxDesi)
-        ) || selectedCargo.desiPrices[selectedCargo.desiPrices.length - 1]; // Fallback to last range if exceeds max
-
-        if (range) {
-            const rangePrice = Number(range.price);
-            if (range.multiplierType === "MULTIPLY") {
-                shippingCost = rangePrice * Math.ceil(totalDesi);
-            } else {
-                shippingCost = rangePrice;
-            }
-        }
-    }
+    const shippingQuote = quoteShipping({
+        cargo: selectedCargo,
+        chargeableDesi: summary.totalDesi,
+        cartTotal: summary.total,
+        freeShippingLimit,
+    });
+    const shippingCost = shippingQuote.cost;
 
     let baseTotal = summary.total;
     let bankDiscountAmount = 0;
 
     if (paymentMethod === "BANK_TRANSFER" && bankTransferDiscount > 0) {
-        bankDiscountAmount = (baseTotal * bankTransferDiscount) / 100;
+        let eligibleTotal = 0;
+        items.forEach((item) => {
+            const hasCampaignDiscount = item.salePrice && Number(item.salePrice) < Number(item.listPrice);
+            if (!hasCampaignDiscount) {
+                const priceCalc = calculatePrice(
+                    item.listPrice,
+                    item.salePrice,
+                    item.discountRate !== undefined ? item.discountRate : discountRate,
+                    item.vatRate
+                );
+                eligibleTotal += priceCalc.finalPrice * item.quantity;
+            }
+        });
+        bankDiscountAmount = (eligibleTotal * bankTransferDiscount) / 100;
         baseTotal -= bankDiscountAmount;
     }
 
@@ -133,10 +136,43 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
         setLoading(true);
 
         const formData = new FormData(e.currentTarget);
+
+        if (!hasFullName(String(formData.get("name") || ""))) {
+            toast.error(FULL_NAME_ERROR);
+            document.getElementById("name")?.focus();
+            setLoading(false);
+            return;
+        }
+
         const phoneRaw = String(formData.get("phone")).replace(/\D/g, "");
 
         if (phoneRaw.length < 10) {
             toast.error("Lütfen geçerli bir telefon numarası giriniz (Örn: 05xx...)");
+            setLoading(false);
+            return;
+        }
+
+        if (!paymentMethod) {
+            setPaymentMissing(true);
+            toast.error("Lütfen bir ödeme yöntemi seçin.");
+            document.getElementById("payment-method")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            setLoading(false);
+            return;
+        }
+
+        // TC Kimlik (11) / Vergi No (10) — opsiyonel; girildiyse siparişe yazılır (e-fatura alıcısı)
+        const taxNumber = String(formData.get("idNumber") || "").replace(/\D/g, "");
+        if (taxNumber && taxNumber.length !== 10 && taxNumber.length !== 11) {
+            toast.error("TC Kimlik No 11, Vergi No 10 haneli olmalıdır.");
+            document.getElementById("idNumber")?.focus();
+            setLoading(false);
+            return;
+        }
+
+        if (!agreed) {
+            setAgreeMissing(true);
+            toast.error("Siparişi tamamlamak için sözleşmeleri onaylamanız gerekiyor.");
+            document.getElementById("agree-terms")?.scrollIntoView({ behavior: "smooth", block: "center" });
             setLoading(false);
             return;
         }
@@ -157,11 +193,13 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                     city: String(formData.get("city")),
                     district: formData.get("district") ? String(formData.get("district")) : undefined,
                     phone: String(formData.get("phone")),
+                    // Önceden formda alınıp hiç kaydedilmiyordu
+                    taxNumber: taxNumber || undefined,
                 },
                 cargoCompany: selectedCargo?.name || String(formData.get("cargoCompany")),
                 notes: formData.get("notes") ? String(formData.get("notes")) : undefined,
                 paymentMethod: paymentMethod,
-                guestEmail: !initialData?.name ? String(formData.get("email")) : undefined,
+                guestEmail: !initialData?.isLoggedIn ? String(formData.get("email")) : undefined,
                 discountRate: Number(discountRate),
                 shippingCost: shippingCost,
                 shippingDesi: summary.totalDesi,
@@ -212,7 +250,7 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                         <Card className="border-l-4 border-l-blue-600">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
-                                    <Truck className="h-5 w-5 text-blue-600" />
+                                    <Truck className="h-5 w-5 text-[#009AD0]" />
                                     Teslimat ve Kargo
                                 </CardTitle>
                             </CardHeader>
@@ -224,8 +262,8 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                             id="name"
                                             name="name"
                                             required
-                                            defaultValue={initialData?.name}
-                                            placeholder="Adınız veya Firma Adı"
+                                            defaultValue={addrDefaults.name}
+                                            placeholder="Ad Soyad (Örn: Ahmet Yılmaz) veya Firma Adı"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -235,26 +273,14 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                             name="phone"
                                             type="tel"
                                             required
-                                            defaultValue={initialData?.phone}
+                                            defaultValue={formatPhoneDisplay(addrDefaults.phone)}
                                             placeholder="05XX XXX XX XX"
                                             maxLength={15}
-                                            onChange={(e) => {
-                                                let val = e.target.value.replace(/\D/g, ""); // Sadece rakamlar
-                                                if (val.length > 11) val = val.substring(0, 11);
-                                                
-                                                // Format: 05XX XXX XX XX
-                                                let formatted = "";
-                                                if (val.length > 0) {
-                                                    formatted = val.substring(0, 4);
-                                                    if (val.length > 4) formatted += " " + val.substring(4, 7);
-                                                    if (val.length > 7) formatted += " " + val.substring(7, 9);
-                                                    if (val.length > 9) formatted += " " + val.substring(9, 11);
-                                                }
-                                                e.target.value = formatted;
-                                            }}
+                                            onChange={(e) => (e.target.value = formatPhoneInput(e.target.value))}
                                         />
                                     </div>
-                                    {!initialData?.name && (
+                                    {/* E-posta sadece misafirden istenir (üyenin e-postası hesabında kayıtlı) */}
+                                    {!initialData?.isLoggedIn && (
                                         <div className="space-y-2">
                                             <Label htmlFor="email">E-posta Adresi * (Sipariş Takibi İçin)</Label>
                                             <Input
@@ -271,7 +297,10 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                         <Input
                                             id="idNumber"
                                             name="idNumber"
-                                            placeholder="Fatura için gereklidir"
+                                            defaultValue={initialData?.taxNumber}
+                                            inputMode="numeric"
+                                            maxLength={11}
+                                            placeholder="Faturanız için (10 veya 11 hane)"
                                         />
                                     </div>
                                 </div>
@@ -313,11 +342,10 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                         name="address"
                                         rows={2}
                                         required
-                                        defaultValue={initialData?.address}
+                                        defaultValue={addrDefaults.address}
                                         placeholder="Tam adresiniz..."
                                     />
                                 </div>
-
                                 <Separator />
 
                                 <div className="space-y-2">
@@ -347,22 +375,27 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                         </Card>
 
                         {/* Payment Method */}
-                        <Card>
+                        <Card id="payment-method" className={paymentMissing && !paymentMethod ? "ring-2 ring-red-400" : undefined}>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <CreditCard className="h-5 w-5" />
-                                    Ödeme Yöntemi
+                                    Ödeme Yöntemi *
                                 </CardTitle>
+                                {!paymentMethod && (
+                                    <p className={`text-sm ${paymentMissing ? "text-red-600 font-semibold" : "text-gray-500"}`}>
+                                        Lütfen ödeme yönteminizi seçin.
+                                    </p>
+                                )}
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div
-                                    className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-all ${paymentMethod === "CREDIT_CARD" ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 ring-2 ring-blue-500 ring-offset-2" : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-                                    onClick={() => setPaymentMethod("CREDIT_CARD")}
+                                    className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-all ${paymentMethod === "CREDIT_CARD" ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 ring-2 ring-[#009AD0] ring-offset-2" : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                                    onClick={() => { setPaymentMethod("CREDIT_CARD"); setPaymentMissing(false); }}
                                 >
-                                    <CreditCard className={`h-6 w-6 mt-1 ${paymentMethod === "CREDIT_CARD" ? "text-blue-600" : "text-gray-500"}`} />
+                                    <CreditCard className={`h-6 w-6 mt-1 ${paymentMethod === "CREDIT_CARD" ? "text-[#009AD0]" : "text-gray-500"}`} />
                                     <div className="flex-1">
                                         <div className="flex justify-between">
-                                            <p className={`font-medium ${paymentMethod === "CREDIT_CARD" ? "text-blue-700 dark:text-blue-400" : "text-gray-900 dark:text-white"}`}>
+                                            <p className={`font-medium ${paymentMethod === "CREDIT_CARD" ? "text-[#0081AF] dark:text-[#009AD0]" : "text-gray-900 dark:text-white"}`}>
                                                 Kredi Kartı / Banka Kartı
                                             </p>
                                         </div>
@@ -370,27 +403,28 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                             PayTR güvencesiyle 12 aya varan taksit seçenekleri.
                                         </p>
                                     </div>
-                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === "CREDIT_CARD" ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"}`}>
+                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === "CREDIT_CARD" ? "border-[#009AD0] bg-[#009AD0] text-white" : "border-gray-300"}`}>
                                         {paymentMethod === "CREDIT_CARD" && <div className="w-2 h-2 rounded-full bg-white" />}
                                     </div>
                                 </div>
 
                                 <div
-                                    className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-all ${paymentMethod === "BANK_TRANSFER" ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 ring-2 ring-blue-500 ring-offset-2" : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-                                    onClick={() => setPaymentMethod("BANK_TRANSFER")}
+                                    className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-all ${paymentMethod === "BANK_TRANSFER" ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 ring-2 ring-[#009AD0] ring-offset-2" : "hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                                    onClick={() => { setPaymentMethod("BANK_TRANSFER"); setPaymentMissing(false); }}
                                 >
-                                    <Building2 className={`h-6 w-6 mt-1 ${paymentMethod === "BANK_TRANSFER" ? "text-blue-600" : "text-gray-500"}`} />
+                                    <Building2 className={`h-6 w-6 mt-1 ${paymentMethod === "BANK_TRANSFER" ? "text-[#009AD0]" : "text-gray-500"}`} />
                                     <div className="flex-1">
                                         <div className="flex justify-between">
-                                            <p className={`font-medium ${paymentMethod === "BANK_TRANSFER" ? "text-blue-700 dark:text-blue-400" : "text-gray-900 dark:text-white"}`}>
+                                            <p className={`font-medium ${paymentMethod === "BANK_TRANSFER" ? "text-[#0081AF] dark:text-[#009AD0]" : "text-gray-900 dark:text-white"}`}>
                                                 Havale / EFT
                                             </p>
                                         </div>
                                         <p className="text-sm text-gray-500 mt-1">
-                                            Banka hesap bilgilerimize havale yaparak ödeme yapabilirsiniz.
+                                            Sipariş sonrası hesap bilgilerimiz gösterilir; ödemeniz ulaşınca siparişiniz hazırlanır.
+                                            {bankTransferDiscount > 0 && <span className="text-emerald-600 font-medium"> Havalede %{bankTransferDiscount} indirim (kampanyasız ürünlerde).</span>}
                                         </p>
                                     </div>
-                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === "BANK_TRANSFER" ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"}`}>
+                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === "BANK_TRANSFER" ? "border-[#009AD0] bg-[#009AD0] text-white" : "border-gray-300"}`}>
                                         {paymentMethod === "BANK_TRANSFER" && <div className="w-2 h-2 rounded-full bg-white" />}
                                     </div>
                                 </div>
@@ -420,7 +454,7 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                         className={`flex items-start gap-4 p-4 border rounded-lg transition-all ${!canUseCurrentAccount ? "opacity-60 cursor-not-allowed bg-gray-50" :
                                             paymentMethod === "CURRENT_ACCOUNT" ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 ring-2 ring-orange-500 ring-offset-2 cursor-pointer" : "hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                                             }`}
-                                        onClick={() => canUseCurrentAccount && setPaymentMethod("CURRENT_ACCOUNT")}
+                                        onClick={() => { if (canUseCurrentAccount) { setPaymentMethod("CURRENT_ACCOUNT"); setPaymentMissing(false); } }}
                                     >
                                         <CreditCard className={`h-6 w-6 mt-1 ${paymentMethod === "CURRENT_ACCOUNT" ? "text-orange-600" : "text-gray-500"}`} />
                                         <div className="flex-1">
@@ -527,25 +561,25 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                     </div>
                                     {summary.discountAmount > 0 && (
                                         <div className="flex justify-between text-green-600 font-medium">
-                                            <span>Müşteri İskontosu</span>
+                                            <span>İndirim</span>
                                             <span>-{formatPrice(summary.discountAmount)}</span>
                                         </div>
                                     )}
                                     {bankDiscountAmount > 0 && (
-                                        <div className="flex justify-between text-blue-600 font-medium italic">
+                                        <div className="flex justify-between text-[#009AD0] font-medium italic">
                                             <span>Havale İndirimi (%{bankTransferDiscount})</span>
                                             <span>-{formatPrice(bankDiscountAmount)}</span>
                                         </div>
                                     )}
                                     <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                                        <span>KDV Toplam</span>
+                                        <span>KDV (fiyatlara dahil)</span>
                                         <span>{formatPrice(summary.vatAmount)}</span>
                                     </div>
                                     <div className="flex justify-between items-center font-medium">
                                         <span className="text-gray-600 dark:text-gray-400">Kargo</span>
-                                        {isFreeShipping ? (
+                                        {shippingQuote.kind === "FREE" ? (
                                             <span className="text-green-600">Ücretsiz</span>
-                                        ) : selectedCargo && !selectedCargo.isDesiActive ? (
+                                        ) : shippingQuote.kind === "RECEIVER_PAYS" ? (
                                             <span className="text-gray-900 dark:text-gray-200 uppercase text-xs font-bold">
                                                 Alıcı Ödemeli
                                             </span>
@@ -562,34 +596,60 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                 <div className="flex justify-between items-end">
                                     <span className="font-bold text-lg">Toplam Tutar</span>
                                     <div className="text-right">
-                                        <div className="text-2xl font-bold text-blue-600">
+                                        <div className="text-2xl font-bold text-[#009AD0]">
                                             {formatPrice(grandTotal)}
                                         </div>
 
                                     </div>
                                 </div>
 
+                                <label
+                                    id="agree-terms"
+                                    className={`flex items-start gap-2.5 text-xs leading-snug text-gray-600 dark:text-gray-300 cursor-pointer rounded-md p-2 -mx-2 ${agreeMissing && !agreed ? "bg-red-50 ring-1 ring-red-300" : ""}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={agreed}
+                                        onChange={(e) => { setAgreed(e.target.checked); setAgreeMissing(false); }}
+                                        className="mt-0.5 h-4 w-4 shrink-0 accent-[#009AD0]"
+                                    />
+                                    <span>
+                                        <Link href="/policies/distance-sales" target="_blank" className="font-semibold underline">Ön Bilgilendirme Koşulları ve Mesafeli Satış Sözleşmesi</Link>
+                                        {"'ni ve "}
+                                        <Link href="/policies/cancellation" target="_blank" className="font-semibold underline">İptal ve İade Koşulları</Link>
+                                        {"'nı okudum, onaylıyorum."}
+                                    </span>
+                                </label>
+
                                 <Button
                                     type="submit"
-                                    className="w-full h-12 text-lg font-semibold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20"
+                                    className="w-full h-12 text-base sm:text-lg font-semibold bg-[#009AD0] hover:bg-[#0081AF] shadow-lg shadow-[#009AD0]/20"
                                     disabled={loading}
                                 >
                                     {loading ? (
                                         "Sipariş Oluşturuluyor..."
-                                    ) : (
+                                    ) : paymentMethod === "CREDIT_CARD" ? (
                                         <>
-                                            Siparişi Onayla
-                                            <span className="ml-2 font-normal text-blue-100/80">
-                                                • {formatPrice(grandTotal)}
-                                            </span>
+                                            Kartla Ödemeye Geç
+                                            <span className="ml-2 font-normal text-blue-100/80">• {formatPrice(grandTotal)}</span>
                                         </>
+                                    ) : paymentMethod === "BANK_TRANSFER" ? (
+                                        <>
+                                            Siparişi Onayla (Havale)
+                                            <span className="ml-2 font-normal text-blue-100/80">• {formatPrice(grandTotal)}</span>
+                                        </>
+                                    ) : paymentMethod === "CURRENT_ACCOUNT" ? (
+                                        <>
+                                            Siparişi Onayla (Cari Hesap)
+                                            <span className="ml-2 font-normal text-blue-100/80">• {formatPrice(grandTotal)}</span>
+                                        </>
+                                    ) : (
+                                        "Ödeme Yöntemi Seçin"
                                     )}
                                 </Button>
-
-                                <div className="text-[10px] text-center text-gray-400 leading-tight">
-                                    <p>Siparişi onaylayarak <Link href="/policies/distance-sales" className="underline hover:text-gray-600">Mesafeli Satış Sözleşmesi</Link>'ni</p>
-                                    <p>kabul etmiş olursunuz.</p>
-                                </div>
+                                {paymentMethod === "CREDIT_CARD" && (
+                                    <p className="text-[11px] text-center text-gray-500 -mt-2">Bir sonraki adımda PayTR güvenli ödeme ekranında kart bilgilerinizi gireceksiniz.</p>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

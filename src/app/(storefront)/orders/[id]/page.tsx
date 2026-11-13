@@ -145,7 +145,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
                                         <span className="text-gray-500">Kargo Ücreti</span>
                                         <span className="font-medium">
                                             {isBuyerPays ? (
-                                                <span className="text-blue-600 font-bold uppercase text-[10px]">Alıcı Ödemeli</span>
+                                                <span className="text-[#0081AF] font-bold uppercase text-[10px]">Alıcı Ödemeli</span>
                                             ) : Number((order as any).shippingCost || 0) === 0 ? (
                                                 <span className="text-green-600 font-medium">Ücretsiz</span>
                                             ) : (
@@ -156,7 +156,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
                                     <Separator className="my-2" />
                                     <div className="flex justify-between text-lg font-bold">
                                         <span>Genel Toplam</span>
-                                        <span className="text-blue-600">{formatPrice(Number(order.total))}</span>
+                                        <span className="text-[#009AD0]">{formatPrice(Number(order.total))}</span>
                                     </div>
                                 </div>
                             </CardContent>

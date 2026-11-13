@@ -119,3 +119,52 @@ export function getNextShippingDay(): string {
     const nextDay = (day + 1) % 7;
     return `Yarın (${dayNames[nextDay]})`;
 }
+
+/**
+ * Sepet ve ödeme ekranındaki kargo ücreti (Bardakçı'dakiyle aynı). İkisi de bu fonksiyonu kullanır; önceden kargo
+ * sadece ödeme ekranında hesaplanıyordu, sepette görmeyen müşteri ödemede kargo ücretiyle karşılaşıyordu.
+ *  - Sepet tutarı Ayarlar > Kargo'daki "Ücretsiz Kargo Limiti"ne ulaşırsa ücretsiz
+ *  - Sepetin desisi (getSummary().totalDesi) firmanın desi tarifesiyle fiyatlanır; desi girilmemiş ürünler yüzünden
+ *    desi 0 çıkarsa en az 1 desi üzerinden hesaplanır (Serin'in önceki kuralı; Bardakçı'da ücretsiz kargo işaretli
+ *    ürünler var, orada desi 0 ücretsiz sayılıyor)
+ *  - Desi fiyatlandırması kapalı firma: Alıcı Ödemeli
+ */
+export type CargoPricing = {
+    id: string;
+    name: string;
+    isDesiActive: boolean;
+    desiPrices: {
+        minDesi: any;
+        maxDesi: any;
+        price: any;
+        multiplierType: string;
+    }[];
+};
+
+export type ShippingQuote = {
+    cost: number;
+    kind: "FREE" | "PAID" | "RECEIVER_PAYS";
+};
+
+export function quoteShipping(opts: {
+    cargo?: CargoPricing | null;
+    chargeableDesi: number;
+    cartTotal: number;
+    freeShippingLimit: number;
+}): ShippingQuote {
+    const { cargo, chargeableDesi, cartTotal, freeShippingLimit } = opts;
+
+    if (freeShippingLimit > 0 && cartTotal >= freeShippingLimit) return { cost: 0, kind: "FREE" };
+    if (cargo && !cargo.isDesiActive) return { cost: 0, kind: "RECEIVER_PAYS" };
+    if (!cargo || cargo.desiPrices.length === 0) return { cost: 0, kind: "PAID" };
+
+    // Desi 0 ise en az 1 desi üzerinden hesapla (minimum kargo ücreti)
+    const desi = Math.max(1, chargeableDesi || 0);
+    const range =
+        cargo.desiPrices.find((r) => desi >= Number(r.minDesi) && desi <= Number(r.maxDesi)) ||
+        cargo.desiPrices[cargo.desiPrices.length - 1]; // Tarifenin üst sınırı aşılırsa son aralık
+
+    const rangePrice = Number(range.price);
+    const cost = range.multiplierType === "MULTIPLY" ? rangePrice * Math.ceil(desi) : rangePrice;
+    return { cost, kind: "PAID" };
+}

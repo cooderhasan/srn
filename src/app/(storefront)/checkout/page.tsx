@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
+import { getCargoPricing } from "@/lib/cargo-pricing";
 import { CheckoutForm } from "@/components/storefront/checkout-form";
 
 export default async function CheckoutPage() {
@@ -11,7 +12,9 @@ export default async function CheckoutPage() {
         const user = await prisma.user.findUnique({
             where: { id: session.user.id },
             select: {
+                name: true,
                 companyName: true,
+                taxNumber: true,
                 phone: true,
                 address: true,
                 city: true,
@@ -28,8 +31,12 @@ export default async function CheckoutPage() {
 
         if (user) {
             // Address Info
+            // Bireysel üyede firma adı boş; önceden sadece firma adı alındığı için ad soyad boş geliyordu.
+            // isLoggedIn: üyeden e-posta sorulmaz (önceden adı boş üyeye misafir gibi e-posta soruluyordu)
             initialData = {
-                name: user.companyName || "",
+                isLoggedIn: true,
+                name: user.companyName || user.name || "",
+                taxNumber: user.taxNumber || "",
                 phone: user.phone || "",
                 address: user.address || "",
                 city: user.city || "",
@@ -60,34 +67,15 @@ export default async function CheckoutPage() {
         }
     }
 
-    const cargoCompanies = await prisma.cargoCompany.findMany({
-        where: { isActive: true },
-        include: { desiPrices: { orderBy: { minDesi: "asc" } } },
-        orderBy: { name: "asc" },
-    }) as any[]; // Casting to any to bypass Prisma Client lock issues on Windows
-
     const settings = await getSiteSettings();
-    const freeShippingLimit = Number(settings.freeShippingLimit) || 20000;
+    // Kargo tarifesi sepet sayfasıyla aynı kaynaktan (lib/cargo-pricing)
+    const { cargoCompanies, freeShippingLimit } = await getCargoPricing();
     const bankTransferDiscount = Number(settings.bankTransferDiscount) || 0;
-
-    // Serialize Decimal fields for Client Component
-    const serializedCargoCompanies = cargoCompanies.map(company => ({
-        id: company.id,
-        name: company.name,
-        isDesiActive: !!company.isDesiActive,
-        desiPrices: (company.desiPrices || []).map((price: any) => ({
-            id: price.id,
-            minDesi: Number(price.minDesi),
-            maxDesi: Number(price.maxDesi),
-            price: Number(price.price),
-            multiplierType: price.multiplierType || "FIXED",
-        }))
-    }));
 
     return (
         <CheckoutForm
             initialData={initialData}
-            cargoCompanies={serializedCargoCompanies}
+            cargoCompanies={cargoCompanies}
             freeShippingLimit={freeShippingLimit}
             bankTransferDiscount={bankTransferDiscount}
         />

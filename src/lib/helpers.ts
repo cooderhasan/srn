@@ -295,3 +295,18 @@ export function getUserStatusColor(status: string): string {
     };
     return statusColors[status] || "bg-slate-500 text-white";
 }
+
+export const FULL_NAME_ERROR = "Lütfen adınızı ve soyadınızı birlikte yazın (Örn: Ahmet Yılmaz). Kargo ve fatura için gereklidir.";
+
+/**
+ * Ad ve soyad birlikte mi? Kargo etiketi ve fatura için tek kelimelik isim kabul edilmez.
+ * Harf dışı karakterler atıldığında en az 2 harfi kalan kelimeler sayılır:
+ * "Ahmet", "Hasan K." → false; "Ahmet Yılmaz", "ABC Otomotiv Ltd. Şti." → true
+ */
+export function hasFullName(name: string | null | undefined): boolean {
+    const words = String(name ?? "")
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.replace(/[^\p{L}]/gu, "").length >= 2);
+    return words.length >= 2;
+}

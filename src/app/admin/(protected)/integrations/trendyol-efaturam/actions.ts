@@ -113,8 +113,10 @@ function buildInvoicePayload(order: any): any {
     let receiverTaxId = "11111111111"; // Varsayılan (nihai tüketici)
     let receiverTaxOffice = "";
 
-    // Kullanıcıdan VKN/TCKN al
-    if (user?.taxNumber) {
+    // VKN/TCKN: siparişte müşterinin girdiği öncelikli (ödeme formu), yoksa üyelikteki
+    if (shippingAddress?.taxNumber) {
+        receiverTaxId = String(shippingAddress.taxNumber);
+    } else if (user?.taxNumber) {
         receiverTaxId = user.taxNumber;
     }
 

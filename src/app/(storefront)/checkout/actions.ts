@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { generateOrderNumber } from "@/lib/helpers";
+import { generateOrderNumber, hasFullName, FULL_NAME_ERROR } from "@/lib/helpers";
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
 import { addMarketplaceSyncJob } from "@/lib/queue/producer";
 
@@ -24,6 +24,7 @@ interface CreateOrderData {
         city: string;
         district?: string;
         phone: string;
+        taxNumber?: string; // TC Kimlik (11) / Vergi No (10) — e-fatura alıcısı
     };
     guestEmail?: string; // For guest checkout
     cargoCompany?: string;
@@ -42,6 +43,17 @@ export async function createOrder(data: CreateOrderData) {
     // Guest checkout requires email
     if (!userId && !data.guestEmail) {
         return { success: false, error: "E-posta adresi gereklidir." };
+    }
+
+    // Kargo etiketi ve fatura için ad soyad birlikte gerekli (istemci de kontrol ediyor, burası atlatılamayan kontrol)
+    if (!hasFullName(data.shippingAddress?.name)) {
+        return { success: false, error: FULL_NAME_ERROR };
+    }
+
+    // TC Kimlik / Vergi No sadece rakam; 10 veya 11 hane değilse kaydedilmez
+    if (data.shippingAddress) {
+        const taxNumber = String(data.shippingAddress.taxNumber || "").replace(/\D/g, "");
+        data.shippingAddress.taxNumber = taxNumber.length === 10 || taxNumber.length === 11 ? taxNumber : undefined;
     }
 
     try {
@@ -66,6 +78,8 @@ export async function createOrder(data: CreateOrderData) {
         let totalDiscountAmount = 0;
         let totalVatAmount = 0;
         let grandTotal = 0; // Final payable amount
+        // Havale indirimi kampanyalı (indirimli) ürünlere uygulanmaz; ödeme ekranındaki hesapla aynı
+        let eligibleForBankDiscountTotal = 0;
 
         // Verify products and calculate amounts
         const orderItems = await Promise.all(
@@ -165,6 +179,11 @@ export async function createOrder(data: CreateOrderData) {
                 totalVatAmount += itemVat;
                 grandTotal += discountedLineTotal;
 
+                const hasCampaignDiscount = salePrice !== null && salePrice < Number(product.listPrice);
+                if (!hasCampaignDiscount) {
+                    eligibleForBankDiscountTotal += discountedLineTotal;
+                }
+
                 return {
                     productId: product.id,
                     productName: productName,
@@ -190,7 +209,7 @@ export async function createOrder(data: CreateOrderData) {
         let appliedBankDiscount = 0;
 
         if (data.paymentMethod === "BANK_TRANSFER" && bankTransferDiscountRate > 0) {
-            appliedBankDiscount = (grandTotal * bankTransferDiscountRate) / 100;
+            appliedBankDiscount = (eligibleForBankDiscountTotal * bankTransferDiscountRate) / 100;
             finalGrandTotal -= appliedBankDiscount;
         }
 
