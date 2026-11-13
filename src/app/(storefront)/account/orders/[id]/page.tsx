@@ -11,6 +11,7 @@ import { ArrowLeft, Package, Truck, CreditCard, MapPin } from "lucide-react";
 import { ReturnModal } from "@/components/orders/return-modal";
 import { BankTransferForm } from "@/components/storefront/bank-transfer-form";
 import { getSiteSettings } from "@/lib/settings";
+import { customerShippingLine } from "@/lib/shipping";
 
 interface OrderDetailPageProps {
     params: Promise<{ id: string }>;
@@ -53,10 +54,22 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
     const isBankTransfer = order.payment?.method === "BANK_TRANSFER";
     const isPaymentPending = order.payment?.status === "PENDING";
 
+    const settings = await getSiteSettings();
+
+    // Müşteri kargoyu ₺0 / hak etmediği "Ücretsiz" olarak görmez (lib/shipping customerShippingLine)
+    const cargoCompanyDetails = order.cargoCompany
+        ? await prisma.cargoCompany.findFirst({ where: { name: order.cargoCompany }, select: { isDesiActive: true } })
+        : null;
+    const shippingLine = customerShippingLine({
+        shippingCost: Number(order.shippingCost || 0),
+        itemsTotal: order.items.reduce((sum, it) => sum + Number(it.lineTotal), 0),
+        freeShippingLimit: Number((settings as any).freeShippingLimit) || 20000,
+        receiverPays: !!cargoCompanyDetails && !cargoCompanyDetails.isDesiActive,
+    });
+
     // Banka bilgilerini çek
     let bankInfo: any = undefined;
     if (isBankTransfer) {
-        const settings = await getSiteSettings();
         bankInfo = {
             bankName: settings.bankName || "",
             iban: settings.bankIban1 || "",
@@ -193,10 +206,18 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                                 <span className="text-gray-500">KDV</span>
                                 <span className="font-medium">{formatPrice(Number(order.vatAmount))}</span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">Kargo</span>
-                                <span className="font-medium">{Number(order.shippingCost) > 0 ? formatPrice(Number(order.shippingCost)) : "Ücretsiz"}</span>
-                            </div>
+                            {shippingLine && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Kargo</span>
+                                    <span className="font-medium">
+                                        {shippingLine.kind === "RECEIVER_PAYS"
+                                            ? "Alıcı Ödemeli"
+                                            : shippingLine.kind === "FREE"
+                                                ? <span className="text-green-600">Ücretsiz</span>
+                                                : formatPrice(shippingLine.cost)}
+                                    </span>
+                                </div>
+                            )}
                             <Separator className="my-2" />
                             <div className="flex justify-between text-lg font-bold">
                                 <span>Toplam</span>

@@ -168,3 +168,25 @@ export function quoteShipping(opts: {
     const cost = range.multiplierType === "MULTIPLY" ? rangePrice * Math.ceil(desi) : rangePrice;
     return { cost, kind: "PAID" };
 }
+
+/**
+ * Müşteriye gösterilecek kargo satırı. Müşteri hiçbir yerde "₺0" ya da hak etmediği "Ücretsiz" görmez:
+ *  - ücret alındıysa tutar
+ *  - alıcı ödemeli firmada "Alıcı Ödemeli"
+ *  - ürün tutarı ücretsiz kargo limitine ulaştıysa "Ücretsiz"
+ *  - diğer durumlarda (ör. kargo tarifesi girilmeden verilmiş eski sipariş) satır gösterilmez (null)
+ */
+export type ShippingLine = { kind: "PAID"; cost: number } | { kind: "RECEIVER_PAYS" } | { kind: "FREE" } | null;
+
+export function customerShippingLine(opts: {
+    shippingCost: number;
+    itemsTotal: number;
+    freeShippingLimit: number;
+    receiverPays?: boolean;
+}): ShippingLine {
+    const cost = Number(opts.shippingCost) || 0;
+    if (cost > 0) return { kind: "PAID", cost };
+    if (opts.receiverPays) return { kind: "RECEIVER_PAYS" };
+    if (opts.freeShippingLimit > 0 && opts.itemsTotal >= opts.freeShippingLimit) return { kind: "FREE" };
+    return null;
+}

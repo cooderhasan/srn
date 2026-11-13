@@ -218,6 +218,8 @@ export default function CartView({ cargoCompanies, freeShippingLimit }: { cargoC
                                 <span className="text-gray-500">KDV (fiyatlara dahil)</span>
                                 <span>{formatPrice(summary.vatAmount)}</span>
                             </div>
+                            {/* Tarife bulunamazsa (ücret 0) kargo satırı gösterilmez: müşteri hiçbir yerde ₺0 kargo görmez */}
+                            {!(shippingQuote.kind === "PAID" && shippingQuote.cost <= 0) && (
                             <div className="flex justify-between gap-3">
                                 <span className="text-gray-500">
                                     Kargo
@@ -233,6 +235,7 @@ export default function CartView({ cargoCompanies, freeShippingLimit }: { cargoC
                                     <span>{formatPrice(shippingQuote.cost)}</span>
                                 )}
                             </div>
+                            )}
                             <Separator />
                             <div className="flex justify-between text-lg font-bold">
                                 <span>Toplam</span>

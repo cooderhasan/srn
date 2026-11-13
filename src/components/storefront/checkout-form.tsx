@@ -575,6 +575,8 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                         <span>KDV (fiyatlara dahil)</span>
                                         <span>{formatPrice(summary.vatAmount)}</span>
                                     </div>
+                                    {/* Tarife bulunamazsa (ücret 0) kargo satırı gösterilmez: müşteri hiçbir yerde ₺0 kargo görmez */}
+                                    {!(shippingQuote.kind === "PAID" && shippingCost <= 0) && (
                                     <div className="flex justify-between items-center font-medium">
                                         <span className="text-gray-600 dark:text-gray-400">Kargo</span>
                                         {shippingQuote.kind === "FREE" ? (
@@ -589,6 +591,7 @@ export function CheckoutForm({ initialData, cargoCompanies, freeShippingLimit, b
                                             </span>
                                         )}
                                     </div>
+                                    )}
                                 </div>
 
                                 <Separator />
