@@ -201,7 +201,7 @@ function N11AutoMatchButton() {
             ) : (
                 <>
                     <Link2 className="mr-2 h-4 w-4 text-purple-700" />
-                    N11 Mağaza Kodlarını Otomatik Eşleştir (8.000 Ürün)
+                    N11 Mağaza Kodlarını Otomatik Eşleştir
                 </>
             )}
         </Button>

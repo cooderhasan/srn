@@ -189,6 +189,10 @@ export function BrandsTable({ brands, firms: firmsProp = [] }: BrandsTableProps)
     const [hbBrandId, setHbBrandId] = useState<string | undefined>(undefined);
     const [manufacturerFirmId, setManufacturerFirmId] = useState("");
     const [importerFirmId, setImporterFirmId] = useState("");
+    // Marka adıyla arama (Bardakçı'daki gibi); Türkçe karakterlerde (İ/ı) doğru eşleşme için tr locale
+    const [searchQuery, setSearchQuery] = useState("");
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase("tr");
+    const filteredBrands = brands.filter((brand) => brand.name.toLocaleLowerCase("tr").includes(normalizedQuery));
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -265,7 +269,31 @@ export function BrandsTable({ brands, firms: firmsProp = [] }: BrandsTableProps)
 
     return (
         <>
-            <div className="flex justify-end mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+                <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                        className="pl-9 pr-9"
+                        placeholder="Marka adı ile ara..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        autoFocus
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+                            aria-label="Aramayı temizle"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
+                <span className="text-sm text-gray-500 whitespace-nowrap">
+                    {filteredBrands.length} / {brands.length} marka
+                </span>
+                <div className="sm:ml-auto">
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
                     <DialogTrigger asChild>
                         <Button onClick={openNewDialog}>
@@ -387,6 +415,7 @@ export function BrandsTable({ brands, firms: firmsProp = [] }: BrandsTableProps)
                         </form>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             <div className="rounded-lg border bg-white dark:bg-gray-800">
@@ -401,14 +430,14 @@ export function BrandsTable({ brands, firms: firmsProp = [] }: BrandsTableProps)
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {brands.length === 0 ? (
+                        {filteredBrands.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                                    Henüz marka bulunmuyor.
+                                    {brands.length === 0 ? "Henüz marka bulunmuyor." : "Aramanızla eşleşen marka bulunamadı."}
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            brands.map((brand) => (
+                            filteredBrands.map((brand) => (
                                 <TableRow key={brand.id}>
                                     <TableCell>
                                         {brand.logoUrl ? (
