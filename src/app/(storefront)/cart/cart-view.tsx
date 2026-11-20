@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatPrice, calculatePrice } from "@/lib/helpers";
 import { quoteShipping, type CargoPricing } from "@/lib/shipping";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, FileQuestion } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, FileQuestion, X } from "lucide-react";
 
 export default function CartView({ cargoCompanies, freeShippingLimit }: { cargoCompanies: CargoPricing[]; freeShippingLimit: number }) {
     const { items, removeItem, updateQuantity, getSummary, discountRate, isAuthenticated, clearCart } =
@@ -87,14 +87,24 @@ export default function CartView({ cargoCompanies, freeShippingLimit }: { cargoC
             </div>
 
             <Dialog open={clearOpen} onOpenChange={(o) => !clearing && setClearOpen(o)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
+                <DialogContent showCloseButton={false} className="sm:max-w-md">
+                    {/* Kapatma düğmesi köşede (genel pencere bileşenindeki X metnin üstüne biniyordu) */}
+                    <button
+                        type="button"
+                        aria-label="Kapat"
+                        disabled={clearing}
+                        onClick={() => setClearOpen(false)}
+                        className="absolute top-3 right-3 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 transition-colors"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                    <DialogHeader className="pr-6">
                         <DialogTitle>Sepet boşaltılsın mı?</DialogTitle>
                         <DialogDescription>
                             Sepetinizdeki tüm ürünler ({summary.itemCount} ürün) kaldırılacak. Bu işlem geri alınamaz.
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="gap-2 sm:gap-0">
+                    <DialogFooter className="gap-3 pt-2">
                         <Button type="button" variant="outline" disabled={clearing} onClick={() => setClearOpen(false)}>
                             Vazgeç
                         </Button>
