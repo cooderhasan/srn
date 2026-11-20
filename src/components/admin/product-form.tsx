@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -168,6 +169,21 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
     const autoDesi = formData.width && formData.height && formData.length
         ? calculateDesi(Number(formData.width), Number(formData.height), Number(formData.length))
         : 0;
+
+    // AI asistanı (Bardakçı'daki gibi): ham metin ya da link; önce site açıklaması, sonra kısa pazaryeri açıklaması
+    const [aiStep, setAiStep] = useState<"site" | "marketplace" | null>(null);
+    const stripHtmlText = (h?: string | null) => String(h || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const requestAiDescription = async (mode: "site" | "marketplace", avoidText?: string) => {
+        const ref = (formData.referenceUrl || "").trim();
+        const isUrl = ref.startsWith("http://") || ref.startsWith("https://");
+        // Pazaryeri metni için ham metin yoksa sitedeki açıklama kaynak olarak kullanılır
+        const source = ref || stripHtmlText(formData.description);
+        const payload = isUrl
+            ? { url: ref, mode, avoidText }
+            : { text: source, productName: formData.name, mode, avoidText };
+        const res = await fetch("/api/admin/ai/generate-description", { method: "POST", body: JSON.stringify(payload) });
+        return res.json();
+    };
 
     const handleChange = (field: string, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -444,41 +460,51 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                 </div>
                             </div>
 
-                            <div className="space-y-4 p-4 bg-indigo-50/30 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl">
-                                <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-semibold mb-1">
-                                    <Brain className="w-5 h-5 text-indigo-600" />
+                            <div className="space-y-4 p-4 bg-primary/5 dark:bg-primary/10 border border-primary/20 dark:border-primary/30 rounded-xl">
+                                <div className="flex items-center gap-2 text-[#0081AF] dark:text-sky-300 font-semibold mb-1">
+                                    <Brain className="w-5 h-5 text-primary" />
                                     <span>AI İçerik Asistanı (Opsiyonel)</span>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="referenceUrl" className="text-xs">Referans Ürün Linki (Toptancı / Rakip)</Label>
-                                    <div className="flex gap-2">
-                                        <Input
+                                    <Label htmlFor="referenceUrl" className="text-xs font-medium">Referans Ürün Bilgisi / Üretici Metni</Label>
+                                    <div className="flex flex-col gap-3">
+                                        <Textarea
                                             id="referenceUrl"
                                             value={formData.referenceUrl}
                                             onChange={(e) => handleChange("referenceUrl", e.target.value)}
-                                            placeholder="https://rakipsite.com/urun-detay"
-                                            className="bg-white dark:bg-gray-800"
+                                            placeholder="Üretici sitesinden kopyaladığınız karışık veya ham ürün bilgilerini (veya referans ürün linkini) buraya yapıştırın. Yapay zeka bu metni düzenleyip SEO uyumlu hale getirecek, önemli kısımları kalın yazacak ve en alta teknik özellikler tablosu ekleyecektir."
+                                            className="bg-white dark:bg-gray-800 min-h-[120px] resize-y"
                                         />
                                         <Button
                                             type="button"
                                             onClick={async () => {
                                                 if (!formData.referenceUrl) {
-                                                    toast.error("Lütfen bir referans linki girin.");
+                                                    toast.error("Lütfen düzeltilecek ham metni veya bir referans linki girin.");
                                                     return;
                                                 }
                                                 setLoading(true);
                                                 try {
-                                                    const res = await fetch("/api/admin/ai/generate-description", {
-                                                        method: "POST",
-                                                        body: JSON.stringify({ url: formData.referenceUrl }),
-                                                    });
-                                                    const result = await res.json();
+                                                    setAiStep("site");
+                                                    const result = await requestAiDescription("site");
                                                     if (result.success && result.data) {
                                                         handleChange("description", result.data);
                                                         if (!formData.name && result.sourceName) {
                                                             handleChange("name", result.sourceName);
                                                         }
-                                                        toast.success("Özgün içerik başarıyla oluşturuldu.");
+                                                        // Ardından pazaryeri için kısa, tablosuz, siteden farklı metin (alan boşsa; elle yazılanı ezmez)
+                                                        if (!stripHtmlText(formData.marketplaceDescription)) {
+                                                            setAiStep("marketplace");
+                                                            const mp = await requestAiDescription("marketplace", result.data);
+                                                            if (mp.success && mp.data) {
+                                                                handleChange("marketplaceDescription", mp.data);
+                                                                toast.success("Site ve pazaryeri açıklamaları oluşturuldu.");
+                                                            } else {
+                                                                toast.success("Site açıklaması oluşturuldu.");
+                                                                toast.error(mp.error || "Pazaryeri açıklaması oluşturulamadı; alttaki düğmeyle tekrar deneyin.");
+                                                            }
+                                                        } else {
+                                                            toast.success("Site açıklaması oluşturuldu. Pazaryeri açıklaması dolu olduğu için değiştirilmedi.");
+                                                        }
                                                     } else if (result.success && !result.data) {
                                                         toast.error("Yapay zeka içerik üretemedi. Lütfen tekrar deneyin.");
                                                     } else {
@@ -488,16 +514,27 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                                     toast.error("Bir hata oluştu.");
                                                 } finally {
                                                     setLoading(false);
+                                                    setAiStep(null);
                                                 }
                                             }}
                                             disabled={loading}
-                                            className="bg-indigo-600 hover:bg-indigo-700 shrink-0"
+                                            className="bg-primary hover:bg-primary/90 text-white w-full md:w-auto self-end font-semibold transition-colors flex items-center justify-center gap-2"
                                         >
-                                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "AI ile Yaz"}
+                                            {loading ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    <span>{aiStep === "marketplace" ? "Pazaryeri açıklaması yazılıyor..." : "İçerik Oluşturuluyor..."}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Brain className="w-4 h-4" />
+                                                    <span>AI ile Açıklama, Teknik Tablo ve Pazaryeri Metni Oluştur</span>
+                                                </>
+                                            )}
                                         </Button>
                                     </div>
                                     <p className="text-[10px] text-gray-500 italic">
-                                        * Linkten ürün ismi ve açıklaması çekilip AI ile özgünleştirilir.
+                                        * Yapıştırılan ham metin veya linkten çekilen bilgiler AI tarafından SEO'ya uygun şekilde düzenlenir, önemli kısımlar vurgulanır ve teknik özellik tablosu oluşturulur. Pazaryeri açıklaması boşsa ona da kısa, tablosuz ve site metninden farklı bir açıklama yazılır.
                                     </p>
                                 </div>
                             </div>
@@ -512,11 +549,43 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                             </div>
 
                             <div className="space-y-2">
-                                <div className="flex flex-col gap-1">
-                                    <Label>Pazar Yeri Açıklaması (Opsiyonel)</Label>
-                                    <span className="text-xs text-gray-500">
-                                        Pazar yerleri için özel açıklama. Boş bırakılırsa normal ürün açıklaması gönderilir. Pazar yerleri çok uzun açıklamaları kabul etmediği için buraya daha kısa ve öz açıklamalar girebilirsiniz.
-                                    </span>
+                                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                                    <div className="flex flex-col gap-1">
+                                        <Label>Pazar Yeri Açıklaması (Opsiyonel)</Label>
+                                        <span className="text-xs text-gray-500">
+                                            Pazar yerleri için özel açıklama. Boş bırakılırsa normal ürün açıklaması gönderilir. Pazar yerleri çok uzun açıklamaları kabul etmediği için buraya daha kısa ve öz açıklamalar girebilirsiniz.
+                                        </span>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={loading}
+                                        className="shrink-0 gap-1.5 border-primary/30 text-[#0081AF]"
+                                        onClick={async () => {
+                                            if (!formData.referenceUrl && !stripHtmlText(formData.description)) {
+                                                toast.error("Önce AI asistanına ham metin girin ya da ürün açıklamasını doldurun.");
+                                                return;
+                                            }
+                                            setLoading(true);
+                                            setAiStep("marketplace");
+                                            try {
+                                                const mp = await requestAiDescription("marketplace", formData.description);
+                                                if (mp.success && mp.data) {
+                                                    handleChange("marketplaceDescription", mp.data);
+                                                    toast.success("Pazaryeri açıklaması yazıldı.");
+                                                } else toast.error(mp.error || "Pazaryeri açıklaması oluşturulamadı.");
+                                            } catch {
+                                                toast.error("Bir hata oluştu.");
+                                            } finally {
+                                                setLoading(false);
+                                                setAiStep(null);
+                                            }
+                                        }}
+                                    >
+                                        {aiStep === "marketplace" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
+                                        AI ile yeniden yaz
+                                    </Button>
                                 </div>
                                 <RichTextEditor
                                     content={formData.marketplaceDescription}
