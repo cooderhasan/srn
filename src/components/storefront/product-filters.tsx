@@ -10,12 +10,30 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
+// Turkish title casing helper to fix ALL CAPS database entries
+function toTitleCaseTurkish(text: string): string {
+    return text
+        .split(" ")
+        .map((word) => {
+            if (!word) return "";
+            const first = word.charAt(0).toLocaleLowerCase("tr-TR") === "ı" ? "I" : word.charAt(0).toLocaleUpperCase("tr-TR");
+            const rest = word.slice(1).toLocaleLowerCase("tr-TR");
+            return first + rest;
+        })
+        .join(" ");
+}
+
 interface ProductFiltersProps {
     categories: { id: string; name: string; slug: string }[];
-    brands: { id: string; name: string; slug: string }[];
+    /** count: o listede (kategori/mağaza) markanın ürün sayısı; varsa çoktan aza sıralanır */
+    brands: { id: string; name: string; slug: string; count?: number }[];
     colors: string[];
     sizes: string[];
     activeCategorySlug?: string;
+    isMotor?: boolean;
+    onFilterApply?: () => void;
+    /** Kategori listesinin üstündeki bağlantı (kategori sayfasında: "Tüm X" ya da "← Üst kategori"); yoksa "Tüm Kategoriler" */
+    categoryNav?: { label: string; href: string; active: boolean; back?: boolean } | null;
 }
 
 export function ProductFilters({
@@ -24,6 +42,9 @@ export function ProductFilters({
     colors,
     sizes,
     activeCategorySlug,
+    isMotor = false,
+    onFilterApply,
+    categoryNav,
 }: ProductFiltersProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -63,6 +84,7 @@ export function ProductFilters({
         params.delete("page");
 
         router.push(`?${params.toString()}`);
+        onFilterApply?.();
     };
 
     const isSelected = (key: string, value: string) => {
@@ -71,75 +93,129 @@ export function ProductFilters({
 
     return (
         <div className="space-y-1">
-            <Accordion type="multiple" defaultValue={["categories", "brands", "price", "colors", "sizes"]} className="w-full">
+            <Accordion type="multiple" defaultValue={["categories", "brands", "genders", "brakes", "price", "colors", "sizes"]} className="w-full">
 
                 {/* Categories */}
                 <AccordionItem value="categories" className="border-none">
-                    <AccordionTrigger className="text-sm font-bold text-gray-900 dark:text-gray-100 hover:no-underline py-4">
+                    <AccordionTrigger className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:no-underline py-3">
                         Kategoriler
                     </AccordionTrigger>
                     <AccordionContent>
-                        <ScrollArea className="h-[240px] w-full pr-3 relative">
-                            <div className="space-y-1">
+                        <div className="space-y-1 pr-1">
+                            {/* Kategori sayfasında "Tüm Kategoriler" tüm siteye götürüyordu; artık bulunulan kategori / üst kategori.
+                                null = gösterme (alt kategorisi olmayan ana kategori) */}
+                            {categoryNav !== null && (
+                            <button
+                                onClick={() => { router.push(categoryNav?.href || "/products"); onFilterApply?.(); }}
+                                className={cn(
+                                    "w-full text-left px-3 py-1.5 rounded-lg text-sm transition-all duration-200 cursor-pointer",
+                                    (categoryNav ? categoryNav.active : !activeCategorySlug && !searchParams.get("category"))
+                                        ? "text-[#009AD0] font-semibold bg-blue-50/60 dark:bg-blue-950/30"
+                                        : "text-gray-600 dark:text-gray-400 hover:text-[#009AD0] hover:bg-gray-50/50 dark:hover:bg-gray-800/40",
+                                    categoryNav?.back && "font-semibold text-[#009AD0]"
+                                )}
+                            >
+                                {categoryNav ? (categoryNav.back ? `← ${categoryNav.label}` : categoryNav.label) : "Tüm Kategoriler"}
+                            </button>
+                            )}
+                            {categories.map((category) => (
                                 <button
-                                    onClick={() => router.push("/products")}
+                                    key={category.id}
+                                    onClick={() => { router.push(`/category/${category.slug}`); onFilterApply?.(); }}
                                     className={cn(
-                                        "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors",
-                                        !activeCategorySlug && !searchParams.get("category")
-                                            ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-900/20 dark:text-blue-400"
-                                            : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                        "w-full text-left px-3 py-1.5 rounded-lg text-sm transition-all duration-200 cursor-pointer",
+                                        activeCategorySlug === category.slug || searchParams.get("category") === category.slug
+                                            ? "text-[#009AD0] font-semibold bg-blue-50/60 dark:bg-blue-950/30"
+                                            : "text-gray-600 dark:text-gray-400 hover:text-[#009AD0] hover:bg-gray-50/50 dark:hover:bg-gray-800/40"
                                     )}
                                 >
-                                    Tüm Kategoriler
+                                    {toTitleCaseTurkish(category.name)}
                                 </button>
-                                {categories.map((category) => (
-                                    <button
-                                        key={category.id}
-                                        onClick={() => router.push(`/category/${category.slug}`)}
-                                        className={cn(
-                                            "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors",
-                                            activeCategorySlug === category.slug || searchParams.get("category") === category.slug
-                                                ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-900/20 dark:text-blue-400"
-                                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                        )}
-                                    >
-                                        {category.name}
-                                    </button>
-                                ))}
-                            </div>
-                        </ScrollArea>
+                            ))}
+                        </div>
                     </AccordionContent>
                 </AccordionItem>
 
-                {/* Brands */}
+                {/* Brands: uzun listede ilk 8 + "Tümünü göster" ve arama (motor yedek parçada 33 marka alt alta çıkıyordu) */}
                 {brands.length > 0 && (
                     <AccordionItem value="brands" className="border-t border-gray-100 dark:border-gray-800">
-                        <AccordionTrigger className="text-sm font-bold text-gray-900 dark:text-gray-100 hover:no-underline py-4">
+                        <AccordionTrigger className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:no-underline py-3">
                             Markalar
                         </AccordionTrigger>
                         <AccordionContent>
-                            <ScrollArea className="h-[200px] w-full pr-3">
-                                <div className="space-y-3 pt-1">
-                                    {brands.map((brand) => (
-                                        <div key={brand.id} className="flex items-center space-x-3 group">
+                            <BrandFilterList
+                                brands={brands}
+                                isSelected={(slug) => isSelected("brands", slug)}
+                                onToggle={(slug) => toggleFilter("brands", slug)}
+                            />
+                        </AccordionContent>
+                    </AccordionItem>
+                )}
+
+                {!isMotor && (
+                    <>
+                        {/* Cinsiyet */}
+                        <AccordionItem value="genders" className="border-t border-gray-100 dark:border-gray-800">
+                            <AccordionTrigger className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:no-underline py-3">
+                                Cinsiyet
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <div className="space-y-2.5 pt-1 pr-1">
+                                    {[
+                                        { label: "Erkek", value: "Erkek" },
+                                        { label: "Kadın", value: "Kadın" },
+                                        { label: "Unisex", value: "Unisex" }
+                                    ].map((gender) => (
+                                        <div key={gender.value} className="flex items-center space-x-3 group">
                                             <Checkbox
-                                                id={`brand-${brand.id}`}
-                                                checked={isSelected("brands", brand.slug)}
-                                                onCheckedChange={() => toggleFilter("brands", brand.slug)}
+                                                id={`gender-${gender.value}`}
+                                                checked={isSelected("genders", gender.value)}
+                                                onCheckedChange={() => toggleFilter("genders", gender.value)}
                                                 className="data-[state=checked]:bg-[#009AD0] data-[state=checked]:border-[#009AD0]"
                                             />
                                             <Label
-                                                htmlFor={`brand-${brand.id}`}
+                                                htmlFor={`gender-${gender.value}`}
                                                 className="cursor-pointer text-sm font-normal text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors"
                                             >
-                                                {brand.name}
+                                                {gender.label}
                                             </Label>
                                         </div>
                                     ))}
                                 </div>
-                            </ScrollArea>
-                        </AccordionContent>
-                    </AccordionItem>
+                            </AccordionContent>
+                        </AccordionItem>
+
+                        {/* Fren */}
+                        <AccordionItem value="brakes" className="border-t border-gray-100 dark:border-gray-800">
+                            <AccordionTrigger className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:no-underline py-3">
+                                Fren
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <div className="space-y-2.5 pt-1 pr-1">
+                                    {[
+                                        { label: "V FREN", value: "V FREN" },
+                                        { label: "MEKANİK DİSK FREN", value: "Mekanik Disk Fren" },
+                                        { label: "HİDROLİK DİSK FREN", value: "Hidrolik Disk Fren" }
+                                    ].map((brake) => (
+                                        <div key={brake.value} className="flex items-center space-x-3 group">
+                                            <Checkbox
+                                                id={`brake-${brake.value}`}
+                                                checked={isSelected("brakes", brake.value)}
+                                                onCheckedChange={() => toggleFilter("brakes", brake.value)}
+                                                className="data-[state=checked]:bg-[#009AD0] data-[state=checked]:border-[#009AD0]"
+                                            />
+                                            <Label
+                                                htmlFor={`brake-${brake.value}`}
+                                                className="cursor-pointer text-sm font-normal text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors"
+                                            >
+                                                {brake.label}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    </>
                 )}
 
                 {/* Price Range */}
@@ -188,38 +264,36 @@ export function ProductFilters({
                 {/* Colors */}
                 {colors.length > 0 && (
                     <AccordionItem value="colors" className="border-t border-gray-100 dark:border-gray-800">
-                        <AccordionTrigger className="text-sm font-bold text-gray-900 dark:text-gray-100 hover:no-underline py-4">
+                        <AccordionTrigger className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:no-underline py-3">
                             Renkler
                         </AccordionTrigger>
                         <AccordionContent>
-                            <ScrollArea className="h-[180px] w-full pr-1">
-                                <div className="grid grid-cols-5 gap-2 pt-1">
-                                    {colors.map((color) => (
-                                        <button
-                                            key={color}
-                                            onClick={() => toggleFilter("colors", color)}
-                                            className="group flex flex-col items-center gap-1.5 focus:outline-hidden"
-                                            title={color}
-                                        >
-                                            <div
-                                                className={cn(
-                                                    "w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 transition-all relative",
-                                                    isSelected("colors", color)
-                                                        ? "ring-2 ring-[#009AD0] ring-offset-2 dark:ring-offset-gray-900 scale-110"
-                                                        : "hover:scale-110 hover:border-gray-400"
-                                                )}
-                                                style={{ backgroundColor: mapColorToCss(color) }}
-                                            />
-                                            <span className={cn(
-                                                "text-[10px] text-center w-full truncate px-0.5",
-                                                isSelected("colors", color) ? "text-[#009AD0] font-medium" : "text-gray-500"
-                                            )}>
-                                                {color}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </ScrollArea>
+                            <div className="grid grid-cols-4 gap-x-2 gap-y-3 pt-1 pr-1">
+                                {colors.map((color) => (
+                                    <button
+                                        key={color}
+                                        onClick={() => toggleFilter("colors", color)}
+                                        className="group flex flex-col items-center gap-1.5 focus:outline-hidden"
+                                        title={color}
+                                    >
+                                        <div
+                                            className={cn(
+                                                "w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 transition-all relative",
+                                                isSelected("colors", color)
+                                                    ? "ring-2 ring-[#009AD0] ring-offset-2 dark:ring-offset-gray-900 scale-110"
+                                                    : "hover:scale-110 hover:border-gray-400"
+                                            )}
+                                            style={{ background: colorSwatchCss(color) }}
+                                        />
+                                        <span className={cn(
+                                            "text-[10px] text-center w-full leading-tight line-clamp-2 break-words px-0.5",
+                                            isSelected("colors", color) ? "text-[#009AD0] font-medium" : "text-gray-500"
+                                        )}>
+                                            {color}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         </AccordionContent>
                     </AccordionItem>
                 )}
@@ -227,28 +301,26 @@ export function ProductFilters({
                 {/* Sizes */}
                 {sizes.length > 0 && (
                     <AccordionItem value="sizes" className="border-t border-gray-100 dark:border-gray-800">
-                        <AccordionTrigger className="text-sm font-bold text-gray-900 dark:text-gray-100 hover:no-underline py-4">
+                        <AccordionTrigger className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:no-underline py-3">
                             Bedenler
                         </AccordionTrigger>
                         <AccordionContent>
-                            <ScrollArea className="h-[160px] w-full pr-1">
-                                <div className="flex flex-wrap gap-2 pt-1">
-                                    {sizes.map((size) => (
-                                        <button
-                                            key={size}
-                                            onClick={() => toggleFilter("sizes", size)}
-                                            className={cn(
-                                                "px-3 py-1.5 rounded-lg text-sm font-medium border transition-all",
-                                                isSelected("sizes", size)
-                                                    ? "bg-[#009AD0] text-white border-[#009AD0] shadow-sm"
-                                                    : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#009AD0] hover:text-[#009AD0]"
-                                            )}
-                                        >
-                                            {size}
-                                        </button>
-                                    ))}
-                                </div>
-                            </ScrollArea>
+                            <div className="flex flex-wrap gap-2 pt-1 pr-1">
+                                {sizes.map((size) => (
+                                    <button
+                                        key={size}
+                                        onClick={() => toggleFilter("sizes", size)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-sm font-medium border transition-all",
+                                            isSelected("sizes", size)
+                                                ? "bg-[#009AD0] text-white border-[#009AD0] shadow-sm"
+                                                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#009AD0] hover:text-[#009AD0]"
+                                        )}
+                                    >
+                                        {size}
+                                    </button>
+                                ))}
+                            </div>
                         </AccordionContent>
                     </AccordionItem>
                 )}
@@ -257,9 +329,21 @@ export function ProductFilters({
     );
 }
 
-// Helper to map standard colors to CSS values
-function mapColorToCss(colorName: string): string {
-    const map: Record<string, string> = {
+// "Siyah / Mavi" gibi çok renkli değerler yarım yarım iki renkli yuvarlak; bilinmeyen renk gri
+// (önceden bilinmeyen değer beyaz/boş daire görünüyordu)
+function colorSwatchCss(colorName: string): string {
+    const parts = colorName.split(/\s*[\/,-]\s*/).map((p) => p.trim()).filter(Boolean);
+    const cssOf = (n: string) => {
+        const key = Object.keys(COLOR_MAP).find((k) => k.toLocaleLowerCase("tr-TR") === n.toLocaleLowerCase("tr-TR"));
+        return key ? COLOR_MAP[key] : null;
+    };
+    const known = parts.map(cssOf).filter(Boolean) as string[];
+    if (known.length >= 2) return `linear-gradient(135deg, ${known[0]} 50%, ${known[1]} 50%)`;
+    if (known.length === 1) return known[0];
+    return "#D1D5DB";
+}
+
+const COLOR_MAP: Record<string, string> = {
         "Kırmızı": "#EF4444",
         "Mavi": "#3B82F6",
         "Yeşil": "#22C55E",
@@ -282,6 +366,71 @@ function mapColorToCss(colorName: string): string {
         "Haki": "#4a5d23",
         "Vişne": "#800000",
         "Pudra": "#E8BFB9",
-    };
-    return map[colorName] || colorName;
+        "Füme": "#4B5563",
+        "Fuşya": "#D946EF",
+        "Mint": "#6EE7B7",
+};
+
+const BRAND_PREVIEW = 8;
+
+function BrandFilterList({
+    brands,
+    isSelected,
+    onToggle,
+}: {
+    brands: { id: string; name: string; slug: string; count?: number }[];
+    isSelected: (slug: string) => boolean;
+    onToggle: (slug: string) => void;
+}) {
+    const [showAll, setShowAll] = useState(false);
+    const [query, setQuery] = useState("");
+    // Çok ürünü olan marka üstte; seçili markalar her zaman görünür
+    const sorted = [...brands].sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.name.localeCompare(b.name, "tr"));
+    const q = query.trim().toLocaleLowerCase("tr-TR");
+    const matched = q ? sorted.filter((b) => b.name.toLocaleLowerCase("tr-TR").includes(q)) : sorted;
+    let visible = showAll || q ? matched : matched.slice(0, BRAND_PREVIEW);
+    const hiddenSelected = matched.filter((b) => isSelected(b.slug) && !visible.includes(b));
+    visible = [...visible, ...hiddenSelected];
+    const hasMore = !q && !showAll && matched.length > BRAND_PREVIEW;
+
+    return (
+        <div className="space-y-2.5 pt-1 pr-1">
+            {brands.length > BRAND_PREVIEW && (
+                <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Marka ara..."
+                    className="h-8 text-sm"
+                />
+            )}
+            {visible.map((brand) => (
+                <div key={brand.id} className="flex items-center space-x-3 group">
+                    <Checkbox
+                        id={`brand-${brand.id}`}
+                        checked={isSelected(brand.slug)}
+                        onCheckedChange={() => onToggle(brand.slug)}
+                        className="data-[state=checked]:bg-[#009AD0] data-[state=checked]:border-[#009AD0]"
+                    />
+                    <Label
+                        htmlFor={`brand-${brand.id}`}
+                        className="flex-1 flex items-center justify-between gap-2 cursor-pointer text-sm font-normal text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors"
+                    >
+                        <span className="truncate">{brand.name}</span>
+                        {typeof brand.count === "number" && <span className="text-xs text-gray-400 shrink-0">{brand.count}</span>}
+                    </Label>
+                </div>
+            ))}
+            {q && matched.length === 0 && <p className="text-xs text-gray-400">Marka bulunamadı.</p>}
+            {hasMore && (
+                <button type="button" onClick={() => setShowAll(true)} className="text-xs font-semibold text-[#009AD0] hover:underline">
+                    Tümünü göster ({matched.length})
+                </button>
+            )}
+            {showAll && !q && brands.length > BRAND_PREVIEW && (
+                <button type="button" onClick={() => setShowAll(false)} className="text-xs font-semibold text-gray-500 hover:underline">
+                    Daha az göster
+                </button>
+            )}
+        </div>
+    );
 }

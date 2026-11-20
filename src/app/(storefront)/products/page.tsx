@@ -1,3 +1,5 @@
+import { findProductsInStockFirst } from "@/lib/product-listing";
+import { sortSizes } from "@/lib/helpers";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { ProductCardModern } from "@/components/storefront/product-card-modern";
@@ -5,6 +7,7 @@ import { ProductFilters } from "@/components/storefront/product-filters";
 import { MobileProductFilters } from "@/components/storefront/mobile-product-filters";
 import { Prisma } from "@prisma/client";
 import { ProductSort } from "@/components/storefront/product-sort";
+import { ProductStockToggle } from "@/components/storefront/product-stock-toggle";
 import { Pagination } from "@/components/storefront/pagination";
 import { Metadata } from "next";
 
@@ -20,6 +23,7 @@ interface ProductsPageProps {
         sizes?: string | string[];
         page?: string;
         is_on_sale?: string;
+        in_stock?: string;
     }>;
 }
 
@@ -46,17 +50,27 @@ export async function generateMetadata({ searchParams }: ProductsPageProps): Pro
     }
 
     return {
-        title: `${title} | Serin Motor`,
+        title: title,
         description,
         alternates: {
-            canonical: `${process.env.NEXT_PUBLIC_APP_URL || "https://serinmotor.com"}/products`
+            canonical: "/products"
+        },
+        openGraph: {
+            title: title,
+            description,
+            url: "/products",
+            type: "website",
         }
     };
 }
 
+import { findProductIdsBySearch } from "@/lib/product-search";
+
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
     const params = await searchParams;
     const session = await auth();
+    // Serin tek mağaza (Bardakçı'nın motor sitesi gibi): cinsiyet/fren filtreleri gösterilmez
+    const isMotor = true;
     const discountRate = session?.user?.discountRate || 0;
     const isDealer =
         session?.user?.role === "DEALER" && session?.user?.status === "APPROVED";
@@ -83,37 +97,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         }
     }
 
-    // Search - Kelime bazlı çoklu arama (her kelime ayrı AND koşulu ile aranır)
+    // Arama: Türkçe'ye uygun (elcik/elciği, disli/dişli; marka ve varyant rengi dahil) - lib/product-search
     if (params.search) {
-        const searchWords = params.search
-            .trim()
-            .split(/\s+/)
-            .filter(w => w.length > 0);
-
-        if (searchWords.length === 1) {
-            // Tek kelime: isim, sku, barkod içinde ara
-            const word = searchWords[0];
-            where.OR = [
-                { name: { contains: word, mode: "insensitive" } },
-                { sku: { contains: word, mode: "insensitive" } },
-                { barcode: { contains: word, mode: "insensitive" } },
-                {
-                    variants: {
-                        some: {
-                            OR: [
-                                { sku: { contains: word, mode: "insensitive" } },
-                                { barcode: { contains: word, mode: "insensitive" } },
-                            ],
-                        },
-                    },
-                },
-            ];
-        } else {
-            // Çoklu kelime: her kelimenin ürün adında GEÇMESİ gerekiyor (AND mantığı)
-            where.AND = searchWords.map(word => ({
-                name: { contains: word, mode: "insensitive" },
-            }));
-        }
+        const ids = await findProductIdsBySearch(params.search, { activeOnly: true });
+        if (ids) where.id = { in: ids };
     }
 
 
@@ -130,6 +117,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     if (brandSlugs && brandSlugs.length > 0) {
         where.brand = { slug: { in: brandSlugs } };
     }
+
 
     // Variants (Color & Size)
     const colorFilters = typeof params.colors === 'string' ? [params.colors] : params.colors;
@@ -160,6 +148,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         };
     }
 
+    // In Stock
+    if (params.in_stock === "true") {
+        where.stock = { gt: 0 };
+    }
+
     // --- Build Sorting ---
     let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
     if (params.sort === "price_asc") {
@@ -175,12 +168,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     const currentPage = params.page ? Number(params.page) : 1;
     const skip = (currentPage - 1) * PAGE_SIZE;
 
-    const ROOT_CATEGORY_ID = "cml9exnw20009orv864or2ni2"; // Known Root ID
     let sidebarCategories: any[] = [];
     let currentCategory: { name: string; slug: string } | null = null;
 
     if (params.category) {
-        const foundCategory = await prisma.category.findUnique({
+        const foundCategory = await prisma.category.findFirst({
             where: { slug: params.category },
             include: { children: { where: { isActive: true }, orderBy: { order: "asc" } } }
         });
@@ -205,13 +197,14 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     // If still empty (no category selected OR invalid category OR root fallback), fetch Top Level
     if (sidebarCategories.length === 0) {
         sidebarCategories = await prisma.category.findMany({
-            where: { parentId: ROOT_CATEGORY_ID, isActive: true },
+            where: { parentId: null, isActive: true },
             orderBy: { order: "asc" },
         });
     }
 
-    const [products, totalCount, brands, variants] = await Promise.all([
-        prisma.product.findMany({
+    const [{ products, totalCount }, brandRows, variants] = await Promise.all([
+        // Stoktakiler önce, tükenenler sonda (lib/product-listing)
+        findProductsInStockFirst({
             where,
             include: {
                 category: true,
@@ -222,54 +215,64 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             skip,
             take: PAGE_SIZE,
         }),
-        prisma.product.count({ where }),
         prisma.brand.findMany({
             where: { isActive: true },
             orderBy: { name: "asc" },
-            select: { id: true, name: true, slug: true }
+            // Markanın bu listedeki ürün sayısı (filtrede çoktan aza sıralanır, sayı yanında görünür)
+            select: { id: true, name: true, slug: true, _count: { select: { products: { where: { isActive: true } } } } }
         }),
         prisma.productVariant.findMany({
-            where: { isActive: true },
+            // Sadece satıştaki ürünlerin varyantları
+            where: { isActive: true, product: { isActive: true } },
             select: { color: true, size: true },
             distinct: ['color', 'size']
         })
     ]);
 
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const brands = brandRows
+        .map((b: any) => ({ id: b.id, name: b.name, slug: b.slug, count: b._count?.products ?? 0 }))
+        .filter((b) => b.count > 0);
 
     // Extract unique colors and sizes
-    const uniqueColors = Array.from(new Set(variants.map(v => v.color).filter(Boolean))) as string[];
-    const uniqueSizes = Array.from(new Set(variants.map(v => v.size).filter(Boolean))) as string[];
+    const uniqueColors = (Array.from(new Set(variants.map(v => v.color).filter(Boolean))) as string[]).sort((a, b) => a.localeCompare(b, "tr"));
+    const uniqueSizes = sortSizes(Array.from(new Set(variants.map(v => v.size).filter(Boolean))) as string[]);
 
     return (
         <div className="container mx-auto px-4 py-8">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                        {currentCategory
-                            ? currentCategory.name
-                            : params.search
-                                ? `"${params.search}" Arama Sonuçları`
-                                : params.is_on_sale === "true"
-                                    ? "İndirimli Ürünler"
-                                    : "Tüm Ürünler"}
-                    </h1>
-                    <p className="text-gray-500 dark:text-gray-400">
-                        Toplam <span className="font-semibold text-gray-900 dark:text-white">{totalCount}</span> ürün listeleniyor
-                    </p>
+                <div className="flex items-center justify-between w-full md:w-auto gap-4">
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">
+                            {currentCategory
+                                ? currentCategory.name
+                                : params.search
+                                    ? `"${params.search}" Arama Sonuçları`
+                                    : params.is_on_sale === "true"
+                                        ? "İndirimli Ürünler"
+                                        : "Tüm Ürünler"}
+                        </h1>
+                        <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
+                            Toplam <span className="font-semibold text-gray-900 dark:text-white">{totalCount}</span> ürün listeleniyor
+                        </p>
+                    </div>
+
+                    <div className="lg:hidden shrink-0">
+                        <MobileProductFilters
+                            categories={sidebarCategories}
+                            brands={brands}
+                            colors={uniqueColors}
+                            sizes={uniqueSizes}
+                            activeCategorySlug={params.category}
+                            isMotor={isMotor}
+                        />
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <MobileProductFilters
-                        categories={sidebarCategories}
-                        brands={brands}
-                        colors={uniqueColors}
-                        sizes={uniqueSizes}
-                        activeCategorySlug={params.category}
-                    />
-                    <div className="flex items-center gap-2 ml-auto md:ml-0">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline-block">Sıralama:</span>
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full md:w-auto">
+                    <ProductStockToggle />
+                    <div className="shrink-0">
                         <ProductSort initialSort={params.sort || "newest"} />
                     </div>
                 </div>
@@ -277,7 +280,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
             <div className="flex flex-col lg:flex-row gap-8 items-start">
                 {/* Sidebar Filters - Desktop Sticky */}
-                <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto pr-2 custom-scrollbar">
+                <aside className="hidden lg:block w-72 flex-shrink-0 sticky top-24 pr-2">
                     <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
                         <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#009AD0]"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
@@ -289,6 +292,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                             colors={uniqueColors}
                             sizes={uniqueSizes}
                             activeCategorySlug={params.category}
+                            isMotor={isMotor}
                         />
                     </div>
                 </aside>
@@ -306,14 +310,14 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                             </p>
                             <a
                                 href="/products"
-                                className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl bg-[#009AD0] text-white font-medium hover:bg-[#007da8] transition-colors shadow-lg shadow-blue-500/20"
+                                className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl bg-[#009AD0] text-white font-medium hover:bg-[#0081AF] transition-colors shadow-lg shadow-blue-500/20"
                             >
                                 Filtreleri Temizle
                             </a>
                         </div>
                     ) : (
                         <>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
                                 {products.map((product) => (
                                     <ProductCardModern
                                         key={product.id}
