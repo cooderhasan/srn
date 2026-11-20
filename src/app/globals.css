@@ -214,3 +214,85 @@ html:has(.admin-shell) body[data-scroll-locked] {
 body[data-scroll-locked] .wa-float {
   display: none !important;
 }
+
+/* Yönetim paneli yazı editörü (ürün açıklaması): tablo ve listeler ön yüzdeki ürün açıklamasıyla aynı görünsün.
+   Önceden editörde tablo stilsiz/dar kalıyor, madde işaretleri görünmüyordu (Bardakçı'daki .ProseMirror kuralları). */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+
+.ProseMirror table {
+  width: 100% !important;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  border: 1px solid oklch(0.92 0.01 260);
+  font-size: 0.875rem;
+}
+
+.ProseMirror th {
+  background-color: oklch(0.985 0 0);
+  border: 1px solid oklch(0.92 0.01 260);
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 700;
+  color: oklch(0.13 0.02 260);
+}
+
+.ProseMirror td {
+  border: 1px solid oklch(0.92 0.01 260);
+  padding: 0.75rem;
+  vertical-align: top;
+  color: oklch(0.2 0.03 260);
+}
+
+.ProseMirror th p,
+.ProseMirror td p {
+  margin: 0;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.ProseMirror li {
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror li p {
+  margin: 0;
+}
+
+.ProseMirror blockquote {
+  background-color: #f0faff;
+  border-left: 4px solid #009AD0;
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.dark .ProseMirror table,
+.dark .ProseMirror th,
+.dark .ProseMirror td {
+  border-color: oklch(0.2 0.03 260);
+}
+
+.dark .ProseMirror th {
+  background-color: oklch(0.15 0.02 260);
+  color: oklch(0.985 0 0);
+}
+
+.dark .ProseMirror td {
+  color: oklch(0.7 0.02 260);
+}
+
+.dark .ProseMirror blockquote {
+  background-color: rgba(0, 154, 208, 0.12);
+}
