@@ -8,14 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatPrice, calculatePrice } from "@/lib/helpers";
 import { quoteShipping, type CargoPricing } from "@/lib/shipping";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, FileQuestion } from "lucide-react";
 
 export default function CartView({ cargoCompanies, freeShippingLimit }: { cargoCompanies: CargoPricing[]; freeShippingLimit: number }) {
-    const { items, removeItem, updateQuantity, getSummary, discountRate, isAuthenticated } =
+    const { items, removeItem, updateQuantity, getSummary, discountRate, isAuthenticated, clearCart } =
         useCartStore();
     const [mounted, setMounted] = useState(false);
+    // Sepeti baştan oluşturmak isteyen müşteri için: tüm ürünleri tek seferde kaldırma (onay penceresiyle)
+    const [clearOpen, setClearOpen] = useState(false);
+    const [clearing, setClearing] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -67,9 +71,52 @@ export default function CartView({ cargoCompanies, freeShippingLimit }: { cargoC
 
     return (
         <div className="container mx-auto px-4 py-8">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-8">
-                Sepetim ({summary.itemCount} ürün)
-            </h1>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Sepetim ({summary.itemCount} ürün)
+                </h1>
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setClearOpen(true)}
+                    className="gap-2 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:hover:bg-red-950/30"
+                >
+                    <Trash2 className="h-4 w-4" />
+                    Sepeti Boşalt
+                </Button>
+            </div>
+
+            <Dialog open={clearOpen} onOpenChange={(o) => !clearing && setClearOpen(o)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Sepet boşaltılsın mı?</DialogTitle>
+                        <DialogDescription>
+                            Sepetinizdeki tüm ürünler ({summary.itemCount} ürün) kaldırılacak. Bu işlem geri alınamaz.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button type="button" variant="outline" disabled={clearing} onClick={() => setClearOpen(false)}>
+                            Vazgeç
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={clearing}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                            onClick={async () => {
+                                setClearing(true);
+                                try {
+                                    await clearCart();
+                                } finally {
+                                    setClearing(false);
+                                    setClearOpen(false);
+                                }
+                            }}
+                        >
+                            {clearing ? "Boşaltılıyor..." : "Evet, Sepeti Boşalt"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <div className="grid gap-8 lg:grid-cols-3">
                 {/* Cart Items */}
