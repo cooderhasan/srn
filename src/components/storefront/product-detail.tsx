@@ -10,7 +10,7 @@ import { formatPrice, calculatePrice, validateMinQuantity } from "@/lib/helpers"
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ShoppingCart, Minus, Plus, Package, Truck, ChevronLeft, ChevronRight, Shield, CreditCard, ChevronRight as ChevronRightIcon, FileText, Star, Play } from "lucide-react";
 import { parseYouTubeUrl, type YouTubeVideo } from "@/lib/youtube";
 import { InstallmentTable } from "./installment-table";
@@ -135,6 +135,7 @@ export function ProductDetail({
     // video yalnızca küçük resmine tıklanınca açılıyordu).
     const gallerySlideCount = product.images.length + videos.length;
     const currentSlide = activeVideoIndex !== null ? product.images.length + activeVideoIndex : activeImageIndex;
+    const galleryTouch = useRef<{ x: number; y: number } | null>(null);
     const goToSlide = (slide: number) => {
         const n = (slide + gallerySlideCount) % gallerySlideCount;
         if (n >= product.images.length) {
@@ -326,12 +327,29 @@ export function ProductDetail({
 
                 {/* Main Product Section */}
                 <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mb-8">
-                    <div className="grid lg:grid-cols-2 gap-0">
+                    {/* min-w-0: küçük resim şeridi telefonda sütunu genişletip sayfayı sağdan taşırmasın (Bardakçı'daki gibi) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
                         {/* Left: Image Gallery */}
-                        <div className="p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800">
+                        <div className="min-w-0 p-4 sm:p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800">
                             {/* Main Image */}
-                            <div className={cn(
-                                "relative bg-white dark:bg-gray-800/50 rounded-xl overflow-hidden group mb-4 border border-gray-100 dark:border-gray-800",
+                            {/* Telefonda parmakla sağa/sola kaydırarak görsel (ve video) değişir (Bardakçı'daki gibi) */}
+                            <div
+                                onTouchStart={(e) => {
+                                    const t = e.touches[0];
+                                    galleryTouch.current = t ? { x: t.clientX, y: t.clientY } : null;
+                                }}
+                                onTouchEnd={(e) => {
+                                    const start = galleryTouch.current;
+                                    galleryTouch.current = null;
+                                    const t = e.changedTouches[0];
+                                    if (!start || !t || gallerySlideCount < 2) return;
+                                    const dx = t.clientX - start.x;
+                                    const dy = t.clientY - start.y;
+                                    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+                                    goToSlide(dx < 0 ? currentSlide + 1 : currentSlide - 1);
+                                }}
+                                className={cn(
+                                "relative bg-white dark:bg-gray-800/50 rounded-xl overflow-hidden group mb-4 border border-gray-100 dark:border-gray-800 touch-pan-y",
                                 // Shorts dikey: oynarken kutu da dikey olur (telefonda 4:3 kutuda oynatıcı çok küçük kalıyordu)
                                 activeVideo?.isShort ? "aspect-[9/16] max-h-[70vh] mx-auto sm:aspect-square sm:max-h-none" : "aspect-[4/3]"
                             )}>
@@ -376,6 +394,13 @@ export function ProductDetail({
                                         <Badge className="bg-red-500 hover:bg-red-600 text-white border-none px-3 py-1 text-sm font-bold shadow-lg">
                                             %{Math.max(discountRate, saleDiscountRate)} İndirim
                                         </Badge>
+                                    </div>
+                                )}
+
+                                {/* Telefonda kaçıncı görsel olduğu (kaydırılabildiği belli olsun) */}
+                                {gallerySlideCount > 1 && !activeVideo && (
+                                    <div className="lg:hidden absolute bottom-3 right-3 z-10 rounded-full bg-black/55 text-white text-[11px] font-semibold px-2 py-0.5">
+                                        {currentSlide + 1} / {gallerySlideCount}
                                     </div>
                                 )}
 
@@ -467,7 +492,7 @@ export function ProductDetail({
                         </div>
 
                         {/* Right: Product Info & Buy Box */}
-                        <div className="p-6 lg:p-8 flex flex-col">
+                        <div className="min-w-0 p-4 sm:p-6 lg:p-8 flex flex-col">
                             {/* Category & Brand */}
                             <div className="flex items-center gap-2 mb-3">
                                 {product.category && (
