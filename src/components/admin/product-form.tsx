@@ -1460,51 +1460,33 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                             <CardTitle>Görünürlük & Etiketler</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-800">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base">Aktif Durum</Label>
-                                    <p className="text-sm text-muted-foreground">Ürün mağazada görünür olsun mu?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isActive}
-                                    onCheckedChange={(c) => handleChange("isActive", c)}
-                                />
+                            {/* Aktif + etiketler tek satırda */}
+                            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                                {([
+                                    { key: "isActive", label: "Aktif", hint: "Mağazada görünür" },
+                                    { key: "isFeatured", label: "Öne Çıkan", hint: "Ana sayfa vitrini" },
+                                    { key: "isNew", label: "Yeni Ürün", hint: "\"Yeni\" etiketi" },
+                                    { key: "isBestSeller", label: "Çok Satan", hint: "\"Çok Satan\" etiketi" },
+                                ] as const).map((opt) => (
+                                    <label key={opt.key} className="flex items-start gap-2 p-3 border rounded-lg bg-white dark:bg-gray-800 cursor-pointer select-none">
+                                        <Checkbox
+                                            className="mt-0.5"
+                                            checked={Boolean((formData as any)[opt.key])}
+                                            onCheckedChange={(c) => handleChange(opt.key, c === true)}
+                                        />
+                                        <span className="leading-tight">
+                                            <span className="block text-sm font-medium">{opt.label}</span>
+                                            <span className="block text-[11px] text-muted-foreground">{opt.hint}</span>
+                                        </span>
+                                    </label>
+                                ))}
                             </div>
 
-                            <hr />
-                            <h3 className="font-semibold text-gray-900 dark:text-white">Pazar Yeri Görünürlüğü</h3>
-                            <p className="text-sm text-muted-foreground -mt-2">
-                                Pazaryeri seçimleri ve fiyatları <b>Fiyat &amp; Stok</b> sekmesindedir.
+                            <p className="text-xs text-muted-foreground">
+                                Pazaryerlerine gönderim seçimi ve fiyatları <strong>Fiyat &amp; Stok</strong> sekmesindedir.
                             </p>
 
-                            {formData.isN11Active && (
-                                <div className="p-4 border border-purple-200 dark:border-purple-800 rounded-lg bg-purple-50/30 dark:bg-purple-950/10 space-y-3">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="n11CatalogId" className="text-purple-700 dark:text-purple-300 font-semibold flex items-center gap-1.5">
-                                            <span>N11 Katalog (Buybox) ID</span>
-                                        </Label>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                                            Eğer ürün barkodu N11 kurallarına (sadece numerik olması gerekir) uymuyorsa, ürünü N11 kataloğundaki bir ürünle eşleştirmek için N11 Katalog ID'sini girebilirsiniz.
-                                        </p>
-                                        <Input
-                                            id="n11CatalogId"
-                                            type="text"
-                                            value={formData.n11CatalogId}
-                                            onChange={(e) => {
-                                                // Only allow numbers
-                                                const val = e.target.value;
-                                                if (/^\d*$/.test(val)) {
-                                                    handleChange("n11CatalogId", val);
-                                                }
-                                            }}
-                                            placeholder="Örn: 123456789"
-                                            className="border-purple-200 dark:border-purple-800 focus:border-purple-500 bg-white dark:bg-gray-800 font-mono"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/10 mt-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3 p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/10">
                                 <div className="space-y-0.5">
                                     <Label className="text-base text-blue-700 dark:text-blue-300">Pazar Yeri Senkronizasyonu</Label>
                                     <p className="text-sm text-muted-foreground">Fiyat ve stok bilgisini şimdi pazar yerlerine gönder.</p>
@@ -1521,38 +1503,35 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                 </Button>
                             </div>
 
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-800">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base">Öne Çıkan</Label>
-                                    <p className="text-sm text-muted-foreground">Ana sayfada vitrine eklensin mi?</p>
+                            {/* Nadiren kullanılan pazaryeri kodları: kapalı gelir, değer girilmişse açık gelir */}
+                            <details
+                                className="border rounded-lg bg-white dark:bg-gray-800 group"
+                                open={Boolean(formData.n11CatalogId)}
+                            >
+                                <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                    Gelişmiş: pazaryeri özel kodları
+                                    <span className="block text-[11px] font-normal text-muted-foreground">Genelde boş bırakılır.</span>
+                                </summary>
+                                <div className="grid grid-cols-1 gap-3 px-4 pb-4 md:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="n11CatalogId" className="text-xs font-semibold text-purple-700">N11 Katalog (Buybox) ID</Label>
+                                        <Input
+                                            id="n11CatalogId"
+                                            type="text"
+                                            value={formData.n11CatalogId}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (/^\d*$/.test(val)) {
+                                                    handleChange("n11CatalogId", val);
+                                                }
+                                            }}
+                                            placeholder="Örn: 123456789"
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                        <p className="text-[10px] text-muted-foreground">Barkod N11 kuralına (sadece rakam) uymuyorsa ürünü N11 kataloğundaki ürünle eşleştirmek için.</p>
+                                    </div>
                                 </div>
-                                <Checkbox
-                                    checked={formData.isFeatured}
-                                    onCheckedChange={(c) => handleChange("isFeatured", c)}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-800">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base">Yeni Ürün</Label>
-                                    <p className="text-sm text-muted-foreground">"Yeni" etiketi gösterilsin mi?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isNew}
-                                    onCheckedChange={(c) => handleChange("isNew", c)}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-800">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base">Çok Satan</Label>
-                                    <p className="text-sm text-muted-foreground">"Çok Satan" etiketi gösterilsin mi?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isBestSeller}
-                                    onCheckedChange={(c) => handleChange("isBestSeller", c)}
-                                />
-                            </div>
+                            </details>
                         </CardContent>
                     </Card>
                 </TabsContent>
