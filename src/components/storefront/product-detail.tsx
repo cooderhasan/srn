@@ -131,6 +131,19 @@ export function ProductDetail({
         .filter((v): v is YouTubeVideo => !!v);
     const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
     const activeVideo = activeVideoIndex !== null ? videos[activeVideoIndex] : null;
+    // Galeri sırası: önce görseller, sonra videolar. Oklar videoyu da kapsar (önceden son görselden ilk görsele dönüyordu,
+    // video yalnızca küçük resmine tıklanınca açılıyordu).
+    const gallerySlideCount = product.images.length + videos.length;
+    const currentSlide = activeVideoIndex !== null ? product.images.length + activeVideoIndex : activeImageIndex;
+    const goToSlide = (slide: number) => {
+        const n = (slide + gallerySlideCount) % gallerySlideCount;
+        if (n >= product.images.length) {
+            setActiveVideoIndex(n - product.images.length);
+        } else {
+            setActiveVideoIndex(null);
+            setActiveImageIndex(n);
+        }
+    };
     const addItem = useCartStore((state) => state.addItem);
     const openAddedToCartModal = useCartStore((state) => state.openAddedToCartModal);
 
@@ -367,27 +380,27 @@ export function ProductDetail({
                                 )}
 
                                 {/* Navigation Arrows */}
-                                {!activeVideo && product.images.length > 1 && (
+                                {gallerySlideCount > 1 && (
                                     <>
                                         <button
+                                            type="button"
+                                            aria-label="Önceki"
                                             onClick={(e) => {
                                                 e.preventDefault();
-                                                setActiveImageIndex((prev) =>
-                                                    prev === 0 ? product.images.length - 1 : prev - 1
-                                                );
+                                                goToSlide(currentSlide - 1);
                                             }}
-                                            className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 dark:bg-gray-900/90 shadow-md opacity-0 group-hover:opacity-100 transition-all hover:bg-[#009AD0] hover:text-white"
+                                            className={cn("absolute z-30 left-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 dark:bg-gray-900/90 shadow-md transition-all hover:bg-[#009AD0] hover:text-white", activeVideo ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
                                         >
                                             <ChevronLeft className="h-4 w-4" />
                                         </button>
                                         <button
+                                            type="button"
+                                            aria-label="Sonraki"
                                             onClick={(e) => {
                                                 e.preventDefault();
-                                                setActiveImageIndex((prev) =>
-                                                    prev === product.images.length - 1 ? 0 : prev + 1
-                                                );
+                                                goToSlide(currentSlide + 1);
                                             }}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 dark:bg-gray-900/90 shadow-md opacity-0 group-hover:opacity-100 transition-all hover:bg-[#009AD0] hover:text-white"
+                                            className={cn("absolute z-30 right-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 dark:bg-gray-900/90 shadow-md transition-all hover:bg-[#009AD0] hover:text-white", activeVideo ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
                                         >
                                             <ChevronRight className="h-4 w-4" />
                                         </button>
