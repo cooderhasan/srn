@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { parseYouTubeUrl } from "@/lib/youtube";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -18,7 +19,7 @@ import { createProduct, updateProduct, syncProductToMarketplaces, searchProducts
 import { generateSlug, generateSKU, generateBarcode } from "@/lib/helpers";
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, X, ImageIcon, Trash2, Loader2, RefreshCcw, Package, RefreshCw, Brain, Search } from "lucide-react";
+import { Plus, X, ImageIcon, Trash2, Loader2, RefreshCcw, Package, RefreshCw, Brain, Search, Play } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { calculateDesi } from "@/lib/shipping";
@@ -84,6 +85,7 @@ interface Product {
     criticalStock: number;
     categoryId: string | null;
     images: string[];
+    videoUrls?: string[];
     isFeatured: boolean;
     isNew: boolean;
     isBestSeller: boolean;
@@ -139,6 +141,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
         stock: product?.stock || 0,
         criticalStock: product?.criticalStock ?? defaultCriticalStock,
         images: product?.images || [] as string[],
+        videoUrls: product?.videoUrls || [] as string[],
         variants: product?.variants || [] as ProductVariant[],
         isActive: product?.isActive ?? true,
         isTrendyolActive: product?.isTrendyolActive ?? false,
@@ -183,6 +186,22 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
             : { text: source, productName: formData.name, mode, avoidText };
         const res = await fetch("/api/admin/ai/generate-description", { method: "POST", body: JSON.stringify(payload) });
         return res.json();
+    };
+
+    // Ürün videoları (YouTube / Shorts linki): kapak resmi YouTube'dan gelir
+    const [videoInput, setVideoInput] = useState("");
+    const addVideo = () => {
+        const v = parseYouTubeUrl(videoInput);
+        if (!v) {
+            toast.error("Geçerli bir YouTube linki değil. Örnek: https://youtube.com/shorts/... veya https://youtube.com/watch?v=...");
+            return;
+        }
+        if (formData.videoUrls.some((u) => parseYouTubeUrl(u)?.id === v.id)) {
+            toast.error("Bu video zaten ekli.");
+            return;
+        }
+        handleChange("videoUrls", [...formData.videoUrls, v.url]);
+        setVideoInput("");
     };
 
     const handleChange = (field: string, value: any) => {
@@ -342,7 +361,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
 
         const data = new FormData();
         Object.entries(formData).forEach(([key, value]) => {
-            if (key === 'variants' || key === 'images' || key === 'categoryIds') {
+            if (key === 'variants' || key === 'images' || key === 'videoUrls' || key === 'categoryIds') {
                 data.append(key, JSON.stringify(value));
             } else {
                 data.append(key, String(value));
@@ -1219,6 +1238,71 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                             )}
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Ürün Videosu (YouTube)</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                YouTube Shorts ya da normal video linkini yapıştırın. Video ürün sayfasında görsellerin yanında oynatma simgesiyle görünür; kapak resmi YouTube&apos;dan otomatik gelir.
+                            </p>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <Input
+                                    value={videoInput}
+                                    onChange={(e) => setVideoInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            addVideo();
+                                        }
+                                    }}
+                                    placeholder="https://youtube.com/shorts/..."
+                                />
+                                <Button type="button" onClick={addVideo} className="shrink-0">
+                                    Video Ekle
+                                </Button>
+                            </div>
+
+                            {formData.videoUrls.length > 0 && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {formData.videoUrls.map((url, index) => {
+                                        const v = parseYouTubeUrl(url);
+                                        if (!v) return null;
+                                        return (
+                                            <div key={v.id} className="relative group">
+                                                <a
+                                                    href={v.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className={`relative block overflow-hidden rounded-lg border bg-black ${v.isShort ? "aspect-[9/16]" : "aspect-video"}`}
+                                                    title="YouTube'da aç"
+                                                >
+                                                    <img src={v.thumbnailUrl} alt={`Video ${index + 1}`} className="w-full h-full object-cover" />
+                                                    <span className="absolute inset-0 flex items-center justify-center">
+                                                        <span className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+                                                            <Play className="h-5 w-5 text-white fill-white ml-0.5" />
+                                                        </span>
+                                                    </span>
+                                                </a>
+                                                <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-red-600 text-white text-[10px] font-semibold rounded">
+                                                    {v.isShort ? "Shorts" : "Video"}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleChange("videoUrls", formData.videoUrls.filter((_, i) => i !== index))}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                                                    title="Videoyu kaldır"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </CardContent>

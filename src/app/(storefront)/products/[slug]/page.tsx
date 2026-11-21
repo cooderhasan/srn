@@ -4,6 +4,7 @@ import { getSiteSettings } from "@/lib/settings";
 import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/storefront/product-detail";
 import { JsonLd } from "@/components/seo/json-ld";
+import { parseYouTubeUrl } from "@/lib/youtube";
 import { Metadata } from "next";
 import { getProductReviews, getReviewStats } from "@/app/actions/review";
 
@@ -157,6 +158,24 @@ export default async function ProductPage({ params }: ProductPageProps) {
             },
         },
     };
+
+    // Ürün videoları (YouTube/Shorts): Google'a ürün sayfasındaki video olarak bildirilir
+    const productVideos = ((product as any).videoUrls as string[] | undefined || [])
+        .map((u) => parseYouTubeUrl(u))
+        .filter((v): v is NonNullable<typeof v> => !!v);
+    if (productVideos.length > 0) {
+        const plainDescription = (product.description?.replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim() || product.name).slice(0, 300);
+        productSchema.video = productVideos.map((v, i) => ({
+            "@type": "VideoObject",
+            "name": productVideos.length > 1 ? `${product.name} - Video ${i + 1}` : `${product.name} Videosu`,
+            "description": plainDescription,
+            "thumbnailUrl": v.thumbnailUrl,
+            // YouTube'daki yayın tarihi elde yok: ürünün eklenme tarihi kullanılır
+            "uploadDate": product.createdAt.toISOString(),
+            "contentUrl": v.url,
+            "embedUrl": `https://www.youtube.com/embed/${v.id}`,
+        }));
+    }
 
     // Enrich with review and rating data if available
     if (reviewStats.totalReviews > 0) {

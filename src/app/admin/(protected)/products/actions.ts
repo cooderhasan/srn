@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeYouTubeUrls } from "@/lib/youtube";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
@@ -80,6 +81,15 @@ export async function createProduct(formData: FormData) {
     const imagesJson = formData.get("images") as string;
     const images: string[] = imagesJson ? JSON.parse(imagesJson) : [];
 
+    // YouTube videoları (Shorts dahil): geçersiz linkler atılır, tek tip linke çevrilir
+    const videosJson = formData.get("videoUrls") as string;
+    let videoUrls: string[] = [];
+    try {
+        videoUrls = normalizeYouTubeUrls(videosJson ? JSON.parse(videosJson) : []);
+    } catch {
+        videoUrls = [];
+    }
+
     // Parse variants from JSON string
     const variantsJson = formData.get("variants") as string;
     const variants = variantsJson ? JSON.parse(variantsJson) : [];
@@ -91,6 +101,7 @@ export async function createProduct(formData: FormData) {
         data: {
             ...productData,
             images,
+            videoUrls,
             ...(brandId && brandId !== "none" && { brand: { connect: { id: brandId } } }),
             categories: {
                 connect: validCategoryIds.map((id) => ({ id })),
@@ -217,6 +228,15 @@ export async function updateProduct(productId: string, formData: FormData) {
     const imagesJson = formData.get("images") as string;
     const images: string[] = imagesJson ? JSON.parse(imagesJson) : [];
 
+    // YouTube videoları (Shorts dahil): geçersiz linkler atılır, tek tip linke çevrilir
+    const videosJson = formData.get("videoUrls") as string;
+    let videoUrls: string[] = [];
+    try {
+        videoUrls = normalizeYouTubeUrls(videosJson ? JSON.parse(videosJson) : []);
+    } catch {
+        videoUrls = [];
+    }
+
     // Parse variants from JSON string
     const variantsJson = formData.get("variants") as string;
     const variants = variantsJson ? JSON.parse(variantsJson) : [];
@@ -234,6 +254,7 @@ export async function updateProduct(productId: string, formData: FormData) {
         data: {
             ...updateData,
             images,
+            videoUrls,
             brand: brandId ? { connect: { id: brandId } } : { disconnect: true },
             // category: categoryId ? { connect: { id: categoryId } } : { disconnect: true },
             categories: {

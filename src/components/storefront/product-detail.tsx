@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
 import { toast } from "sonner";
 import { useState } from "react";
-import { ShoppingCart, Minus, Plus, Package, Truck, ChevronLeft, ChevronRight, Shield, CreditCard, ChevronRight as ChevronRightIcon, FileText, Star } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Package, Truck, ChevronLeft, ChevronRight, Shield, CreditCard, ChevronRight as ChevronRightIcon, FileText, Star, Play } from "lucide-react";
+import { parseYouTubeUrl, type YouTubeVideo } from "@/lib/youtube";
 import { InstallmentTable } from "./installment-table";
 import { WishlistButton } from "@/components/products/wishlist-button";
 import { ReviewForm } from "@/components/products/review-form";
@@ -39,6 +40,7 @@ interface Product {
     name: string;
     slug: string;
     images: string[];
+    videoUrls?: string[];
     listPrice: number;
     salePrice?: number | null;
     vatRate: number;
@@ -122,6 +124,13 @@ export function ProductDetail({
     const [inputValue, setInputValue] = useState(product.minQuantity.toString());
     const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
+    // Ürün videoları (YouTube/Shorts): küçük resimlerde oynatma simgesiyle durur; tıklanınca ana alanda oynar.
+    // Sayfa açılışında YouTube yüklenmez (yalnızca kapak resmi), sayfa hızı etkilenmez.
+    const videos: YouTubeVideo[] = (product.videoUrls || [])
+        .map((u) => parseYouTubeUrl(u))
+        .filter((v): v is YouTubeVideo => !!v);
+    const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
+    const activeVideo = activeVideoIndex !== null ? videos[activeVideoIndex] : null;
     const addItem = useCartStore((state) => state.addItem);
     const openAddedToCartModal = useCartStore((state) => state.openAddedToCartModal);
 
@@ -308,8 +317,23 @@ export function ProductDetail({
                         {/* Left: Image Gallery */}
                         <div className="p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800">
                             {/* Main Image */}
-                            <div className="relative aspect-[4/3] bg-white dark:bg-gray-800/50 rounded-xl overflow-hidden group mb-4 border border-gray-100 dark:border-gray-800">
-                                {product.images[0] ? (
+                            <div className={cn(
+                                "relative bg-white dark:bg-gray-800/50 rounded-xl overflow-hidden group mb-4 border border-gray-100 dark:border-gray-800",
+                                // Shorts dikey: oynarken kutu da dikey olur (telefonda 4:3 kutuda oynatıcı çok küçük kalıyordu)
+                                activeVideo?.isShort ? "aspect-[9/16] max-h-[70vh] mx-auto sm:aspect-square sm:max-h-none" : "aspect-[4/3]"
+                            )}>
+                                {activeVideo ? (
+                                    <div className="absolute inset-0 z-20 bg-black flex items-center justify-center">
+                                        <iframe
+                                            key={activeVideo.id}
+                                            src={activeVideo.embedUrl}
+                                            title={`${product.name} videosu`}
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                            allowFullScreen
+                                            className={activeVideo.isShort ? "h-full aspect-[9/16] max-w-full" : "w-full aspect-video max-h-full"}
+                                        />
+                                    </div>
+                                ) : product.images[0] ? (
                                     <Image
                                         src={product.images[activeImageIndex] || product.images[0]}
                                         alt={product.name}
@@ -343,7 +367,7 @@ export function ProductDetail({
                                 )}
 
                                 {/* Navigation Arrows */}
-                                {product.images.length > 1 && (
+                                {!activeVideo && product.images.length > 1 && (
                                     <>
                                         <button
                                             onClick={(e) => {
@@ -372,16 +396,19 @@ export function ProductDetail({
                             </div>
 
                             {/* Thumbnails */}
-                            {product.images.length > 1 && (
+                            {(product.images.length > 1 || videos.length > 0) && (
                                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
                                     {product.images.map((image, index) => (
                                         <button
                                             key={index}
                                             type="button"
-                                            onClick={() => setActiveImageIndex(index)}
+                                            onClick={() => {
+                                                setActiveImageIndex(index);
+                                                setActiveVideoIndex(null);
+                                            }}
                                             className={cn(
                                                 "relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-all shrink-0",
-                                                activeImageIndex === index
+                                                activeVideoIndex === null && activeImageIndex === index
                                                     ? "border-[#009AD0] ring-1 ring-[#009AD0]/30"
                                                     : "border-gray-200 dark:border-gray-700 hover:border-gray-300 opacity-60 hover:opacity-100"
                                             )}
@@ -392,6 +419,34 @@ export function ProductDetail({
                                                 fill
                                                 className="object-contain p-1"
                                             />
+                                        </button>
+                                    ))}
+                                    {videos.map((video, index) => (
+                                        <button
+                                            key={video.id}
+                                            type="button"
+                                            onClick={() => setActiveVideoIndex(index)}
+                                            aria-label={`${product.name} videosunu oynat`}
+                                            title="Ürün videosu"
+                                            className={cn(
+                                                "relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-all shrink-0 bg-black",
+                                                activeVideoIndex === index
+                                                    ? "border-[#009AD0] ring-1 ring-[#009AD0]/30"
+                                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                                            )}
+                                        >
+                                            {/* eslint-disable-next-line @next/next/no-img-element -- YouTube kapak resmi doğrudan i.ytimg.com'dan */}
+                                            <img
+                                                src={video.thumbnailUrl}
+                                                alt=""
+                                                loading="lazy"
+                                                className="absolute inset-0 w-full h-full object-cover"
+                                            />
+                                            <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                                                <span className="w-7 h-7 rounded-full bg-red-600 flex items-center justify-center shadow">
+                                                    <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />
+                                                </span>
+                                            </span>
                                         </button>
                                     ))}
                                 </div>
