@@ -19,7 +19,8 @@ import { createProduct, updateProduct, syncProductToMarketplaces, searchProducts
 import { generateSlug, generateSKU, generateBarcode } from "@/lib/helpers";
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, X, ImageIcon, Trash2, Loader2, RefreshCcw, Package, RefreshCw, Brain, Search, Play } from "lucide-react";
+import { Plus, X, ImageIcon, Trash2, Loader2, RefreshCcw, Package, RefreshCw, Brain, Search, Play, Copy, Eraser, AlertTriangle } from "lucide-react";
+import { autoMarketplacePrice, keepsListPrice } from "@/lib/marketplace-price-fill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { calculateDesi } from "@/lib/shipping";
@@ -355,8 +356,97 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
         handleChange("images", formData.images.filter((_, i) => i !== index));
     };
 
+    // Pazaryerleri: gönderim seçimi + fiyat Fiyat & Stok sekmesinde tek yerde (Bardakçı'daki gibi)
+    const marketplacePriceFields = [
+        { key: "trendyolPrice", activeKey: "isTrendyolActive", label: "Trendyol" },
+        { key: "n11Price", activeKey: "isN11Active", label: "N11" },
+        { key: "hepsiburadaPrice", activeKey: "isHepsiburadaActive", label: "Hepsiburada" },
+    ];
+
+    const marketplaceColors: Record<string, string> = {
+        trendyolPrice: "text-orange-600",
+        n11Price: "text-purple-600",
+        hepsiburadaPrice: "text-orange-600",
+    };
+
+    // Daha önce de tikli ve fiyatsız kayıtlı eski ürün: kayıtta fiyatı kendiliğinden artırılmaz, liste fiyatıyla gider
+    const staysOnListPrice = (f: { key: string; activeKey: string }) =>
+        keepsListPrice(product as any, { price: f.key, active: f.activeKey });
+
+    const applyPriceToAllMarketplaces = () => {
+        // İlk dolu pazaryeri fiyatı kullanılır; liste fiyatı ASLA kullanılmaz (komisyonsuz)
+        const firstFilledField = marketplacePriceFields.find(f => {
+            const val = (formData as any)[f.key];
+            return val !== "" && val !== null && val !== undefined && Number(val) > 0;
+        });
+        if (!firstFilledField) {
+            toast.error("Önce en az bir pazaryerine fiyat girin! (Liste fiyatı kullanılmaz, komisyonlu fiyat girmeniz gerekiyor)");
+            return;
+        }
+        const priceToApply = (formData as any)[firstFilledField.key];
+        const updates: any = {};
+        marketplacePriceFields.forEach(f => {
+            if (f.key === firstFilledField.key) return;
+            const val = (formData as any)[f.key];
+            if (!val || val === "" || Number(val) === 0) {
+                updates[f.key] = priceToApply;
+            }
+        });
+        if (Object.keys(updates).length === 0) {
+            toast.info("Tüm pazaryeri fiyatları zaten dolu.");
+            return;
+        }
+        setFormData(prev => ({ ...prev, ...updates }));
+        toast.success(`${firstFilledField.label} fiyatı (${Number(priceToApply).toLocaleString("tr-TR")}₺) → ${Object.keys(updates).length} pazaryerine uygulandı.`);
+    };
+
+    // Fiyat güncellerken: hepsini sil, ilk kutuya yeni fiyatı yaz, "Boş Olanlara İlk Fiyatı Uygula" ile dağıt
+    const clearAllMarketplacePrices = () => {
+        const updates: any = {};
+        marketplacePriceFields.forEach(f => { updates[f.key] = ""; });
+        setFormData(prev => ({ ...prev, ...updates }));
+        setTimeout(() => document.getElementById(marketplacePriceFields[0].key)?.focus(), 0);
+    };
+
+    // Pazaryeri gönderim seçimlerinin hepsini aç/kapat (Google dahil)
+    const setAllMarketplacesActive = (value: boolean) => {
+        const updates: any = { isGoogleActive: value };
+        marketplacePriceFields.forEach(f => { updates[f.activeKey] = value; });
+        setFormData(prev => ({ ...prev, ...updates }));
+    };
+
+    // İndirimli fiyat liste fiyatının üstünde olamaz (sunucu da reddediyor)
+    const salePriceTooHigh =
+        Number(formData.salePrice) > 0 && Number(formData.listPrice) > 0 && Number(formData.salePrice) > Number(formData.listPrice);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (salePriceTooHigh) {
+            toast.error("İndirimli fiyat liste fiyatından yüksek olamaz. İndirimli fiyatı düzeltin ya da boş bırakın.");
+            document.getElementById("salePrice")?.focus();
+            return;
+        }
+
+        // Pazaryeri fiyat kontrolü: diğerlerinde fiyat varken liste fiyatıyla gidecek boş pazaryeri varsa sor
+        const filledMarketplaces = marketplacePriceFields.filter(f => {
+            const price = (formData as any)[f.key];
+            return price && price !== "" && Number(price) > 0;
+        });
+        // Boş kutular kayıtta otomatik dolar; sadece daha önce de tikli ve fiyatsız olan eski üründe liste fiyatı gitmeye devam eder
+        const emptyMarketplaces = marketplacePriceFields.filter(f => {
+            const price = (formData as any)[f.key];
+            const isEmpty = !price || price === "" || Number(price) === 0;
+            return isEmpty && (formData as any)[f.activeKey] && staysOnListPrice(f);
+        });
+        if (filledMarketplaces.length > 0 && emptyMarketplaces.length > 0) {
+            const emptyNames = emptyMarketplaces.map(f => f.label).join(", ");
+            const confirmed = window.confirm(
+                `DİKKAT!\n\nŞu pazaryerlerinin fiyatı boş: ${emptyNames}\n\nBoş bırakılan pazaryerlerine LİSTE FİYATI (${Number(formData.listPrice).toLocaleString("tr-TR")}₺) gönderilecek!\n\nBu genellikle komisyonsuz düşük fiyat demektir.\n\nDevam etmek istiyor musunuz?`
+            );
+            if (!confirmed) return;
+        }
+
         setLoading(true);
 
         const data = new FormData();
@@ -386,11 +476,18 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
 
             if (result?.success) {
                 toast.success(product ? "Ürün güncellendi" : "Ürün oluşturuldu");
+                const priceFill = (result as any).priceFill;
+                const pricesFilled = priceFill?.labels?.length > 0;
+                if (pricesFilled) {
+                    toast.warning(`${priceFill.labels.join(", ")} fiyatı boştu, ${Number(priceFill.price).toLocaleString("tr-TR")}₺ yazıldı (liste fiyatı + %50).`, { duration: 8000 });
+                    // Form açık kalırsa boş kutu bir sonraki kayıtta bu fiyatı silmesin
+                    setFormData(prev => ({ ...prev, ...priceFill.filled }));
+                }
                 if (!product) {
                     setTimeout(() => {
                         router.push("/admin/products");
                         router.refresh();
-                    }, 1000);
+                    }, pricesFilled ? 3500 : 1000); // Otomatik yazılan fiyat mesajı okunabilsin
                 } else {
                     router.refresh();
                 }
@@ -622,7 +719,8 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                             <CardTitle>Fiyatlandırma & Stok</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            {/* Liste Fiyatı, İndirimli Fiyat, KDV - tek satır */}
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                 <div className="space-y-2">
                                     <Label htmlFor="listPrice">Liste Fiyatı (₺) *</Label>
                                     <Input
@@ -643,48 +741,14 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                         value={formData.salePrice}
                                         onChange={(e) => handleChange("salePrice", e.target.value)}
                                         placeholder="İndirimli satış fiyatı"
-                                        className="border-red-200 focus:border-red-500 bg-red-50/50"
+                                        className={salePriceTooHigh ? "border-red-500 bg-red-50 ring-1 ring-red-500" : "border-red-200 focus:border-red-500 bg-red-50/50"}
                                     />
-                                    <p className="text-[10px] text-gray-500">Girilirse bu fiyat geçerli olur, liste fiyatı üstü çizili görünür.</p>
+                                    {salePriceTooHigh ? (
+                                        <p className="text-xs font-semibold text-red-600">İndirimli fiyat liste fiyatından ({formData.listPrice} ₺) yüksek olamaz. Bu haliyle kaydedilmez.</p>
+                                    ) : (
+                                        <p className="text-[10px] text-gray-500">Girilirse bu fiyat geçerli olur, liste fiyatı üstü çizili görünür.</p>
+                                    )}
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="trendyolPrice" className="text-orange-600">Trendyol Fiyatı (₺)</Label>
-                                    <Input
-                                        id="trendyolPrice"
-                                        type="number"
-                                        step="0.01"
-                                        value={formData.trendyolPrice}
-                                        onChange={(e) => handleChange("trendyolPrice", e.target.value)}
-                                        placeholder="Varsayılan: Liste Fiyatı"
-                                        className="border-orange-200 focus:border-orange-500"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="n11Price" className="text-purple-600">N11 Fiyatı (₺)</Label>
-                                    <Input
-                                        id="n11Price"
-                                        type="number"
-                                        step="0.01"
-                                        value={formData.n11Price}
-                                        onChange={(e) => handleChange("n11Price", e.target.value)}
-                                        placeholder="Varsayılan: Liste Fiyatı"
-                                        className="border-purple-200 focus:border-purple-500"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="hepsiburadaPrice" className="text-orange-600">Hepsiburada Fiyatı (₺)</Label>
-                                    <Input
-                                        id="hepsiburadaPrice"
-                                        type="number"
-                                        step="0.01"
-                                        value={formData.hepsiburadaPrice}
-                                        onChange={(e) => handleChange("hepsiburadaPrice", e.target.value)}
-                                        placeholder="Varsayılan: Liste Fiyatı"
-                                        className="border-orange-200 focus:border-orange-500"
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="vatRate">KDV Oranı *</Label>
                                     <Select
@@ -702,10 +766,92 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                 </div>
                             </div>
 
+                            {/* Pazaryerleri: gönderim seçimi + fiyat tek yerde (önceden seçim Ayarlar sekmesindeydi) */}
+                            <div className="border rounded-lg p-4 bg-gray-50/50 dark:bg-gray-900/30 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Pazaryerleri</h4>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => setAllMarketplacesActive(true)}>
+                                            Hepsini Seç
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => setAllMarketplacesActive(false)}>
+                                            Hepsini Kaldır
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" className="text-xs h-7 gap-1" onClick={clearAllMarketplacePrices}>
+                                            <Eraser className="h-3 w-3" />
+                                            Fiyatları Temizle
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" className="text-xs h-7 gap-1" onClick={applyPriceToAllMarketplaces}>
+                                            <Copy className="h-3 w-3" />
+                                            Boş Olanlara İlk Fiyatı Uygula
+                                        </Button>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-gray-500 -mt-1">
+                                    İşaretli pazaryerlerine gönderilir. İşaretli olup fiyatı boş bırakılan kutuya kaydederken liste fiyatı + %50 yazılır; komisyon eklenmiş fiyatları girmeyi unutmayın!
+                                </p>
+
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                    {marketplacePriceFields.map((field) => {
+                                        const price = (formData as any)[field.key];
+                                        const isEmpty = !price || price === "" || Number(price) === 0;
+                                        const isActive = Boolean((formData as any)[field.activeKey]);
+                                        const hasAnyOtherFilled = marketplacePriceFields.some(f => {
+                                            if (f.key === field.key) return false;
+                                            const v = (formData as any)[f.key];
+                                            return v && v !== "" && Number(v) > 0;
+                                        });
+                                        const showWarning = isEmpty && hasAnyOtherFilled;
+                                        const color = marketplaceColors[field.key] || "text-gray-700";
+
+                                        return (
+                                            <div key={field.key} className={`rounded-md border px-2.5 py-2 space-y-1.5 ${showWarning ? "bg-amber-50 border-amber-300" : isActive ? "bg-white dark:bg-gray-800 border-gray-300" : "bg-white/60 dark:bg-gray-800/50 border-gray-200"}`}>
+                                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                    <Checkbox
+                                                        checked={isActive}
+                                                        onCheckedChange={(c) => handleChange(field.activeKey, c === true)}
+                                                    />
+                                                    <span className={`text-sm font-semibold ${color}`}>{field.label}</span>
+                                                    {showWarning && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 ml-auto" />}
+                                                </label>
+                                                <Input
+                                                    id={field.key}
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={price}
+                                                    onChange={(e) => handleChange(field.key, e.target.value)}
+                                                    placeholder={`Boş = ${(isActive && !staysOnListPrice(field) ? autoMarketplacePrice(formData.listPrice || 0) : Number(formData.listPrice || 0)).toLocaleString("tr-TR")}₺`}
+                                                    className="h-8 text-sm"
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Google Shopping: fiyat boşsa liste fiyatı kullanılır */}
+                                    <div className={`rounded-md border px-2.5 py-2 space-y-1.5 ${formData.isGoogleActive ? "bg-white dark:bg-gray-800 border-gray-300" : "bg-white/60 dark:bg-gray-800/50 border-gray-200"}`}>
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <Checkbox
+                                                checked={Boolean(formData.isGoogleActive)}
+                                                onCheckedChange={(c) => handleChange("isGoogleActive", c === true)}
+                                            />
+                                            <span className="text-sm font-semibold text-blue-700">Google Shopping</span>
+                                        </label>
+                                        <Input
+                                            id="googlePrice"
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.googlePrice}
+                                            onChange={(e) => handleChange("googlePrice", e.target.value)}
+                                            placeholder="Boş = Liste fiyatı"
+                                            className="h-8 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             <hr />
 
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
+                            {/* Kodlar ve stok: iki satır, üçer alan */}
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                 <div className="space-y-2 relative">
                                     <Label htmlFor="sku">Stok Kodu (SKU)</Label>
                                     <Input
@@ -713,6 +859,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                         value={formData.sku}
                                         onChange={(e) => handleChange("sku", e.target.value)}
                                         placeholder="PRD-001"
+                                        className="pr-11"
                                     />
                                     <Button
                                         type="button"
@@ -733,6 +880,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                         value={formData.barcode}
                                         onChange={(e) => handleChange("barcode", e.target.value)}
                                         placeholder="869..."
+                                        className="pr-11"
                                     />
                                     <Button
                                         type="button"
@@ -744,11 +892,18 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                     >
                                         <RefreshCcw className="h-4 w-4" />
                                     </Button>
-
                                 </div>
-                            </div>
 
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                <div className="space-y-2">
+                                    <Label htmlFor="origin">Menşei</Label>
+                                    <Input
+                                        id="origin"
+                                        value={formData.origin}
+                                        onChange={(e) => handleChange("origin", e.target.value)}
+                                        placeholder="Türkiye"
+                                    />
+                                </div>
+
                                 <div className="space-y-2">
                                     <Label htmlFor="stock">Stok Adedi</Label>
                                     <Input
@@ -778,16 +933,6 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                         onChange={(e) => handleChange("minQuantity", e.target.value)}
                                     />
                                 </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="origin">Menşei</Label>
-                                <Input
-                                    id="origin"
-                                    value={formData.origin}
-                                    onChange={(e) => handleChange("origin", e.target.value)}
-                                    placeholder="Türkiye"
-                                />
                             </div>
                         </CardContent>
                     </Card>
@@ -1328,28 +1473,9 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
 
                             <hr />
                             <h3 className="font-semibold text-gray-900 dark:text-white">Pazar Yeri Görünürlüğü</h3>
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-orange-50 dark:bg-orange-900/10">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base text-orange-700 dark:text-orange-300">Trendyol Satış</Label>
-                                    <p className="text-sm text-muted-foreground">Bu ürünü Trendyol'a gönder?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isTrendyolActive}
-                                    onCheckedChange={(c) => handleChange("isTrendyolActive", c)}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-purple-50 dark:bg-purple-900/10">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base text-purple-700 dark:text-purple-300">N11 Satış</Label>
-                                    <p className="text-sm text-muted-foreground">Bu ürünü N11'e gönder?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isN11Active}
-                                    onCheckedChange={(c) => handleChange("isN11Active", c)}
-                                />
-                            </div>
+                            <p className="text-sm text-muted-foreground -mt-2">
+                                Pazaryeri seçimleri ve fiyatları <b>Fiyat &amp; Stok</b> sekmesindedir.
+                            </p>
 
                             {formData.isN11Active && (
                                 <div className="p-4 border border-purple-200 dark:border-purple-800 rounded-lg bg-purple-50/30 dark:bg-purple-950/10 space-y-3">
@@ -1373,45 +1499,6 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                                             }}
                                             placeholder="Örn: 123456789"
                                             className="border-purple-200 dark:border-purple-800 focus:border-purple-500 bg-white dark:bg-gray-800 font-mono"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-orange-50 dark:bg-orange-900/10">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base text-orange-700 dark:text-orange-300">Hepsiburada Satış</Label>
-                                    <p className="text-sm text-muted-foreground">Bu ürünü Hepsiburada'ya gönder?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isHepsiburadaActive}
-                                    onCheckedChange={(c) => handleChange("isHepsiburadaActive", c)}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/10">
-                                <div className="space-y-0.5">
-                                    <Label className="text-base text-blue-700 dark:text-blue-300">🛒 Google Shopping Feed</Label>
-                                    <p className="text-sm text-muted-foreground">Bu ürünü Google Merchant Center feed'ine ekle?</p>
-                                </div>
-                                <Checkbox
-                                    checked={formData.isGoogleActive}
-                                    onCheckedChange={(c) => handleChange("isGoogleActive", c)}
-                                />
-                            </div>
-
-                            {formData.isGoogleActive && (
-                                <div className="p-4 border border-blue-200 rounded-lg bg-blue-50/50 space-y-3">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="googlePrice" className="text-blue-700">Google Fiyatı (₺) <span className="font-normal text-gray-500">— Boş bırakılırsa liste fiyatı kullanılır</span></Label>
-                                        <Input
-                                            id="googlePrice"
-                                            type="number"
-                                            step="0.01"
-                                            value={formData.googlePrice}
-                                            onChange={(e) => handleChange("googlePrice", e.target.value)}
-                                            placeholder="Varsayılan: Liste Fiyatı"
-                                            className="border-blue-200 focus:border-blue-500"
                                         />
                                     </div>
                                 </div>

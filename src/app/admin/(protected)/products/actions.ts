@@ -7,6 +7,7 @@ import { safeRevalidatePath as revalidatePath } from "@/lib/safe-revalidate";
 import { redirect } from "next/navigation";
 import { productSchema } from "@/lib/validations";
 import { generateSlug } from "@/lib/helpers";
+import { fillEmptyMarketplacePrices } from "@/lib/marketplace-price-fill";
 import { syncProductsToTrendyol, clearBarcodeCache } from "../integrations/trendyol/actions";
 import { syncProductsToN11 } from "../integrations/n11/actions";
 import { syncProductsToHepsiburada } from "../integrations/hepsiburada/actions";
@@ -39,9 +40,9 @@ export async function createProduct(formData: FormData) {
         marketplaceDescription: formData.get("marketplaceDescription") as string || undefined,
         listPrice: Number(formData.get("listPrice")),
         salePrice: formData.get("salePrice") ? Number(formData.get("salePrice")) : null,
-        trendyolPrice: formData.get("trendyolPrice") ? Number(formData.get("trendyolPrice")) : undefined,
-        n11Price: formData.get("n11Price") ? Number(formData.get("n11Price")) : undefined,
-        hepsiburadaPrice: formData.get("hepsiburadaPrice") ? Number(formData.get("hepsiburadaPrice")) : undefined,
+        trendyolPrice: formData.get("trendyolPrice") ? Number(formData.get("trendyolPrice")) : null,
+        n11Price: formData.get("n11Price") ? Number(formData.get("n11Price")) : null,
+        hepsiburadaPrice: formData.get("hepsiburadaPrice") ? Number(formData.get("hepsiburadaPrice")) : null,
         vatRate: Number(formData.get("vatRate")),
         minQuantity: Number(formData.get("minQuantity")) || 1,
         stock: Number(formData.get("stock")) || 0,
@@ -58,7 +59,7 @@ export async function createProduct(formData: FormData) {
         isN11Active: formData.get("isN11Active") === "true",
         isHepsiburadaActive: formData.get("isHepsiburadaActive") === "true",
         isGoogleActive: formData.get("isGoogleActive") === "true",
-        googlePrice: formData.get("googlePrice") ? Number(formData.get("googlePrice")) : undefined,
+        googlePrice: formData.get("googlePrice") ? Number(formData.get("googlePrice")) : null,
         // Kargo & Desi
         weight: formData.get("weight") ? Number(formData.get("weight")) : null,
         width: formData.get("width") ? Number(formData.get("width")) : null,
@@ -68,6 +69,10 @@ export async function createProduct(formData: FormData) {
         referenceUrl: (formData.get("referenceUrl") as string) || undefined,
         n11CatalogId: (formData.get("n11CatalogId") as string) || null,
     };
+
+    // Tikli ama fiyatı boş pazaryerine liste fiyatı + %50 yazılır (liste fiyatı komisyonsuz olduğu için zarar ettirir)
+    const priceFill = fillEmptyMarketplacePrices(rawData);
+    Object.assign(rawData, priceFill.filled);
 
     const categoryIdsJson = formData.get("categoryIds") as string;
     const categoryIds: string[] = categoryIdsJson ? JSON.parse(categoryIdsJson) : [];
@@ -157,7 +162,7 @@ export async function createProduct(formData: FormData) {
     revalidatePath("/products");
     revalidatePath("/");
 
-    return { success: true };
+    return { success: true, priceFill };
 }
 
 export async function updateProduct(productId: string, formData: FormData) {
@@ -186,9 +191,9 @@ export async function updateProduct(productId: string, formData: FormData) {
         marketplaceDescription: formData.get("marketplaceDescription") as string || undefined,
         listPrice: Number(formData.get("listPrice")),
         salePrice: formData.get("salePrice") ? Number(formData.get("salePrice")) : null,
-        trendyolPrice: formData.get("trendyolPrice") ? Number(formData.get("trendyolPrice")) : undefined,
-        n11Price: formData.get("n11Price") ? Number(formData.get("n11Price")) : undefined,
-        hepsiburadaPrice: formData.get("hepsiburadaPrice") ? Number(formData.get("hepsiburadaPrice")) : undefined,
+        trendyolPrice: formData.get("trendyolPrice") ? Number(formData.get("trendyolPrice")) : null,
+        n11Price: formData.get("n11Price") ? Number(formData.get("n11Price")) : null,
+        hepsiburadaPrice: formData.get("hepsiburadaPrice") ? Number(formData.get("hepsiburadaPrice")) : null,
         vatRate: Number(formData.get("vatRate")),
         minQuantity: Number(formData.get("minQuantity")) || 1,
         stock: Number(formData.get("stock")) || 0,
@@ -205,7 +210,7 @@ export async function updateProduct(productId: string, formData: FormData) {
         isN11Active: formData.get("isN11Active") === "true",
         isHepsiburadaActive: formData.get("isHepsiburadaActive") === "true",
         isGoogleActive: formData.get("isGoogleActive") === "true",
-        googlePrice: formData.get("googlePrice") ? Number(formData.get("googlePrice")) : undefined,
+        googlePrice: formData.get("googlePrice") ? Number(formData.get("googlePrice")) : null,
         // Kargo & Desi
         weight: formData.get("weight") ? Number(formData.get("weight")) : null,
         width: formData.get("width") ? Number(formData.get("width")) : null,
@@ -215,6 +220,10 @@ export async function updateProduct(productId: string, formData: FormData) {
         referenceUrl: (formData.get("referenceUrl") as string) || undefined,
         n11CatalogId: (formData.get("n11CatalogId") as string) || null,
     };
+
+    // Tikli ama fiyatı boş pazaryerine liste fiyatı + %50 yazılır (liste fiyatı komisyonsuz olduğu için zarar ettirir)
+    const priceFill = fillEmptyMarketplacePrices(rawData, oldProduct);
+    Object.assign(rawData, priceFill.filled);
 
     const categoryIdsJson = formData.get("categoryIds") as string;
     const categoryIds: string[] = categoryIdsJson ? JSON.parse(categoryIdsJson) : [];
@@ -354,7 +363,7 @@ export async function updateProduct(productId: string, formData: FormData) {
         console.error("Marketplace instant sync error:", e);
     }
 
-    return { success: true };
+    return { success: true, priceFill };
 }
 
 export async function deleteProduct(productId: string) {

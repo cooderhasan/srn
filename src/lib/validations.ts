@@ -36,9 +36,9 @@ export const productSchema = z.object({
     marketplaceDescription: z.string().optional(),
     listPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz"),
     salePrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").nullable().optional(),
-    trendyolPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").optional(),
-    n11Price: z.number().min(0, "Fiyat 0'dan küçük olamaz").optional(),
-    hepsiburadaPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").optional(),
+    trendyolPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").nullable().optional(),
+    n11Price: z.number().min(0, "Fiyat 0'dan küçük olamaz").nullable().optional(),
+    hepsiburadaPrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").nullable().optional(),
     vatRate: z.number().min(0).refine((val) => val === 10 || val === 20, "KDV oranı %10 veya %20 olmalıdır"),
     minQuantity: z.coerce.number().int().positive("Minimum adet pozitif olmalıdır").default(1),
     stock: z.coerce.number().int().min(0, "Stok negatif olamaz").default(0),
@@ -54,6 +54,7 @@ export const productSchema = z.object({
     isN11Active: z.boolean().default(false),
     isHepsiburadaActive: z.boolean().default(false),
     isGoogleActive: z.boolean().default(false),
+    googlePrice: z.number().min(0, "Fiyat 0'dan küçük olamaz").nullable().optional(), // boşsa feed liste fiyatını kullanır
     // Kargo & Desi
     weight: z.coerce.number().min(0, "Ağırlık negatif olamaz").nullable().optional(),
     width: z.coerce.number().min(0, "Genişlik negatif olamaz").nullable().optional(),
@@ -62,7 +63,11 @@ export const productSchema = z.object({
     desi: z.coerce.number().min(0, "Desi negatif olamaz").nullable().optional(),
     referenceUrl: z.string().nullable().optional(), // AI asistanı: link ya da ham ürün metni
     n11CatalogId: z.string().nullable().optional(),
-});
+}).refine(
+    // İndirimli fiyat liste fiyatının üstünde olamaz (form da kaydetmeden uyarır)
+    (d) => !(d.salePrice != null && d.salePrice > 0 && d.salePrice > d.listPrice),
+    { message: "İndirimli fiyat liste fiyatından yüksek olamaz", path: ["salePrice"] },
+);
 
 // ==================== PRODUCT VARIANT VALIDATIONS ====================
 
