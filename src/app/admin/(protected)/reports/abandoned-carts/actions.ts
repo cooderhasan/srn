@@ -5,25 +5,30 @@ import prisma from "@/lib/db";
 import { sendAbandonedCartEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 
-export async function getAbandonedCartsAction() {
+const PERIOD_DAYS = [7, 30, 90, 0]; // 0 = tümü
+const ABANDONED_AFTER_MS = 2 * 60 * 60 * 1000; // 2 saattir dokunulmamış sepet "bekleyen" sayılır
+
+/**
+ * days: son kaç gündeki sepetler (0 = tümü, geçersizse 30). Eski sepetler veritabanında baştan elenir;
+ * tüm geçmişi çekmek sayfayı zamanla hem uzatıyor hem yavaşlatıyordu.
+ * Son sepet işlemi = en yeni ürün satırı (sepet senkronunda satırlar yeniden yazılır, sepet kaydının
+ * updatedAt'i ürün eklenince değişmez).
+ */
+export async function getAbandonedCartsAction(days: number = 30) {
     try {
         const session = await auth();
         if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "OPERATOR")) {
             return { success: false, error: "Yetkisiz erişim." };
         }
 
-        // 2 saatten eski olan sepetleri getirelim
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        const period = PERIOD_DAYS.includes(days) ? days : 30;
+        const since = period > 0 ? new Date(Date.now() - period * 24 * 60 * 60 * 1000) : null;
+        const abandonedBefore = new Date(Date.now() - ABANDONED_AFTER_MS);
 
-        const carts = await prisma.cart.findMany({
-            where: {
-                items: {
-                    some: {} // Sepetinde en az 1 ürün olanlar
-                },
-                updatedAt: {
-                    lte: twoHoursAgo // En son 2 saat önce güncellenmiş (yani bırakılmış)
-                }
-            },
+        const rawCarts = await prisma.cart.findMany({
+            where: since
+                ? { items: { some: { OR: [{ createdAt: { gte: since } }, { updatedAt: { gte: since } }] } } }
+                : { items: { some: {} } }, // Sepetinde en az 1 ürün olanlar
             select: {
                 id: true,
                 updatedAt: true,
@@ -48,15 +53,43 @@ export async function getAbandonedCartsAction() {
                                 images: true
                             }
                         },
-                        variant: true
+                        variant: { select: { size: true, color: true } }
                     }
                 }
             },
-            orderBy: {
-                updatedAt: "desc"
-            }
         });
 
+        const carts = [];
+        for (const cart of rawCarts) {
+            let lastActivity = 0;
+            for (const item of cart.items) {
+                lastActivity = Math.max(lastActivity, item.createdAt.getTime(), item.updatedAt.getTime());
+            }
+            // 2 saatten yeni sepetler henüz bırakılmış sayılmaz; dönemden eski son işlemi olanlar listelenmez
+            if (!lastActivity || lastActivity > abandonedBefore.getTime()) continue;
+            if (since && lastActivity < since.getTime()) continue;
+
+            const totalAmount = cart.items.reduce(
+                (sum, item) => sum + Number(item.product.salePrice || item.product.listPrice) * item.quantity,
+                0
+            );
+            carts.push({
+                ...cart,
+                updatedAt: new Date(lastActivity),
+                totalAmount,
+                // Decimal fiyatlar istemciye düz sayı olarak gider
+                items: cart.items.map((item) => ({
+                    ...item,
+                    product: {
+                        ...item.product,
+                        listPrice: Number(item.product.listPrice),
+                        salePrice: item.product.salePrice != null ? Number(item.product.salePrice) : null,
+                    },
+                })),
+            });
+        }
+
+        carts.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         return { success: true, carts };
     } catch (error) {
         console.error("Sepetleri getirirken hata oluştu:", error);

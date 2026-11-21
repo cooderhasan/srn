@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { 
@@ -29,50 +29,84 @@ import {
 } from "@/components/ui/card";
 import { Mail, ShoppingCart, Loader2, Eye, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { SimplePagination } from "@/components/admin/simple-pagination";
 import { getAbandonedCartsAction, sendCartReminderAction } from "./actions";
+
+const PERIODS = [
+    { days: 7, label: "7 gün" },
+    { days: 30, label: "30 gün" },
+    { days: 90, label: "90 gün" },
+    { days: 0, label: "Tümü" },
+];
+const PAGE_SIZE = 25;
+const fmtTRY = (n: number) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(n);
 
 export default function AbandonedCartsPage() {
     const [carts, setCarts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [sendingId, setSendingId] = useState<string | null>(null);
 
-    const loadCarts = async () => {
-        setLoading(true);
-        const result = await getAbandonedCartsAction();
-        if (result.success && result.carts) {
-            setCarts(result.carts);
+    const [days, setDays] = useState(30);
+    const [page, setPage] = useState(1);
+    const listRef = useRef<HTMLDivElement>(null);
+
+    /** silent: listeyi spinner'a çevirmeden yenile (hatırlatma sonrası; sayfa kaymasın). Başarılıysa true döner. */
+    const loadCarts = async (period = days, silent = false) => {
+        if (!silent) setLoading(true);
+        const result = await getAbandonedCartsAction(period).catch(() => null);
+        const ok = !!(result?.success && result.carts);
+        if (ok) {
+            setCarts(result!.carts!);
         } else {
-            toast.error(result.error || "Sepetler yüklenemedi.");
+            toast.error(result?.error || "Sepetler yüklenemedi.");
         }
-        setLoading(false);
+        if (!silent) setLoading(false);
+        return ok;
+    };
+
+    // Dönem, liste yüklendikten sonra değişir; yüklenemezse eski dönem ve listesi birlikte kalır
+    const changePeriod = async (period: number) => {
+        if (await loadCarts(period)) {
+            setDays(period);
+            setPage(1);
+        }
+    };
+
+    // Sayfa değişince liste kartının başına kaydır (sayfanın en tepesine değil)
+    const goToPage = (p: number) => {
+        setPage(p);
+        listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 
     useEffect(() => {
         loadCarts();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Liste değişip sayfa sayısı azalırsa (ör. hatırlatma sonrası yenileme) geçerli sayfada kal
+    const pageCount = Math.max(1, Math.ceil(carts.length / PAGE_SIZE));
+    const currentPage = Math.min(page, pageCount);
+    const pageCarts = carts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    const summary = {
+        total: carts.reduce((sum, c) => sum + (c.totalAmount || 0), 0),
+        reminded: carts.filter((c) => c.reminderSentAt).length,
+    };
+    const periodLabel = days === 0 ? "Tüm zamanlarda" : `Son ${days} günde`;
 
     const handleSendReminder = async (cartId: string) => {
         setSendingId(cartId);
         toast.info("Hatırlatma e-postası gönderiliyor...");
-        
+
         const result = await sendCartReminderAction(cartId);
-        
+
         if (result.success) {
             toast.success(result.message);
-            await loadCarts(); // Listeyi güncelle
+            await loadCarts(days, true); // Listeyi sessizce güncelle (spinner yok, sayfa kaymaz)
         } else {
             toast.error(result.error || "Mail gönderilemedi.");
         }
         setSendingId(null);
     };
-
-    if (loading) {
-        return (
-            <div className="flex h-64 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            </div>
-        );
-    }
 
     return (
         <div className="space-y-6">
@@ -85,23 +119,46 @@ export default function AbandonedCartsPage() {
                         Ürünlerini sepette unutan müşterilerinizi takip edin ve hatırlatma maili gönderin.
                     </p>
                 </div>
-                <Button onClick={loadCarts} variant="outline" size="sm">
+                <Button onClick={() => loadCarts()} variant="outline" size="sm" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Yenile
                 </Button>
             </div>
 
-            <Card>
+            <Card ref={listRef} className="scroll-mt-20">
                 <CardHeader>
-                    <CardTitle className="text-lg">Sepeti Terk Edenler</CardTitle>
-                    <CardDescription>
-                        Son 2 saatten daha eski aktif sepetleri listeliyorsunuz.
-                    </CardDescription>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <CardTitle className="text-lg">Sepeti Terk Edenler</CardTitle>
+                            <CardDescription>
+                                Son 2 saattir dokunulmamış sepetler.
+                            </CardDescription>
+                        </div>
+                        <div className="flex flex-wrap gap-1 rounded-lg border p-1 shrink-0 self-start">
+                            {PERIODS.map((p) => (
+                                <Button key={p.days} size="sm" variant={days === p.days ? "default" : "ghost"} disabled={loading} onClick={() => changePeriod(p.days)}>
+                                    {p.label}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                    {!loading && carts.length > 0 && (
+                        <p className="pt-2 text-sm text-gray-700 dark:text-gray-300">
+                            {periodLabel} <span className="font-semibold">{carts.length} sepet</span>
+                            {" · "}Toplam <span className="font-semibold text-blue-600">{fmtTRY(summary.total)}</span>
+                            {" · "}{summary.reminded} sepete hatırlatma gitti
+                        </p>
+                    )}
                 </CardHeader>
                 <CardContent>
-                    {carts.length === 0 ? (
+                    {loading ? (
+                        <div className="flex h-48 items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        </div>
+                    ) : carts.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
                             <ShoppingCart className="h-12 w-12 text-gray-300 mb-4" />
-                            <p>Şu anda sepette bekleyen bir ürün yok.</p>
+                            <p>{days === 0 ? "Şu anda sepette bekleyen bir ürün yok." : `Son ${days} günde sepette bekleyen ürün yok.`}</p>
                         </div>
                     ) : (
                         <div className="rounded-md border">
@@ -118,16 +175,13 @@ export default function AbandonedCartsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {carts.map((cart) => {
+                                    {pageCarts.map((cart) => {
                                         const customerName = cart.user?.companyName || cart.user?.email || "Bilinmiyor";
                                         const email = cart.user?.email;
                                         const phone = cart.user?.phone;
                                         
                                         const totalItems = cart.items.reduce((acc: number, cur: any) => acc + cur.quantity, 0);
-                                        const totalAmount = cart.items.reduce((acc: number, cur: any) => {
-                                            const price = Number(cur.product.salePrice || cur.product.listPrice);
-                                            return acc + (price * cur.quantity);
-                                        }, 0);
+                                        const totalAmount = cart.totalAmount; // sunucuda hesaplanır
 
                                         return (
                                             <TableRow key={cart.id}>
@@ -227,6 +281,14 @@ export default function AbandonedCartsPage() {
                                 </TableBody>
                             </Table>
                         </div>
+                    )}
+                    {!loading && (
+                        <SimplePagination
+                            page={currentPage}
+                            pageSize={PAGE_SIZE}
+                            total={carts.length}
+                            onPageChange={goToPage}
+                        />
                     )}
                 </CardContent>
             </Card>
