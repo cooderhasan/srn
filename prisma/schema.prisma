@@ -90,6 +90,7 @@ model User {
   reviews         Review[]
   wishlist        Wishlist[]
   returnRequests  ReturnRequest[]
+  addresses       UserAddress[]  // Adres defteri (varsayılan adres User.address alanlarıyla eşit tutulur)
 
   // Current Account / Bakiye Sistemi
   creditLimit      Decimal        @default(0)   // Tanımlı Kredi Limiti
@@ -837,4 +838,23 @@ model OperatorFirm {
   updatedAt      DateTime @updatedAt
 
   @@map("operator_firms")
+}
+
+// Hesabım > Adreslerim: üyenin kayıtlı teslimat adresleri (ödemede tek tıkla seçilir)
+model UserAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   // Ev, İş, Depo ...
+  name      String   // Alıcı ad soyad / firma
+  phone     String
+  city      String
+  district  String
+  address   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("user_addresses")
 }

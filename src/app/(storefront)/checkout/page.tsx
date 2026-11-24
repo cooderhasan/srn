@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 import { getCargoPricing } from "@/lib/cargo-pricing";
 import { CheckoutForm } from "@/components/storefront/checkout-form";
+import { getMyAddresses } from "@/app/(storefront)/account/addresses/actions";
 
 export default async function CheckoutPage() {
     const session = await auth();
@@ -68,12 +69,16 @@ export default async function CheckoutPage() {
     }
 
     const settings = await getSiteSettings();
+    // Üyenin adres defteri (ödemede tek tıkla seçilir)
+    const savedAddresses = session?.user?.id ? await getMyAddresses().catch(() => []) : [];
+
     // Kargo tarifesi sepet sayfasıyla aynı kaynaktan (lib/cargo-pricing)
     const { cargoCompanies, freeShippingLimit } = await getCargoPricing();
     const bankTransferDiscount = Number(settings.bankTransferDiscount) || 0;
 
     return (
         <CheckoutForm
+            savedAddresses={savedAddresses}
             initialData={initialData}
             cargoCompanies={cargoCompanies}
             freeShippingLimit={freeShippingLimit}
