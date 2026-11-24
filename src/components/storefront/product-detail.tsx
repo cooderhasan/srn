@@ -553,7 +553,7 @@ export function ProductDetail({
 
                             {/* Product Info Grid */}
                             <div className="mb-5 pb-5 border-b border-gray-100 dark:border-gray-800">
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs mb-3">
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
                                     {product.sku && (
                                         <div>
                                             <span className="text-gray-400 block mb-0.5">Stok Kodu</span>
@@ -578,10 +578,6 @@ export function ProductDetail({
                                             <span className="font-semibold text-gray-700 dark:text-gray-300">{product.brand.name}</span>
                                         </div>
                                     )}
-                                </div>
-                                <div className="text-xs text-[#009AD0] dark:text-[#009AD0] italic flex items-center gap-1.5 p-2 bg-[#009AD0]/5 dark:bg-[#009AD0]/10 rounded-md border border-[#009AD0]/10 dark:border-[#009AD0]/20">
-                                    <Truck className="w-4 h-4 shrink-0" />
-                                    <span>Lütfen dikkat: <strong>Kargo ücreti</strong> teslimat sırasında alıcı tarafından ödenmektedir.</span>
                                 </div>
                             </div>
 
