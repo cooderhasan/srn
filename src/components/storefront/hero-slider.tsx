@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 
 interface Slider {
     id: string;
@@ -19,28 +18,61 @@ interface HeroSliderProps {
     sliders: Slider[];
 }
 
+/** Slayt görseli: tüm slaytlar önceden yüklenir (geçişte geç gelmesin); aktif slaytta 6 sn'de çok hafif yakınlaşma */
+function SlideImage({ slide, priority, active }: { slide: Slider; priority: boolean; active: boolean }) {
+    const { props } = getImageProps({
+        src: slide.imageUrl,
+        alt: slide.title || "Slayt Kampanya Görseli",
+        fill: true,
+        priority,
+        sizes: "100vw",
+    });
+    return (
+        // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+        <img
+            {...props}
+            loading="eager"
+            className={`object-cover object-right transition-transform ease-out ${active ? "scale-[1.04] duration-[6000ms]" : "scale-100 duration-700"}`}
+        />
+    );
+}
+
+const SLIDE_MS = 6000;
+
 export function HeroSlider({ sliders }: HeroSliderProps) {
     const [current, setCurrent] = useState(0);
+    const [paused, setPaused] = useState(false);
 
+    // Her slayt değişiminde süre baştan başlar (elle geçişten hemen sonra atlamasın); fare üstündeyken durur
     useEffect(() => {
-        if (sliders.length <= 1) return;
-
-        const interval = setInterval(() => {
-            setCurrent((prev) => (prev + 1) % sliders.length);
-        }, 5000);
-
-        return () => clearInterval(interval);
-    }, [sliders.length]);
+        if (!sliders || sliders.length <= 1 || paused) return;
+        const t = setTimeout(() => setCurrent((prev) => (prev + 1) % sliders.length), SLIDE_MS);
+        return () => clearTimeout(t);
+    }, [sliders?.length, current, paused]);
 
     const prev = () => {
+        if (!sliders || sliders.length === 0) return;
         setCurrent((c) => (c === 0 ? sliders.length - 1 : c - 1));
     };
 
     const next = () => {
+        if (!sliders || sliders.length === 0) return;
         setCurrent((c) => (c + 1) % sliders.length);
     };
 
-    if (sliders.length === 0) {
+    // Telefonda parmakla kaydırma
+    const touchX = useRef<number | null>(null);
+    const onTouchStart = (e: React.TouchEvent) => {
+        touchX.current = e.touches[0]?.clientX ?? null;
+    };
+    const onTouchEnd = (e: React.TouchEvent) => {
+        if (touchX.current === null) return;
+        const dx = (e.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
+        touchX.current = null;
+        if (Math.abs(dx) > 40) (dx < 0 ? next : prev)();
+    };
+
+    if (!sliders || sliders.length === 0) {
         return (
             <div className="relative h-[400px] md:h-[500px] bg-gray-900 flex items-center justify-center">
                 <div className="text-center text-white px-4">
@@ -60,99 +92,85 @@ export function HeroSlider({ sliders }: HeroSliderProps) {
         );
     }
 
+    const renderOverlay = (slide: Slider, active: boolean) =>
+        (slide.title || slide.subtitle || slide.linkUrl) && (
+            <div className="relative z-20 h-full flex items-center">
+                <div className="container mx-auto px-4 md:pl-24">
+                    <div className={`max-w-2xl transition-all duration-700 delay-300 ${active ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+                        {slide.title && <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">{slide.title}</h2>}
+                        {slide.subtitle && <p className="text-xl text-gray-200 mb-6">{slide.subtitle}</p>}
+                        {slide.linkUrl && <Button size="lg">Keşfet</Button>}
+                    </div>
+                </div>
+            </div>
+        );
+
     return (
-        <div className="relative h-[400px] md:h-[500px] overflow-hidden">
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={sliders[current].id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.7 }}
-                    className="absolute inset-0"
-                >
-                    {/* Background */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent z-10" />
-                    <div className="absolute inset-0 bg-gray-900">
-                        {sliders[current].imageUrl && (
-                            <Image
-                                src={sliders[current].imageUrl}
-                                alt={sliders[current].title || ""}
-                                fill
-                                className="object-cover object-right"
-                                priority={true}
-                                sizes="100vw"
-                            />
+        <div
+            className="relative h-[400px] md:h-[500px] overflow-hidden bg-gray-900"
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+        >
+            {/* Tüm slaytlar üst üste: eski solarken yeni aynı anda belirir (çapraz geçiş). Önceden eski tamamen
+                kaybolup arada koyu arka plan görünüyordu, sonra yenisi geliyordu. İlk slayt sunucudan hemen görünür. */}
+            {sliders.map((slide, i) => {
+                const active = i === current;
+                const body = (
+                    <>
+                        <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent z-10" />
+                        <div className="absolute inset-0">
+                            {slide.imageUrl && <SlideImage slide={slide} priority={i === 0} active={active} />}
+                        </div>
+                        {renderOverlay(slide, active)}
+                    </>
+                );
+                return (
+                    <div
+                        key={slide.id}
+                        aria-hidden={!active}
+                        className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${active ? "opacity-100 z-[1]" : "opacity-0 z-0 pointer-events-none"}`}
+                    >
+                        {slide.linkUrl ? (
+                            <Link href={slide.linkUrl} className="absolute inset-0 block" aria-label={slide.title || "Slayt Kampanya Detayı"} tabIndex={active ? 0 : -1}>
+                                {body}
+                            </Link>
+                        ) : (
+                            <div className="absolute inset-0">{body}</div>
                         )}
                     </div>
+                );
+            })}
 
-                    {/* Content */}
-                    <div className="relative z-20 h-full flex items-center">
-                        <div className="container mx-auto px-4 pl-16 md:pl-24">
-                            <div className="max-w-2xl">
-                                {sliders[current].title && (
-                                    <motion.h2
-                                        initial={{ y: 20, opacity: 0 }}
-                                        animate={{ y: 0, opacity: 1 }}
-                                        transition={{ delay: 0.3, duration: 0.5 }}
-                                        className="text-3xl md:text-5xl font-bold text-white mb-4"
-                                    >
-                                        {sliders[current].title}
-                                    </motion.h2>
-                                )}
-                                {sliders[current].subtitle && (
-                                    <motion.p
-                                        initial={{ y: 20, opacity: 0 }}
-                                        animate={{ y: 0, opacity: 1 }}
-                                        transition={{ delay: 0.5, duration: 0.5 }}
-                                        className="text-xl text-gray-200 mb-6"
-                                    >
-                                        {sliders[current].subtitle}
-                                    </motion.p>
-                                )}
-                                {sliders[current].linkUrl && (
-                                    <motion.div
-                                        initial={{ y: 20, opacity: 0 }}
-                                        animate={{ y: 0, opacity: 1 }}
-                                        transition={{ delay: 0.7, duration: 0.5 }}
-                                    >
-                                        <Link href={sliders[current].linkUrl}>
-                                            <Button size="lg">Keşfet</Button>
-                                        </Link>
-                                    </motion.div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </motion.div>
-            </AnimatePresence>
-
-            {/* Navigation */}
+            {/* Navigation Buttons (telefonda parmakla kaydırılır) */}
             {sliders.length > 1 && (
                 <>
                     <button
                         onClick={prev}
-                        className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                        aria-label="Önceki slayt"
+                        className="hidden md:block absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
                     >
-                        <ChevronLeft className="h-6 w-6" />
+                        <ChevronLeft className="w-6 h-6" />
                     </button>
                     <button
                         onClick={next}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                        aria-label="Sonraki slayt"
+                        className="hidden md:block absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
                     >
-                        <ChevronRight className="h-6 w-6" />
+                        <ChevronRight className="w-6 h-6" />
                     </button>
 
-                    {/* Dots */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex gap-2">
+                    {/* Indicators */}
+                    <div className="absolute bottom-2 md:bottom-4 left-1/2 -translate-x-1/2 z-30 flex gap-1.5 md:gap-2">
                         {sliders.map((_, index) => (
                             <button
                                 key={index}
                                 onClick={() => setCurrent(index)}
-                                className={`w-2 h-2 rounded-full transition-all ${index === current
-                                    ? "bg-white w-6"
-                                    : "bg-white/50 hover:bg-white/75"
-                                    }`}
+                                aria-label={`${index + 1}. slayt`}
+                                className={`h-2 rounded-full transition-all duration-500 shadow-sm ${
+                                    index === current ? "w-6 md:w-8 bg-white" : "w-2 bg-white/50 hover:bg-white/80"
+                                }`}
                             />
                         ))}
                     </div>
