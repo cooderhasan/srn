@@ -296,3 +296,12 @@ body[data-scroll-locked] .wa-float {
 .dark .ProseMirror blockquote {
   background-color: rgba(0, 154, 208, 0.12);
 }
+
+/* Yatay kayan şeritlerde kaydırma çubuğunu gizle (sınıf kullanılıyordu ama tanımlı değildi; telefonda gri çizgi görünüyordu) */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

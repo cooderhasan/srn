@@ -78,7 +78,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -90,7 +90,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                         <span>/</span>
                         <span>Sipariş Detayı</span>
                     </div>
-                    <h1 className="text-2xl font-bold flex items-center gap-3">
+                    <h1 className="text-xl md:text-2xl font-bold flex flex-wrap items-center gap-x-3 gap-y-1.5">
                         Sipariş #{order.orderNumber}
                         <Badge variant="outline" className={`${getOrderStatusColor(order.status)} border-0 text-sm px-3 py-1`}>
                             {getOrderStatusLabel(order.status)}
@@ -110,11 +110,12 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                 )}
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-8">
+            {/* grid-cols-1 (minmax(0,1fr)): telefonda uzun ürün adı sütunu ekrandan taşırıp fiyatları kesiyordu */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
                 {/* Left Column: Order Items */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-2 space-y-6 min-w-0">
                     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-                        <div className="p-6 border-b border-gray-100 dark:border-gray-800">
+                        <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800">
                             <h2 className="font-bold flex items-center gap-2">
                                 <Package className="w-5 h-5 text-[#009AD0]" />
                                 Sipariş İçeriği
@@ -126,7 +127,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                                 const canReturn = isDelivered && !returnRequest;
 
                                 return (
-                                    <div key={item.id} className="p-6 flex flex-col sm:flex-row gap-4 sm:items-center">
+                                    <div key={item.id} className="p-4 sm:p-6 flex flex-col sm:flex-row gap-4 sm:items-center">
                                         <div className="relative w-20 h-20 bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden shrink-0 border border-gray-100 dark:border-gray-800">
                                             {item.product && item.product.images && item.product.images[0] ? (
                                                 <Image
@@ -142,7 +143,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                                            <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-2">
                                                 {item.productName}
                                             </h3>
                                             <p className="text-sm text-gray-500 mt-1">
@@ -184,9 +185,9 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                 </div>
 
                 {/* Right Column: Order Summary & Details */}
-                <div className="space-y-6">
+                <div className="space-y-6 min-w-0">
                     {/* Payment Info */}
-                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 sm:p-6">
                         <h3 className="font-bold flex items-center gap-2 mb-4">
                             <CreditCard className="w-5 h-5 text-[#009AD0]" />
                             Ödeme Bilgileri
@@ -241,7 +242,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
 
                     {/* Havale Bildirim Formu */}
                     {isBankTransfer && isPaymentPending && (
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-green-200 dark:border-green-800 shadow-sm p-6">
+                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-green-200 dark:border-green-800 shadow-sm p-4 sm:p-6">
                             <h3 className="font-bold flex items-center gap-2 mb-4 text-green-700 dark:text-green-400">
                                 🏦 Havale Bildirimi
                             </h3>
@@ -254,7 +255,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
                     )}
 
                     {/* Shipping Address */}
-                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 sm:p-6">
                         <h3 className="font-bold flex items-center gap-2 mb-4">
                             <MapPin className="w-5 h-5 text-[#009AD0]" />
                             Teslimat Adresi
