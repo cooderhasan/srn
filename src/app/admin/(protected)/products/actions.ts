@@ -82,6 +82,9 @@ export async function createProduct(formData: FormData) {
 
     const validatedData = productSchema.parse(rawData);
 
+    // Stok kodu zorunlu: pazaryeri ilanları ve stok eşleşmesi bu koda dayanıyor
+    if (!validatedData.sku?.trim()) return { success: false, error: "Stok kodu (SKU) zorunludur." };
+
     // Parse images from JSON string
     const imagesJson = formData.get("images") as string;
     const images: string[] = imagesJson ? JSON.parse(imagesJson) : [];
@@ -232,6 +235,10 @@ export async function updateProduct(productId: string, formData: FormData) {
     Object.assign(rawData, { categoryIds });
 
     const validatedData = productSchema.parse(rawData);
+
+    // Stok kodu zorunlu (boş gönderilirse eski kod korunur; eski kod da yoksa kaydedilmez).
+    // Varyantlar aşağıda silinip yeniden yazıldığı için kontrol her yazmadan önce yapılır.
+    if (!validatedData.sku?.trim() && !oldProduct?.sku?.trim()) return { success: false, error: "Stok kodu (SKU) zorunludur." };
 
     // Parse images from JSON string
     const imagesJson = formData.get("images") as string;

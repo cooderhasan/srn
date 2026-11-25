@@ -419,8 +419,19 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
     const salePriceTooHigh =
         Number(formData.salePrice) > 0 && Number(formData.listPrice) > 0 && Number(formData.salePrice) > Number(formData.listPrice);
 
+    // Sekme kontrollü: SKU eksikse kayıt sırasında Fiyat & Stok sekmesine geçilir
+    const [activeTab, setActiveTab] = useState("general");
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Stok kodu zorunlu: pazaryeri ilanları ve stok eşleşmesi bu koda dayanıyor
+        if (!String(formData.sku || "").trim()) {
+            toast.error("Stok kodu (SKU) zorunludur. Fiyat & Stok sekmesinde girin ya da yanındaki düğmeyle oluşturun.");
+            setActiveTab("price");
+            setTimeout(() => document.getElementById("sku")?.focus(), 50);
+            return;
+        }
 
         if (salePriceTooHigh) {
             toast.error("İndirimli fiyat liste fiyatından yüksek olamaz. İndirimli fiyatı düzeltin ya da boş bırakın.");
@@ -504,7 +515,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
 
     return (
         <form onSubmit={handleSubmit} className="relative pb-24">
-            <Tabs defaultValue="general" className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-white dark:bg-gray-800 p-1 rounded-lg border flex flex-wrap h-auto sticky top-4 z-10 shadow-sm gap-2">
                     <TabsTrigger value="general" className="px-4 py-2">Genel Bilgiler</TabsTrigger>
                     <TabsTrigger value="price" className="px-4 py-2">Fiyat & Stok</TabsTrigger>
@@ -853,7 +864,7 @@ export function ProductForm({ categories, brands, product, defaultCriticalStock 
                             {/* Kodlar ve stok: iki satır, üçer alan */}
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                 <div className="space-y-2 relative">
-                                    <Label htmlFor="sku">Stok Kodu (SKU)</Label>
+                                    <Label htmlFor="sku">Stok Kodu (SKU) *</Label>
                                     <Input
                                         id="sku"
                                         value={formData.sku}
