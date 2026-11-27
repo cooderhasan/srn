@@ -665,7 +665,7 @@ export async function sendProductToN11(
         const config = await (prisma as any).n11Config.findFirst({ where: { isActive: true } });
         if (!config) return { success: false, message: "Aktif entegrasyon bulunamadı." };
 
-        const priceNote = await fillEmptyPriceOnSend("n11", [productId]);
+        let priceNote = await fillEmptyPriceOnSend("n11", [productId]);
 
         const product = await prisma.product.findUnique({
             where: { id: productId },
@@ -786,6 +786,25 @@ export async function sendProductToN11(
                 };
             });
 
+            // N11'de zaten açılmış bedenler tekrar gönderilmez. N11 bazı bedenlerde "Sistemde bir hata oluştu" deyip
+            // diğerlerini açabiliyor; ürün yeniden gönderilince açık bedenler "stock code tarafınızdan kullanılmaktadır"
+            // hatası veriyordu. Böylece sadece eksik bedenler gider.
+            const existingCodes: string[] = [];
+            for (const s of skus) {
+                const r = await client.getProductByStockCode(s.stockCode);
+                if (r.success && r.product) existingCodes.push(s.stockCode);
+            }
+            const skusToSend = skus.filter((s: any) => !existingCodes.includes(s.stockCode));
+            if (skusToSend.length === 0) {
+                await (prisma as any).n11Product.upsert({
+                    where: { productId: product.id },
+                    update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null, sellerCode: skus[0]?.stockCode },
+                    create: { productId: product.id, isSynced: true, lastSyncedAt: new Date(), sellerCode: skus[0]?.stockCode },
+                });
+                return { success: true, synced: true, message: `Bütün bedenler zaten N11'de (${existingCodes.join(", ")}), tekrar gönderilmedi.` };
+            }
+            if (existingCodes.length > 0) priceNote += ` N11'de zaten olan bedenler atlandı: ${existingCodes.join(", ")}. Gönderilen: ${skusToSend.map((s: any) => s.stockCode).join(", ")}.`;
+
             payload = {
                 title: product.name,
                 description: product.marketplaceDescription || product.description || product.name,
@@ -803,7 +822,7 @@ export async function sendProductToN11(
                 images: absoluteImages,
                 attributes: mappedAttributes,
                 // For variant products, send all variants as separate skus
-                _skus: skus // Internal flag for api.ts to handle
+                _skus: skusToSend // Internal flag for api.ts to handle
             };
         } else {
             // Single product (no variants)
@@ -1491,20 +1510,35 @@ export async function verifyN11Product(productId: string) {
         });
         if (!product) return { success: false, synced: false, message: "Ürün bulunamadı." };
 
-        const stockCode = getN11StockCodes(product)[0] || product.id;
+        // Varyantlı üründe her bedenin kodu ayrı sorgulanır: sadece ilk beden aranınca o beden N11'de yoksa
+        // (reddedilmiş / henüz işlenmemiş) diğer bedenler satışta olsa bile "bulunamadı" deniyordu
+        const codes = getN11StockCodes(product);
+        if (codes.length === 0) codes.push(product.id);
         const client = new N11Client();
-        const res = await client.getProductByStockCode(stockCode);
-        if (!res.success) return { success: false, synced: false, message: `N11 sorgu hatası: ${res.message}` };
-
-        if (!res.product) {
-            await (prisma as any).n11Product.updateMany({
-                where: { productId },
-                data: { isSynced: false, lastSyncError: `N11'de "${stockCode}" stok koduyla ürün bulunamadı.` },
-            });
-            return { success: true, synced: false, message: `N11'de "${stockCode}" stok koduyla ürün bulunamadı. Ürünü N11'e gönderebilirsiniz.` };
+        let stockCode = codes[0];
+        let n11: any = null;
+        const missing: string[] = [];
+        for (const code of codes) {
+            const res = await client.getProductByStockCode(code);
+            if (!res.success) return { success: false, synced: false, message: `N11 sorgu hatası: ${res.message}` };
+            if (res.product) {
+                if (!n11) {
+                    n11 = res.product;
+                    stockCode = code;
+                }
+            } else missing.push(code);
         }
 
-        const n11 = res.product;
+        if (!n11) {
+            const label = codes.length > 1 ? `${codes.length} bedenin hiçbiri` : `"${codes[0]}" stok koduyla ürün`;
+            await (prisma as any).n11Product.updateMany({
+                where: { productId },
+                data: { isSynced: false, lastSyncError: `N11'de ${label} bulunamadı.` },
+            });
+            return { success: true, synced: false, message: `N11'de ${label} bulunamadı. Ürünü N11'e gönderebilirsiniz.` };
+        }
+        const missingNote = missing.length > 0 ? ` N11'de olmayan bedenler: ${missing.join(", ")}` : "";
+
         await (prisma as any).n11Product.upsert({
             where: { productId },
             update: { isSynced: true, lastSyncedAt: new Date(), lastSyncError: null, n11Id: String(n11.n11ProductId ?? ""), sellerCode: stockCode },
@@ -1518,7 +1552,7 @@ export async function verifyN11Product(productId: string) {
         return {
             success: true,
             synced: true,
-            message: `N11'de bulundu. Durum: ${saleStatus}, Stok: ${n11.quantity ?? "-"}, Fiyat: ${n11.salePrice ?? "-"} TL`,
+            message: `N11'de bulundu (${stockCode}). Durum: ${saleStatus}, Stok: ${n11.quantity ?? "-"}, Fiyat: ${n11.salePrice ?? "-"} TL.${missingNote}`,
         };
     } catch (error: any) {
         console.error("verifyN11Product error:", error);
